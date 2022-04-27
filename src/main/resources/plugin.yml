@@ -1,0 +1,8 @@
+name: MarbleBaseMD
+main: me.pattrick.marbledrop.Main
+version: 1.0
+api-version: 1.18
+commands:
+   md:
+      description: Base command for marble drop
+      usage: /md
