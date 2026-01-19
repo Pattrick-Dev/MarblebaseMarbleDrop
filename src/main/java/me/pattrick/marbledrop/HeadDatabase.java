@@ -18,7 +18,7 @@ public class HeadDatabase {
         final ItemStack head = new ItemStack(Material.PLAYER_HEAD, 1);
         final ItemMeta meta = head.getItemMeta();
         final ArrayList<String> sample = Sampler.main();
-        meta.setLore(Arrays.asList("ง7Team: " + sample.get(2), " ", "ง7Found by: " + user, "ง7On: " + LocalDate.now(), " ", "ง8Marblebase Marble"));
+        meta.setLore(Arrays.asList("ยง7Team: " + sample.get(2), " ", "ยง7Found by: " + user, "ยง7On: " + LocalDate.now(), " ", "ยง8Marblebase Marble"));
         final GameProfile profile = new GameProfile(UUID.randomUUID(), "");
         meta.setDisplayName((String)sample.get(1));
         profile.getProperties().put("textures", new Property("textures", sample.get(0)));

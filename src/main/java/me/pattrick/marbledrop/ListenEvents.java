@@ -73,7 +73,7 @@ public class ListenEvents implements Listener
         final Player player = event.getPlayer();
         final Random r = new Random();
         final double randomInt = r.nextDouble() * 100.0;
-        if (event.getBlock().getType() == Material.TALL_GRASS || event.getBlock().getType() == Material.GRASS || event.getBlock().getType() == Material.KELP || event.getBlock().getType() == Material.KELP_PLANT || event.getBlock().getType() == Material.SEAGRASS) {
+        if (event.getBlock().getType() == Material.TALL_GRASS || event.getBlock().getType() == Material.TALL_GRASS || event.getBlock().getType() == Material.KELP || event.getBlock().getType() == Material.KELP_PLANT || event.getBlock().getType() == Material.SEAGRASS) {
             return;
         }
         try {
@@ -116,7 +116,7 @@ public class ListenEvents implements Listener
         }
         if (material.equals(Material.PLAYER_HEAD) || material.equals(Material.PLAYER_WALL_HEAD) && holdingItemMainHandMeta.hasLore()) {
             final List<String> headLore = holdingItemMainHandMeta.getLore();
-            if (headLore.contains("ง8Marblebase Marble")) {
+            if (headLore.contains("ยง8Marblebase Marble")) {
                 player.sendMessage(ChatColor.RED + "" + ChatColor.BOLD + "Don't place your marbles!");
                 player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_HIT, 1.0f, 1.0f);
             }
@@ -136,7 +136,7 @@ public class ListenEvents implements Listener
         }
         if (material.equals(Material.PLAYER_HEAD) || material.equals(Material.PLAYER_WALL_HEAD) && holdingItemMainHandMeta.hasLore()) {
             final List<String> headLore = holdingItemMainHandMeta.getLore();
-            if (headLore.contains("ง8Marblebase Marble")) {
+            if (headLore.contains("ยง8Marblebase Marble")) {
                 player.sendMessage(ChatColor.RED + "" + ChatColor.BOLD + "Don't place your marbles!");
                 player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_HIT, 1.0f, 1.0f);
             }
@@ -150,10 +150,10 @@ public class ListenEvents implements Listener
         	if (!e.getCurrentItem().getItemMeta().hasLore()) {
         		return;
         	}
-            if (e.getClick().isShiftClick() && e.getCurrentItem().getItemMeta().getLore().contains("ง8Marblebase Marble") && e.getInventory().getType() == InventoryType.CRAFTING) {
+            if (e.getClick().isShiftClick() && e.getCurrentItem().getItemMeta().getLore().contains("๏ฟฝ8Marblebase Marble") && e.getInventory().getType() == InventoryType.CRAFTING) {
                 e.setCancelled(true);
             }
-            if (e.getCursor().getItemMeta().getLore().contains("ง8Marblebase Marble") && e.getSlotType() == InventoryType.SlotType.ARMOR) {
+            if (e.getCursor().getItemMeta().getLore().contains("ยง8Marblebase Marble") && e.getSlotType() == InventoryType.SlotType.ARMOR) {
                 e.setCancelled(true);
             }
         }
@@ -164,7 +164,7 @@ public class ListenEvents implements Listener
             }
             if (e.getCurrentItem().getItemMeta().getLore() != null) {
                 final List<String> lore = e.getCurrentItem().getItemMeta().getLore();
-                if (lore.contains("ง8Marblebase Marble")) {
+                if (lore.contains("ยง8Marblebase Marble")) {
                     player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_HIT, 1.0f, 1.0f);
                     player.closeInventory();
                     player.sendMessage(ChatColor.RED + "Do not rename your marbles!");

@@ -1,17 +1,29 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
 	<modelVersion>4.0.0</modelVersion>
+
 	<groupId>me.pattrick</groupId>
 	<artifactId>MarbleDropPlugin</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>MarbleDropPlugin</name>
 
+	<properties>
+		<!-- Paper 1.21.x targets Java 21 -->
+		<java.version>21</java.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<paper.api.version>1.21.11-R0.1-SNAPSHOT</paper.api.version>
+	</properties>
+
 	<repositories>
+		<!-- PaperMC Maven repo (Paper API, etc.) -->
 		<repository>
-			<id>spigot-repo</id>
-			<url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+			<id>papermc</id>
+			<url>https://repo.papermc.io/repository/maven-public/</url>
 		</repository>
+
+		<!-- Keep Mojang libraries repo only if you truly need authlib -->
 		<repository>
 			<id>minecraft-repo</id>
 			<url>https://libraries.minecraft.net/</url>
@@ -19,12 +31,15 @@
 	</repositories>
 
 	<dependencies>
+		<!-- Compile against Paper API (provided by the server at runtime) -->
 		<dependency>
-			<groupId>org.spigotmc</groupId>
-			<artifactId>spigot-api</artifactId>
-			<version>1.18.1-R0.1-SNAPSHOT</version>
+			<groupId>io.papermc.paper</groupId>
+			<artifactId>paper-api</artifactId>
+			<version>${paper.api.version}</version>
 			<scope>provided</scope>
 		</dependency>
+
+		<!-- Keep only if your code imports com.mojang.authlib.* -->
 		<dependency>
 			<groupId>com.mojang</groupId>
 			<artifactId>authlib</artifactId>
@@ -32,20 +47,24 @@
 			<scope>provided</scope>
 		</dependency>
 	</dependencies>
+
 	<build>
 		<finalName>MarblebaseDrop</finalName>
 		<sourceDirectory>src/main/java</sourceDirectory>
 
 		<plugins>
+			<!-- Modern compiler plugin + Java 21 -->
 			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<version>2.3.2</version>
+				<version>3.11.0</version>
 				<configuration>
-					<source>1.8</source>
-					<target>1.8</target>
+					<source>${java.version}</source>
+					<target>${java.version}</target>
 				</configuration>
 			</plugin>
 		</plugins>
+
 		<resources>
 			<resource>
 				<filtering>true</filtering>
@@ -59,4 +78,5 @@
 			</resource>
 		</resources>
 	</build>
+
 </project>
