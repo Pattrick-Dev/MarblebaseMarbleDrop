@@ -38,14 +38,6 @@
 			<version>${paper.api.version}</version>
 			<scope>provided</scope>
 		</dependency>
-
-		<!-- Keep only if your code imports com.mojang.authlib.* -->
-		<dependency>
-			<groupId>com.mojang</groupId>
-			<artifactId>authlib</artifactId>
-			<version>1.5.21</version>
-			<scope>provided</scope>
-		</dependency>
 	</dependencies>
 
 	<build>

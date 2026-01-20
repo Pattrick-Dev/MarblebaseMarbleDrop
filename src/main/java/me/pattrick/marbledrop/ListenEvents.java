@@ -143,35 +143,55 @@ public class ListenEvents implements Listener
             e.setCancelled(true);
         }
     }
-    
+
     @EventHandler
     public void onHeadRename(InventoryClickEvent e) {
-        if (e.getWhoClicked() instanceof Player) {
-        	if (!e.getCurrentItem().getItemMeta().hasLore()) {
-        		return;
-        	}
-            if (e.getClick().isShiftClick() && e.getCurrentItem().getItemMeta().getLore().contains("�8Marblebase Marble") && e.getInventory().getType() == InventoryType.CRAFTING) {
-                e.setCancelled(true);
-            }
-            if (e.getCursor().getItemMeta().getLore().contains("§8Marblebase Marble") && e.getSlotType() == InventoryType.SlotType.ARMOR) {
-                e.setCancelled(true);
-            }
+        if (!(e.getWhoClicked() instanceof Player player)) {
+            return;
         }
-        final Player player = (Player) e.getWhoClicked();
+
+        // Safely grab current item + meta + lore
+        final ItemStack current = e.getCurrentItem();
+        final ItemMeta currentMeta = (current != null) ? current.getItemMeta() : null;
+        final List<String> currentLore = (currentMeta != null) ? currentMeta.getLore() : null;
+
+        // Safely grab cursor item + meta + lore
+        final ItemStack cursor = e.getCursor();
+        final ItemMeta cursorMeta = (cursor != null) ? cursor.getItemMeta() : null;
+        final List<String> cursorLore = (cursorMeta != null) ? cursorMeta.getLore() : null;
+
+        // 1) Prevent shift-click moving marbles in player crafting inventory
+        // (Fix corrupted "�8" -> "§8")
+        if (e.getClick().isShiftClick()
+                && e.getInventory().getType() == InventoryType.CRAFTING
+                && currentLore != null
+                && currentLore.contains("§8Marblebase Marble")) {
+            e.setCancelled(true);
+            return;
+        }
+
+        // 2) Prevent putting marbles into armor slots (dragging with cursor)
+        if (e.getSlotType() == InventoryType.SlotType.ARMOR
+                && cursorLore != null
+                && cursorLore.contains("§8Marblebase Marble")) {
+            e.setCancelled(true);
+            return;
+        }
+
+        // 3) Prevent renaming marbles in an anvil
         if (e.getInventory() instanceof AnvilInventory) {
             if (e.getSlotType() != InventoryType.SlotType.RESULT) {
                 return;
             }
-            if (e.getCurrentItem().getItemMeta().getLore() != null) {
-                final List<String> lore = e.getCurrentItem().getItemMeta().getLore();
-                if (lore.contains("§8Marblebase Marble")) {
-                    player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_HIT, 1.0f, 1.0f);
-                    player.closeInventory();
-                    player.sendMessage(ChatColor.RED + "Do not rename your marbles!");
-                    e.setCancelled(true);
-                    player.updateInventory();
-                }
+
+            if (currentLore != null && currentLore.contains("§8Marblebase Marble")) {
+                player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_HIT, 1.0f, 1.0f);
+                player.closeInventory();
+                player.sendMessage(ChatColor.RED + "Do not rename your marbles!");
+                e.setCancelled(true);
+                player.updateInventory();
             }
         }
     }
+
 }
