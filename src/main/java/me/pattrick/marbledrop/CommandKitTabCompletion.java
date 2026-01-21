@@ -14,6 +14,7 @@ public class CommandKitTabCompletion implements TabCompleter {
       completion.add("chance");
       completion.add("cooldown");
       completion.add("rcd");
+      completion.add("pdc");
       return completion;
     } 
     if (args.length == 1) {

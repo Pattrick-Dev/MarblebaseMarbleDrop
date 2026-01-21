@@ -19,6 +19,9 @@ public class Main extends JavaPlugin
         if (!new File(getDataFolder(), "cooldowns.yml").exists()) {
             saveResource("cooldowns.yml", false);
         }
+
+        MarbleItem.init(this);
+
         getCommand("md").setExecutor(new CommandKit());
         getCommand("md").setTabCompleter(new CommandKitTabCompletion());
         getServer().getPluginManager().registerEvents(new ListenEvents(), this);
