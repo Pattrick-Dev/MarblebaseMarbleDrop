@@ -1,10 +1,6 @@
 package me.pattrick.marbledrop;
 
-import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
-import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.Sound;
+import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -15,14 +11,11 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.inventory.ClickType;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.inventory.InventoryType;
-import org.bukkit.event.inventory.PrepareAnvilEvent;
+import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.AnvilInventory;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -31,10 +24,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.util.HashMap;
-import java.util.Random;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 public class ListenEvents implements Listener {
 
@@ -181,25 +171,6 @@ public class ListenEvents implements Listener {
     }
 
     /**
-     * Prevent right-click equipping marbles as a helmet.
-     */
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onRightClickEquip(PlayerInteractEvent event) {
-        Action action = event.getAction();
-        if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) return;
-
-        ItemStack item = event.getItem();
-        if (!isMarble(item)) return;
-
-        if (item.getType() == Material.PLAYER_HEAD) {
-            Player player = event.getPlayer();
-            player.sendMessage(ChatColor.RED + "" + ChatColor.BOLD + "Don't wear your marbles!");
-            player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_HIT, 1.0f, 1.0f);
-            event.setCancelled(true);
-        }
-    }
-
-    /**
      * Block anvil renames BEFORE the player can take the result.
      */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -212,92 +183,46 @@ public class ListenEvents implements Listener {
         }
     }
 
+    /**
+     * Block right-click equipping (player heads can be equipped by right-click if helmet slot is empty).
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onRightClickEquip(PlayerInteractEvent event) {
+        Action action = event.getAction();
+        if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) return;
+
+        // Avoid firing twice on some servers (main-hand + off-hand)
+        if (event.getHand() != null && event.getHand() != EquipmentSlot.HAND) return;
+
+        Player player = event.getPlayer();
+        ItemStack item = event.getItem();
+        if (!isMarble(item)) return;
+
+        // Only matters if helmet is empty (that’s when MC would auto-equip)
+        if (player.getInventory().getHelmet() == null) {
+            player.sendMessage(ChatColor.RED + "" + ChatColor.BOLD + "You can't wear marbles!");
+            player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_HIT, 1.0f, 1.0f);
+            event.setCancelled(true);
+            syncInventoryNextTick(player);
+        }
+    }
+
     @EventHandler
     public void onHeadRename(InventoryClickEvent e) {
-        if (!(e.getWhoClicked() instanceof Player player)) {
-            return;
-        }
-
-        final ItemStack current = e.getCurrentItem();
-        final ItemStack cursor = e.getCursor();
-        final ClickType click = e.getClick();
-
-        // 1) Shift-click in crafting/player inventory (common source of "disappears" via desync)
-        if (click.isShiftClick()
-                && e.getInventory().getType() == InventoryType.CRAFTING
-                && isMarble(current)) {
+        Player player = (Player) e.getWhoClicked();
+        if (e.isShiftClick() && isMarble(e.getCurrentItem())) {
             e.setCancelled(true);
-            syncInventoryNextTick(player);
-            return;
         }
-
-        // 2) Prevent placing marbles into armor slots
-        if (e.getSlotType() == InventoryType.SlotType.ARMOR && isMarble(cursor)) {
+        if (player.getGameMode() == GameMode.CREATIVE
+                && isMarble(e.getCurrentItem())
+                && (player.getInventory().getHelmet() == null || player.getInventory().getHelmet().getType() == Material.AIR || player.getInventory().getHelmet().getType() == Material.PLAYER_HEAD)) {
             e.setCancelled(true);
-            syncInventoryNextTick(player);
-            return;
+        } else {
+            player.sendMessage("Gamemode: " + String.valueOf(player.getGameMode() == GameMode.CREATIVE));
+            player.sendMessage("Marble: " + String.valueOf(isMarble(e.getCurrentItem())));
+            player.sendMessage("Helmet: " + String.valueOf(player.getInventory().getHelmet() == null || player.getInventory().getHelmet().getType() == Material.AIR));
+            player.sendMessage(String.valueOf(player.getInventory().getHelmet().getType()));
         }
 
-        // 3) Prevent NUMBER_KEY hotbar swaps that move items without using cursor
-        if (click == ClickType.NUMBER_KEY) {
-            int hotbarButton = e.getHotbarButton(); // 0-8
-            ItemStack hotbarItem = (hotbarButton >= 0) ? player.getInventory().getItem(hotbarButton) : null;
-
-            // If either the hotbar item or the clicked slot item is a marble, block it
-            if (isMarble(hotbarItem) || isMarble(current)) {
-                e.setCancelled(true);
-                syncInventoryNextTick(player);
-                return;
-            }
-        }
-
-        // 4) Prevent double-click collect-to-cursor from scooping marbles and “losing” them client-side
-        if (click == ClickType.DOUBLE_CLICK) {
-            if (isMarble(cursor) || isMarble(current)) {
-                e.setCancelled(true);
-                syncInventoryNextTick(player);
-                return;
-            }
-        }
-
-        // 5) Extra safety: if they're interacting with an anvil and a marble is involved, block it
-        if (e.getInventory() instanceof AnvilInventory) {
-            if (isMarble(current) || isMarble(cursor)) {
-                player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_HIT, 1.0f, 1.0f);
-                e.setCancelled(true);
-                syncInventoryNextTick(player);
-            }
-        }
-    }
-
-    /**
-     * Prevent dragging marbles into armor slots (drag events bypass InventoryClickEvent slotType logic).
-     */
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onInventoryDrag(InventoryDragEvent e) {
-        if (!(e.getWhoClicked() instanceof Player player)) return;
-
-        ItemStack cursor = e.getOldCursor();
-        if (!isMarble(cursor)) return;
-
-        // If any of the dragged-to slots are armor slots in the player's inventory, cancel.
-        Inventory top = e.getView().getTopInventory();
-        Inventory bottom = e.getView().getBottomInventory();
-
-        // Raw slots: bottom inventory armor slots are within the view; easiest is to block if any target is an armor slot type.
-        // We can approximate by checking if the drag affects the bottom inventory and the slot index is within typical armor positions.
-        // Safer: if any target slot maps to SlotType.ARMOR, cancel (but DragEvent doesn't give SlotType directly).
-        // Minimal practical fix: cancel any drag of marble while bottom inventory is involved.
-        Set<Integer> rawSlots = e.getRawSlots();
-        int topSize = top.getSize();
-
-        for (int raw : rawSlots) {
-            // raw >= topSize means it's in the player's inventory area
-            if (raw >= topSize) {
-                e.setCancelled(true);
-                syncInventoryNextTick(player);
-                return;
-            }
-        }
-    }
+         }
 }
