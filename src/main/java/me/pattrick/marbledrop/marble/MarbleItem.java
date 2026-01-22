@@ -1,0 +1,103 @@
+package me.pattrick.marbledrop.marble;
+
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
+
+import java.util.UUID;
+
+public final class MarbleItem {
+    private MarbleItem() {}
+
+    public static boolean isMarble(ItemStack item) {
+        if (item == null) return false;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return false;
+
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        return pdc.has(MarbleKeys.MARBLE_ID, PersistentDataType.STRING)
+                && pdc.has(MarbleKeys.MARBLE_KEY, PersistentDataType.STRING)
+                && pdc.has(MarbleKeys.RARITY, PersistentDataType.STRING);
+    }
+
+    public static MarbleData read(ItemStack item) {
+        if (!isMarble(item)) return null;
+
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return null;
+
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+
+        int schema = getInt(pdc, MarbleKeys.SCHEMA, MarbleData.SCHEMA_VERSION);
+
+        // If later you bump schema, you’ll migrate here based on `schema`.
+        UUID id = UUID.fromString(pdc.get(MarbleKeys.MARBLE_ID, PersistentDataType.STRING));
+
+        String marbleKey = pdc.get(MarbleKeys.MARBLE_KEY, PersistentDataType.STRING);
+        String teamKey = pdc.getOrDefault(MarbleKeys.TEAM_KEY, PersistentDataType.STRING, "");
+
+        MarbleRarity rarity = MarbleRarity.valueOf(
+                pdc.get(MarbleKeys.RARITY, PersistentDataType.STRING)
+        );
+
+        int speed = getInt(pdc, MarbleKeys.SPEED, 0);
+        int accel = getInt(pdc, MarbleKeys.ACCEL, 0);
+        int handling = getInt(pdc, MarbleKeys.HANDLING, 0);
+        int stability = getInt(pdc, MarbleKeys.STABILITY, 0);
+        int boost = getInt(pdc, MarbleKeys.BOOST, 0);
+
+        MarbleStats stats = new MarbleStats(speed, accel, handling, stability, boost);
+
+        String foundByStr = pdc.getOrDefault(MarbleKeys.FOUND_BY, PersistentDataType.STRING, "");
+        UUID foundBy = foundByStr.isEmpty() ? null : UUID.fromString(foundByStr);
+
+        long createdAt = getLong(pdc, MarbleKeys.CREATED_AT, 0L);
+
+        int xp = getInt(pdc, MarbleKeys.XP, 0);
+        int level = getInt(pdc, MarbleKeys.LEVEL, 1);
+
+        return new MarbleData(id, marbleKey, teamKey, rarity, stats, foundBy, createdAt, xp, level);
+    }
+
+    public static void write(ItemStack item, MarbleData data) {
+        if (item == null) return;
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return;
+
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+
+        pdc.set(MarbleKeys.SCHEMA, PersistentDataType.INTEGER, MarbleData.SCHEMA_VERSION);
+
+        pdc.set(MarbleKeys.MARBLE_ID, PersistentDataType.STRING, data.getId().toString());
+        pdc.set(MarbleKeys.MARBLE_KEY, PersistentDataType.STRING, data.getMarbleKey());
+        pdc.set(MarbleKeys.TEAM_KEY, PersistentDataType.STRING, data.getTeamKey());
+        pdc.set(MarbleKeys.RARITY, PersistentDataType.STRING, data.getRarity().name());
+
+        pdc.set(MarbleKeys.SPEED, PersistentDataType.INTEGER, data.getStats().get(MarbleStat.SPEED));
+        pdc.set(MarbleKeys.ACCEL, PersistentDataType.INTEGER, data.getStats().get(MarbleStat.ACCEL));
+        pdc.set(MarbleKeys.HANDLING, PersistentDataType.INTEGER, data.getStats().get(MarbleStat.HANDLING));
+        pdc.set(MarbleKeys.STABILITY, PersistentDataType.INTEGER, data.getStats().get(MarbleStat.STABILITY));
+        pdc.set(MarbleKeys.BOOST, PersistentDataType.INTEGER, data.getStats().get(MarbleStat.BOOST));
+
+        if (data.getFoundBy() != null) {
+            pdc.set(MarbleKeys.FOUND_BY, PersistentDataType.STRING, data.getFoundBy().toString());
+        }
+
+        pdc.set(MarbleKeys.CREATED_AT, PersistentDataType.LONG, data.getCreatedAt());
+        pdc.set(MarbleKeys.XP, PersistentDataType.INTEGER, data.getXp());
+        pdc.set(MarbleKeys.LEVEL, PersistentDataType.INTEGER, data.getLevel());
+
+        item.setItemMeta(meta);
+    }
+
+    private static int getInt(PersistentDataContainer pdc, org.bukkit.NamespacedKey key, int def) {
+        Integer v = pdc.get(key, PersistentDataType.INTEGER);
+        return (v != null) ? v : def;
+    }
+
+    private static long getLong(PersistentDataContainer pdc, org.bukkit.NamespacedKey key, long def) {
+        Long v = pdc.get(key, PersistentDataType.LONG);
+        return (v != null) ? v : def;
+    }
+}

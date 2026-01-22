@@ -11,6 +11,13 @@ import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 import java.io.File;
 import org.bukkit.command.CommandExecutor;
+import org.bukkit.NamespacedKey;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.java.JavaPlugin;
+
 
 public class CommandKit implements CommandExecutor
 {
@@ -140,6 +147,42 @@ public class CommandKit implements CommandExecutor
                             player.sendMessage(ChatColor.GREEN + "Removed " + onlinePlayer.getDisplayName() + "'s cooldown!");
                         }
                     }
+                }
+            } else if (args[0].equalsIgnoreCase("pdc")) {
+                if (!player.hasPermission("marbledrop.debug")) {
+                    player.sendMessage(ChatColor.RED + "You don't have permission");
+                }
+
+                ItemStack item = player.getInventory().getItemInMainHand();
+                if (item == null || item.getType().isAir()) {
+                    player.sendMessage(ChatColor.RED + "You are not holding an item.");
+                }
+
+                ItemMeta meta = item.getItemMeta();
+                if (meta == null) {
+                    player.sendMessage(ChatColor.RED + "That item has no ItemMeta.");
+                }
+
+                JavaPlugin plugin = JavaPlugin.getProvidingPlugin(getClass());
+                NamespacedKey marbleKey = new NamespacedKey(plugin, "marble");
+                NamespacedKey marbleNameKey = new NamespacedKey(plugin, "marble_name");
+                NamespacedKey marbleTeamKey = new NamespacedKey(plugin, "marble_team");
+
+                PersistentDataContainer pdc = meta.getPersistentDataContainer();
+
+                Byte flag = pdc.get(marbleKey, PersistentDataType.BYTE);
+                boolean isMarble = (flag != null && flag == (byte) 1);
+
+                player.sendMessage(ChatColor.GOLD + "=== Marble Debug ===");
+                player.sendMessage(ChatColor.YELLOW + "Type: " + ChatColor.WHITE + item.getType());
+                player.sendMessage(ChatColor.YELLOW + "Is Marble: " + (isMarble ? (ChatColor.GREEN + "YES") : (ChatColor.RED + "NO")));
+
+                if (isMarble) {
+                    String name = pdc.get(marbleNameKey, PersistentDataType.STRING);
+                    String team = pdc.get(marbleTeamKey, PersistentDataType.STRING);
+
+                    player.sendMessage(ChatColor.YELLOW + "marble_name: " + ChatColor.WHITE + (name != null ? name : "null"));
+                    player.sendMessage(ChatColor.YELLOW + "marble_team: " + ChatColor.WHITE + (team != null ? team : "null"));
                 }
             }
             else {
