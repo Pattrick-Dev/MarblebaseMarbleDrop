@@ -153,7 +153,7 @@ public class ListenEvents implements Listener {
     }
 
     /**
-     * Prevent placing marble heads. Uses the actual item used to place.
+     * Prevent placing marbles. Uses the actual item used to place.
      */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
@@ -184,45 +184,20 @@ public class ListenEvents implements Listener {
     }
 
     /**
-     * Block right-click equipping (player heads can be equipped by right-click if helmet slot is empty).
+     * Prevent placing marbles in the helmet slot.
      */
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onRightClickEquip(PlayerInteractEvent event) {
-        Action action = event.getAction();
-        if (action != Action.RIGHT_CLICK_AIR && action != Action.RIGHT_CLICK_BLOCK) return;
-
-        // Avoid firing twice on some servers (main-hand + off-hand)
-        if (event.getHand() != null && event.getHand() != EquipmentSlot.HAND) return;
-
-        Player player = event.getPlayer();
-        ItemStack item = event.getItem();
-        if (!isMarble(item)) return;
-
-        // Only matters if helmet is empty (that’s when MC would auto-equip)
-        if (player.getInventory().getHelmet() == null) {
-            player.sendMessage(ChatColor.RED + "" + ChatColor.BOLD + "You can't wear marbles!");
-            player.playSound(player.getLocation(), Sound.ITEM_TRIDENT_HIT, 1.0f, 1.0f);
-            event.setCancelled(true);
-            syncInventoryNextTick(player);
-        }
-    }
-
     @EventHandler
-    public void onHeadRename(InventoryClickEvent e) {
-        Player player = (Player) e.getWhoClicked();
+    public void onHelmetClick(InventoryClickEvent e) {
+        if (!(e.getWhoClicked() instanceof Player)) return;
+
+        if (e.getSlotType() == InventoryType.SlotType.ARMOR && e.getSlot() == 39) {
+            if (isMarble(e.getCursor())) {
+                e.setCancelled(true);
+            }
+        }
+
         if (e.isShiftClick() && isMarble(e.getCurrentItem())) {
             e.setCancelled(true);
         }
-        if (player.getGameMode() == GameMode.CREATIVE
-                && isMarble(e.getCurrentItem())
-                && (player.getInventory().getHelmet() == null || player.getInventory().getHelmet().getType() == Material.AIR || player.getInventory().getHelmet().getType() == Material.PLAYER_HEAD)) {
-            e.setCancelled(true);
-        } else {
-            player.sendMessage("Gamemode: " + String.valueOf(player.getGameMode() == GameMode.CREATIVE));
-            player.sendMessage("Marble: " + String.valueOf(isMarble(e.getCurrentItem())));
-            player.sendMessage("Helmet: " + String.valueOf(player.getInventory().getHelmet() == null || player.getInventory().getHelmet().getType() == Material.AIR));
-            player.sendMessage(String.valueOf(player.getInventory().getHelmet().getType()));
-        }
-
-         }
+    }
 }
