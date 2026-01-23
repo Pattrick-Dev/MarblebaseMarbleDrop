@@ -6,3 +6,16 @@ commands:
    md:
       description: Base command for marble drop
       usage: /md
+   dust:
+      description: Show your Marble Dust balance
+      usage: /dust
+   tasks:
+      description: View and claim daily/weekly tasks
+      usage: /tasks [claim]
+   tasksadmin:
+      description: Admin tools for tasks
+      usage: /tasksadmin reset <daily|weekly|all> <player|all>
+
+permissions:
+   marbledrop.admin:
+      default: op
