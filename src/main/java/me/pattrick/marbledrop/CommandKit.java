@@ -165,9 +165,9 @@ public class CommandKit implements CommandExecutor
 
                 JavaPlugin plugin = JavaPlugin.getProvidingPlugin(getClass());
                 NamespacedKey marbleKey = new NamespacedKey(plugin, "marble");
-                NamespacedKey marbleNameKey = new NamespacedKey(plugin, "marble_name");
                 NamespacedKey marbleTeamKey = new NamespacedKey(plugin, "marble_team");
 
+                assert meta != null;
                 PersistentDataContainer pdc = meta.getPersistentDataContainer();
 
                 Byte flag = pdc.get(marbleKey, PersistentDataType.BYTE);
@@ -178,10 +178,12 @@ public class CommandKit implements CommandExecutor
                 player.sendMessage(ChatColor.YELLOW + "Is Marble: " + (isMarble ? (ChatColor.GREEN + "YES") : (ChatColor.RED + "NO")));
 
                 if (isMarble) {
-                    String name = pdc.get(marbleNameKey, PersistentDataType.STRING);
+                    String name = meta.hasDisplayName()
+                            ? meta.getDisplayName()
+                            : "none";
                     String team = pdc.get(marbleTeamKey, PersistentDataType.STRING);
 
-                    player.sendMessage(ChatColor.YELLOW + "marble_name: " + ChatColor.WHITE + (name != null ? name : "null"));
+                    player.sendMessage(ChatColor.YELLOW + "marble_name: " + ChatColor.WHITE + name);
                     player.sendMessage(ChatColor.YELLOW + "marble_team: " + ChatColor.WHITE + (team != null ? team : "null"));
                 }
             }
