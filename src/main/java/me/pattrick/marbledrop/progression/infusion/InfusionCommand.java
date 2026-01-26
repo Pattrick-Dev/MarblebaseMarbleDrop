@@ -1,19 +1,16 @@
-package me.pattrick.marbledrop.progression;
+package me.pattrick.marbledrop.progression.infusion;
 
-import me.pattrick.marbledrop.progression.infusion.InfusionService;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-public final class DustCommand implements CommandExecutor {
+public final class InfusionCommand implements CommandExecutor {
 
-    private final DustManager dustManager;
     private final InfusionService infusionService;
 
-    public DustCommand(DustManager dustManager, InfusionService infusionService) {
-        this.dustManager = dustManager;
+    public InfusionCommand(InfusionService infusionService) {
         this.infusionService = infusionService;
     }
 
@@ -25,7 +22,7 @@ public final class DustCommand implements CommandExecutor {
         }
 
         // /dust infuse <amount>
-        if (args.length > 0 && args[0].equalsIgnoreCase("infuse")) {
+        if (args.length >= 1 && args[0].equalsIgnoreCase("infuse")) {
             if (args.length < 2) {
                 player.sendMessage(ChatColor.RED + "Use: /dust infuse <amount>");
                 return true;
@@ -43,10 +40,6 @@ public final class DustCommand implements CommandExecutor {
             return true;
         }
 
-        // default: /dust
-        int dust = dustManager.getDust(player);
-        player.sendMessage(ChatColor.GOLD + "Marble Dust: " + ChatColor.YELLOW + dust);
-        player.sendMessage(ChatColor.GRAY + "Use " + ChatColor.WHITE + "/dust infuse <amount>" + ChatColor.GRAY + " to convert dust into a marble.");
-        return true;
+        return false; // let your existing /dust behavior handle balance display
     }
 }

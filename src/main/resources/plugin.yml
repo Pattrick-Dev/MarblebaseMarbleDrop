@@ -7,14 +7,18 @@ commands:
       description: Base command for marble drop
       usage: /md
    dust:
-      description: Show your Marble Dust balance
-      usage: /dust
+      description: Show Marble Dust balance or infuse dust into a marble
+      usage: /dust [infuse <amount>]
    tasks:
       description: View and claim daily/weekly tasks
       usage: /tasks [claim]
    tasksadmin:
       description: Admin tools for tasks
       usage: /tasksadmin reset <daily|weekly|all> <player|all>
+   infusiontable:
+      description: Manage infusion table cauldrons
+      usage: /infusiontable add|remove|count
+      permission: marbledrop.admin
 
 permissions:
    marbledrop.admin:
