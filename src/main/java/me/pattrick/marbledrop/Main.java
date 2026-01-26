@@ -66,6 +66,8 @@ public class Main extends JavaPlugin
 
         getCommand("md").setExecutor(new CommandKit());
         getCommand("md").setTabCompleter(new CommandKitTabCompletion());
+        getCommand("dustadmin").setExecutor(new DustAdminCommand(dustManager));
+
 
         // Listeners
         getServer().getPluginManager().registerEvents(new ListenEvents(), this);

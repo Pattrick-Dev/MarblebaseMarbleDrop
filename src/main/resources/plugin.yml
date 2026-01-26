@@ -19,6 +19,10 @@ commands:
       description: Manage infusion table cauldrons
       usage: /infusiontable add|remove|count
       permission: marbledrop.admin
+   dustadmin:
+      description: Admin command to manage Marble Dust
+      usage: /dustadmin <give|remove|set> <player> <amount>
+      permission: marbledrop.admin.dust
 
 permissions:
    marbledrop.admin:

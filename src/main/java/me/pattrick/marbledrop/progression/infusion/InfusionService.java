@@ -16,7 +16,10 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 public final class InfusionService {
 
@@ -32,9 +35,12 @@ public final class InfusionService {
     // Reads the team from the item's PDC (source of truth)
     private final NamespacedKey K_TEAM;
 
-    // NEW: per-player daily infusion cap tracking
+    // per-player daily infusion cap tracking
     private final NamespacedKey K_INFUSE_DAY;   // int: YYYYMMDD
     private final NamespacedKey K_INFUSE_COUNT; // int: used today
+
+    // reads rarity from marble PDC (for catalyst marbles)
+    private final NamespacedKey K_RARITY;
 
     // Keep 3-arg constructor signature so Main doesn't break
     public InfusionService(Plugin plugin, DustManager dust, me.pattrick.marbledrop.progression.infusion.heads.HeadPool headPool) {
@@ -48,6 +54,8 @@ public final class InfusionService {
 
         this.K_INFUSE_DAY = new NamespacedKey(plugin, "infuse_day");
         this.K_INFUSE_COUNT = new NamespacedKey(plugin, "infuse_count");
+
+        this.K_RARITY = new NamespacedKey(plugin, "rarity");
     }
 
     /**
@@ -66,11 +74,17 @@ public final class InfusionService {
     }
 
     /**
-     * Produce the infused marble ItemStack for GUIs/animations.
+     * Backwards compatible method used by existing code.
      * bonusValue is hidden value from catalyst items.
-     * Returns null if failed (and refunds dust if dust was taken).
      */
     public ItemStack infuseToItem(Player player, int amount, int bonusValue) {
+        return infuseToItem(player, amount, bonusValue, null);
+    }
+
+    /**
+     * NEW: Produce the infused marble ItemStack with optional marble catalyst rarity bias.
+     */
+    public ItemStack infuseToItem(Player player, int amount, int bonusValue, MarbleRarity catalystRarity) {
         if (amount <= 0) {
             player.sendMessage(ChatColor.RED + "Use: /dust infuse <amount>");
             return null;
@@ -82,7 +96,7 @@ public final class InfusionService {
             return null;
         }
 
-        // NEW: daily cap (0 = unlimited)
+        // daily cap (0 = unlimited)
         int cap = plugin.getConfig().getInt("infusion.daily-cap", 0);
         if (cap > 0) {
             int used = getInfusionsUsedToday(player);
@@ -103,8 +117,8 @@ public final class InfusionService {
 
         int effective = amount + attunement + Math.max(0, bonusValue);
 
-        // Roll rarity
-        MarbleRarity rarity = rarityRoller.roll(effective);
+        // Roll rarity (biased if catalyst marble rarity present)
+        MarbleRarity rarity = rollWithCatalystBias(effective, catalystRarity);
 
         // Update attunement (hidden pity)
         int newAttunement = attunement;
@@ -159,7 +173,7 @@ public final class InfusionService {
         pdc.set(K_LEGACY_MARBLE, PersistentDataType.BYTE, (byte) 1);
 
         // Visible lore
-        meta.setLore(java.util.List.of(
+        meta.setLore(List.of(
                 ChatColor.GRAY + "Team: " + ChatColor.WHITE + team,
                 ChatColor.GRAY + "Rarity: " + rarityColor(rarity) + rarity.name(),
                 "",
@@ -172,7 +186,7 @@ public final class InfusionService {
 
         item.setItemMeta(meta);
 
-        // NEW: increment daily infusion count ONLY on success
+        // increment daily infusion count ONLY on success
         if (cap > 0) {
             incrementInfusionsUsedToday(player);
             int usedNow = getInfusionsUsedToday(player);
@@ -183,9 +197,127 @@ public final class InfusionService {
                 + ChatColor.YELLOW + effective
                 + ChatColor.GRAY + " (" + amount + " dust"
                 + (bonusValue > 0 ? (" + " + bonusValue + " catalyst") : "")
+                + (catalystRarity != null ? (ChatColor.GRAY + " + " + rarityColor(catalystRarity) + catalystRarity.name() + ChatColor.GRAY + " marble") : "")
                 + ChatColor.GRAY + ")");
 
         return item;
+    }
+
+    /**
+     * Reads rarity from a catalyst marble item.
+     * Returns null if item is not a marble catalyst.
+     */
+    public MarbleRarity readMarbleCatalystRarity(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return null;
+
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return null;
+
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+
+        // must be a marble (legacy flag)
+        Byte isMarble = pdc.get(K_LEGACY_MARBLE, PersistentDataType.BYTE);
+        if (isMarble == null || isMarble != (byte) 1) {
+            return null;
+        }
+
+        // preferred: PDC rarity
+        String rarityStr = pdc.get(K_RARITY, PersistentDataType.STRING);
+        if (rarityStr != null && !rarityStr.isEmpty()) {
+            MarbleRarity parsed = parseRaritySafe(rarityStr);
+            if (parsed != null) return parsed;
+        }
+
+        // fallback: lore parsing ("Rarity: <RARITY>")
+        List<String> lore = meta.getLore();
+        if (lore != null) {
+            for (String line : lore) {
+                if (line == null) continue;
+                String stripped = ChatColor.stripColor(line);
+                if (stripped == null) continue;
+
+                if (stripped.toLowerCase(Locale.ROOT).startsWith("rarity:")) {
+                    String after = stripped.substring("rarity:".length()).trim();
+                    MarbleRarity parsed = parseRaritySafe(after);
+                    if (parsed != null) return parsed;
+                }
+            }
+        }
+
+        // legacy unknown rarity -> treat as COMMON
+        return MarbleRarity.COMMON;
+    }
+
+    /**
+     * Catalyst bias while keeping your project rarity enum as the public type.
+     *
+     * IMPORTANT: RarityRoller currently returns me.pattrick.marbledrop.marble.MarbleRarity,
+     * so we convert it into me.pattrick.marbledrop.MarbleRarity by name().
+     */
+    private MarbleRarity rollWithCatalystBias(int effectiveValue, MarbleRarity catalystRarity) {
+        MarbleRarity best = toProjectRarity(rarityRoller.roll(effectiveValue));
+
+        if (catalystRarity == null) {
+            return best;
+        }
+
+        int extraRolls;
+        double floorChance;
+
+        switch (catalystRarity) {
+            case UNCOMMON -> { extraRolls = 1; floorChance = 0.35; }
+            case RARE -> { extraRolls = 2; floorChance = 0.55; }
+            case EPIC -> { extraRolls = 3; floorChance = 0.75; }
+            case LEGENDARY -> { extraRolls = 4; floorChance = 0.90; }
+            default -> { extraRolls = 0; floorChance = 0.0; }
+        }
+
+        // Extra rerolls – take best
+        for (int i = 0; i < extraRolls; i++) {
+            MarbleRarity rolled = toProjectRarity(rarityRoller.roll(effectiveValue));
+            if (rolled.ordinal() > best.ordinal()) {
+                best = rolled;
+            }
+        }
+
+        // Soft floor chance
+        if (best.ordinal() < catalystRarity.ordinal()) {
+            if (ThreadLocalRandom.current().nextDouble() < floorChance) {
+                best = catalystRarity;
+            }
+        }
+
+        return best;
+    }
+
+    /**
+     * Converts the roller's enum type (me.pattrick.marbledrop.marble.MarbleRarity)
+     * into your project enum type (me.pattrick.marbledrop.MarbleRarity).
+     */
+    private MarbleRarity toProjectRarity(me.pattrick.marbledrop.marble.MarbleRarity rollerRarity) {
+        if (rollerRarity == null) return MarbleRarity.COMMON;
+        try {
+            return MarbleRarity.valueOf(rollerRarity.name());
+        } catch (IllegalArgumentException ex) {
+            return MarbleRarity.COMMON;
+        }
+    }
+
+    private MarbleRarity parseRaritySafe(String raw) {
+        if (raw == null) return null;
+
+        String cleaned = ChatColor.stripColor(raw);
+        if (cleaned == null) cleaned = raw;
+
+        cleaned = cleaned.trim()
+                .replace(' ', '_')
+                .toUpperCase(Locale.ROOT);
+
+        try {
+            return MarbleRarity.valueOf(cleaned);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private int getInfusionsUsedToday(Player player) {
@@ -196,7 +328,6 @@ public final class InfusionService {
         Integer count = pdc.get(K_INFUSE_COUNT, PersistentDataType.INTEGER);
 
         if (day == null || day != today || count == null) {
-            // reset for a new day / missing values
             pdc.set(K_INFUSE_DAY, PersistentDataType.INTEGER, today);
             pdc.set(K_INFUSE_COUNT, PersistentDataType.INTEGER, 0);
             return 0;

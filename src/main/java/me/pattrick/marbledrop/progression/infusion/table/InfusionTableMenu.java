@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.progression.infusion.table;
 
+import me.pattrick.marbledrop.MarbleRarity;
 import me.pattrick.marbledrop.progression.DustManager;
 import me.pattrick.marbledrop.progression.infusion.InfusionService;
 import org.bukkit.Bukkit;
@@ -12,6 +13,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public final class InfusionTableMenu {
@@ -67,16 +69,25 @@ public final class InfusionTableMenu {
         inv.setItem(SLOT_CATALYST, catalyst == null ? new ItemStack(Material.AIR) : catalyst);
 
         // Buttons
-        inv.setItem(SLOT_MINUS, button(Material.REDSTONE, ChatColor.RED + "-50 Dust",
-                List.of(ChatColor.GRAY + "Decrease infusion dust by 50")));
+        inv.setItem(SLOT_MINUS, button(
+                Material.REDSTONE,
+                ChatColor.RED + "-50 Dust",
+                List.of(ChatColor.GRAY + "Decrease infusion dust by 50")
+        ));
 
-        inv.setItem(SLOT_PLUS, button(Material.GLOWSTONE_DUST, ChatColor.GREEN + "+50 Dust",
-                List.of(ChatColor.GRAY + "Increase infusion dust by 50")));
+        inv.setItem(SLOT_PLUS, button(
+                Material.GLOWSTONE_DUST,
+                ChatColor.GREEN + "+50 Dust",
+                List.of(ChatColor.GRAY + "Increase infusion dust by 50")
+        ));
 
-        // Info (this is the "confirmation" that catalyst is being counted)
+        // Info panel
         int balance = dust.getDust(player);
         ItemStack cat = inv.getItem(SLOT_CATALYST);
         int catalystValue = CatalystValue.valueOf(cat);
+
+        // Detect marble catalyst rarity (if applicable)
+        MarbleRarity marbleCatalystRarity = infusion.readMarbleCatalystRarity(cat);
 
         String catName = (cat == null || cat.getType().isAir())
                 ? (ChatColor.DARK_GRAY + "None")
@@ -86,30 +97,45 @@ public final class InfusionTableMenu {
                 ? (ChatColor.DARK_GRAY + "Nothing")
                 : (ChatColor.YELLOW + "" + cat.getAmount() + " " + prettyName(cat));
 
-        inv.setItem(SLOT_INFO, button(Material.BOOK, ChatColor.LIGHT_PURPLE + "Infusion Details",
-                List.of(
-                        ChatColor.GRAY + "Dust Balance: " + ChatColor.YELLOW + balance,
-                        ChatColor.GRAY + "Dust Amount: " + ChatColor.YELLOW + dustAmount,
-                        "",
-                        ChatColor.GRAY + "Catalyst: " + catName,
-                        ChatColor.GRAY + "Catalyst Value: " + ChatColor.YELLOW + catalystValue,
-                        ChatColor.GRAY + "Will Consume: " + willConsume,
-                        "",
-                        ChatColor.GRAY + "Total Value: " + ChatColor.GOLD + (dustAmount + catalystValue),
-                        "",
-                        ChatColor.DARK_GRAY + "Put any item in the center slot",
-                        ChatColor.DARK_GRAY + "to boost the infusion outcome.",
-                        ChatColor.DARK_GRAY + "Close menu to get items back."
-                )));
+        // Build lore dynamically (so we can omit the Rarity Boost line entirely)
+        List<String> lore = new ArrayList<>();
+        lore.add(ChatColor.GRAY + "Dust Balance: " + ChatColor.YELLOW + balance);
+        lore.add(ChatColor.GRAY + "Dust Amount: " + ChatColor.YELLOW + dustAmount);
+        lore.add("");
+        lore.add(ChatColor.GRAY + "Catalyst: " + catName);
+        lore.add(ChatColor.GRAY + "Catalyst Value: " + ChatColor.YELLOW + catalystValue);
+
+        // Only show this line if a MARBLE catalyst is present
+        if (marbleCatalystRarity != null) {
+            String rarityBoostLine = rarityColor(marbleCatalystRarity) + marbleCatalystRarity.name() + "+";
+            lore.add(ChatColor.GRAY + "Rarity Boost: " + rarityBoostLine);
+        }
+
+        lore.add(ChatColor.GRAY + "Will Consume: " + willConsume);
+        lore.add("");
+        lore.add(ChatColor.GRAY + "Total Value: " + ChatColor.GOLD + (dustAmount + catalystValue));
+        lore.add("");
+        lore.add(ChatColor.DARK_GRAY + "Put any item in the center slot");
+        lore.add(ChatColor.DARK_GRAY + "to boost the infusion outcome.");
+        lore.add(ChatColor.DARK_GRAY + "Close menu to get items back.");
+
+        inv.setItem(SLOT_INFO, button(
+                Material.BOOK,
+                ChatColor.LIGHT_PURPLE + "Infusion Details",
+                lore
+        ));
 
         // Confirm
-        inv.setItem(SLOT_CONFIRM, button(Material.AMETHYST_SHARD, ChatColor.GOLD + "Infuse",
+        inv.setItem(SLOT_CONFIRM, button(
+                Material.AMETHYST_SHARD,
+                ChatColor.GOLD + "Infuse",
                 List.of(
                         ChatColor.GRAY + "Consume dust + 1 catalyst item",
                         ChatColor.GRAY + "and form a marble.",
                         "",
                         ChatColor.YELLOW + "Click to begin."
-                )));
+                )
+        ));
     }
 
     private ItemStack button(Material mat, String name, List<String> lore) {
@@ -133,8 +159,10 @@ public final class InfusionTableMenu {
         ItemStack catalyst = inv.getItem(SLOT_CATALYST);
         int catalystValue = CatalystValue.valueOf(catalyst);
 
+        MarbleRarity marbleCatalystRarity = infusion.readMarbleCatalystRarity(catalyst);
+
         // Try infusion first (dust is deducted inside infuseToItem)
-        ItemStack marble = infusion.infuseToItem(player, dustAmount, catalystValue);
+        ItemStack marble = infusion.infuseToItem(player, dustAmount, catalystValue, marbleCatalystRarity);
         if (marble == null) {
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
             draw(player, inv);
@@ -169,5 +197,15 @@ public final class InfusionTableMenu {
         }
         String s = item.getType().name().toLowerCase().replace('_', ' ');
         return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+    }
+
+    private String rarityColor(MarbleRarity r) {
+        return switch (r) {
+            case COMMON -> ChatColor.WHITE.toString();
+            case UNCOMMON -> ChatColor.GREEN.toString();
+            case RARE -> ChatColor.AQUA.toString();
+            case EPIC -> ChatColor.LIGHT_PURPLE.toString();
+            case LEGENDARY -> ChatColor.GOLD.toString();
+        };
     }
 }
