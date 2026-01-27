@@ -47,8 +47,6 @@ public class HeadDatabase {
         baseMeta.setDisplayName(displayName);
 
         // Lore:
-        // - keep your existing “Marblebase Marble” marker
-        // - also show rarity + stats to the player
         baseMeta.setLore(Arrays.asList(
                 "§7Team: " + team,
                 "§7Rarity: §f" + rarity.displayName() + " §8(Cap " + rarity.statCap() + ")",

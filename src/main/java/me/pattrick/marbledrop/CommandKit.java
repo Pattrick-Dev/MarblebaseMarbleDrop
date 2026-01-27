@@ -1,199 +1,236 @@
 package me.pattrick.marbledrop;
 
-import java.util.UUID;
-import java.io.IOException;
-import org.bukkit.ChatColor;
-import org.bukkit.entity.Player;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandSender;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.Bukkit;
-import org.bukkit.configuration.file.FileConfiguration;
-import java.io.File;
-import org.bukkit.command.CommandExecutor;
+import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
+import java.io.IOException;
 
-public class CommandKit implements CommandExecutor
-{
-    File dataFolder;
-    File filePath;
-    FileConfiguration config;
-    
-    public CommandKit() {
-        this.dataFolder = Bukkit.getPluginManager().getPlugin("MarbleBaseMD").getDataFolder();
-        this.filePath = new File(this.dataFolder, "config.yml");
-        this.config = (FileConfiguration)YamlConfiguration.loadConfiguration(this.filePath);
+public class CommandKit implements CommandExecutor {
+
+    private final JavaPlugin plugin;
+
+    private final CommandExecutor infusionTableCommand;// dust infuse
+    private final CommandExecutor dustCommand;
+    private final CommandExecutor dustAdminCommand;
+    private final CommandExecutor marbleRecyclerCommand;
+    private final CommandExecutor tasksCommand;
+    private final CommandExecutor tasksAdminCommand;
+
+    private final File filePath;
+    private final FileConfiguration config;
+
+    public CommandKit(
+            JavaPlugin plugin,
+            CommandExecutor infusionTableCommand,
+            CommandExecutor dustCommand,
+            CommandExecutor dustAdminCommand,
+            CommandExecutor marbleRecyclerCommand,
+            CommandExecutor tasksCommand,
+            CommandExecutor tasksAdminCommand
+    ) {
+        this.plugin = plugin;
+        this.infusionTableCommand = infusionTableCommand;
+        this.dustCommand = dustCommand;
+        this.dustAdminCommand = dustAdminCommand;
+        this.marbleRecyclerCommand = marbleRecyclerCommand;
+        this.tasksCommand = tasksCommand;
+        this.tasksAdminCommand = tasksAdminCommand;
+
+        this.filePath = new File(plugin.getDataFolder(), "config.yml");
+        this.config = YamlConfiguration.loadConfiguration(this.filePath);
     }
-    
-    public boolean onCommand(final CommandSender sender, final Command cmd, final String label, final String[] args) {
-        if (sender instanceof Player) {
-            final Player player = (Player)sender;
-            if (args.length == 0) {
-                if (player.isOp() || player.hasPermission("marbledrop.admin")) {
-                    player.sendMessage(ChatColor.GREEN + "Marblebase MarbleDrop Plugin (Admin)\n\nBase command: /md\n \n" + ChatColor.DARK_GREEN + "Arguments:\ndebug:" + ChatColor.GREEN + " enable debug mode\n" + ChatColor.DARK_GREEN + "chance <double>:" + ChatColor.GREEN + " check chance and set chance\n" + ChatColor.DARK_GREEN + "cooldown/cd:" + ChatColor.GREEN + " check your cooldown\n" + ChatColor.DARK_GREEN + "removecooldown/rcd <player>:" + ChatColor.GREEN + " remove cooldown of a player");
-                }
-                else {
-                    player.sendMessage(ChatColor.GREEN + "Marblebase MarbleDrop Plugin\nDeveloped by Pattrick\n \n" + ChatColor.DARK_GREEN + "/md cd:" + ChatColor.GREEN + " Check your cooldown until you can find a marble\n");
-                }
+
+    private static String[] shiftArgs(String[] args, int by) {
+        if (args.length <= by) return new String[0];
+        String[] out = new String[args.length - by];
+        System.arraycopy(args, by, out, 0, out.length);
+        return out;
+    }
+
+    @Override
+    public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+
+        if (!cmd.getName().equalsIgnoreCase("md")) {
+            sender.sendMessage(ChatColor.RED + "Use: /md");
+            return true;
+        }
+
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage("Please run all commands as a player!");
+            return true;
+        }
+
+        if (args.length == 0) {
+            sendHelp(player);
+            return true;
+        }
+
+        String sub = args[0].toLowerCase();
+
+        // ---------------- ROUTING ----------------
+
+        if (sub.equals("table") || sub.equals("infusiontable")) {
+            return infusionTableCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+        }
+
+        if (sub.equals("recycler") || sub.equals("recycle")) {
+            return marbleRecyclerCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+        }
+
+        if (sub.equals("tasks")) {
+            if (args.length >= 2 && args[1].equalsIgnoreCase("admin")) {
+                return tasksAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 2));
             }
-            else if (args[0].equalsIgnoreCase("debug")) {
+            return tasksCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+        }
+
+        if (sub.equals("dust")) {
+            if (args.length >= 2 && args[1].equalsIgnoreCase("admin")) {
+                return dustAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 2));
+            }
+            return dustCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+        }
+
+        // ---------------- CORE / ADMIN ----------------
+
+        switch (sub) {
+            case "help" -> {
+                sendHelp(player);
+                return true;
+            }
+
+            case "debug" -> {
                 if (!player.hasPermission("marbledrop.debug")) {
                     player.sendMessage(ChatColor.RED + "You don't have permission");
+                    return true;
                 }
-                if (this.config.getBoolean("debug-mode")) {
-                    this.config.set("debug-mode", (Object)false);
-                    player.sendMessage(ChatColor.GRAY + "Debug mode: " + ChatColor.RED + "disabled.");
-                    try {
-                        this.config.options().copyDefaults(true);
-                        this.config.save(this.filePath);
-                    }
-                    catch (IOException e) {
-                        e.printStackTrace();
-                    }
+
+                boolean next = !config.getBoolean("debug-mode");
+                config.set("debug-mode", next);
+
+                player.sendMessage(ChatColor.GRAY + "Debug mode: " +
+                        (next ? ChatColor.GREEN + "enabled." : ChatColor.RED + "disabled."));
+
+                try {
+                    config.save(filePath);
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
-                else if (!this.config.getBoolean("debug-mode")) {
-                    this.config.set("debug-mode", (Object)true);
-                    player.sendMessage(ChatColor.GRAY + "Debug mode:" + ChatColor.GREEN + " enabled.");
-                    try {
-                        this.config.options().copyDefaults(true);
-                        this.config.save(this.filePath);
-                    }
-                    catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
+                return true;
             }
-            else if (args[0].equalsIgnoreCase("chance")) {
+
+            case "chance" -> {
                 if (!player.hasPermission("marbledrop.chance")) {
                     player.sendMessage(ChatColor.RED + "You don't have permission");
+                    return true;
                 }
+
                 if (args.length == 1) {
-                    player.sendMessage(ChatColor.YELLOW + "The current chance to get a marble is: " + ChatColor.BOLD + this.config.getString("drop-chance") + ChatColor.RESET + ChatColor.YELLOW + "%");
+                    player.sendMessage(ChatColor.YELLOW +
+                            "The current chance to get a marble is: " +
+                            ChatColor.BOLD + config.getString("drop-chance") + "%");
+                    return true;
                 }
-                else if (args[1] != null && args.length == 2) {
-                    try {
-                        final double chanceDrop = Double.parseDouble(args[1]);
-                        if (chanceDrop > 100.0) {
-                            player.sendMessage(ChatColor.RED + "Chance cannot be higher than 100! " + ChatColor.BOLD + args[1] + ChatColor.RESET + ChatColor.RED + " is higher than 100!");
-                        }
-                        if (chanceDrop < 0.09) {
-                            player.sendMessage(ChatColor.RED + "Chance cannot be lower than 0.1! " + ChatColor.BOLD + args[1] + ChatColor.RESET + ChatColor.RED + " is lower than 0.1!");
-                        }
-                        if (chanceDrop <= 100.0 && chanceDrop >= 0.1) {
-                            player.sendMessage(ChatColor.BLUE + "Chance is now set to " + ChatColor.DARK_AQUA + ChatColor.BOLD + args[1] + "%");
-                            this.config.set("drop-chance", (Object)args[1]);
-                            try {
-                                this.config.options().copyDefaults(true);
-                                this.config.save(this.filePath);
-                            }
-                            catch (IOException e2) {
-                                e2.printStackTrace();
-                            }
-                        }
+
+                if (args.length > 2) {
+                    player.sendMessage(ChatColor.RED + "Usage: /md chance <double>");
+                    return true;
+                }
+
+                try {
+                    double chance = Double.parseDouble(args[1]);
+
+                    if (chance < 0.1 || chance > 100.0) {
+                        player.sendMessage(ChatColor.RED + "Chance must be between 0.1 and 100.");
+                        return true;
                     }
-                    catch (NumberFormatException e3) {
-                        player.sendMessage(ChatColor.RED + "Please input a valid number 0.1 - 100! " + ChatColor.BOLD + args[1] + ChatColor.RESET + ChatColor.RED + " is not a valid number.");
-                    }
+
+                    config.set("drop-chance", args[1]);
+                    config.save(filePath);
+
+                    player.sendMessage(ChatColor.BLUE + "Chance set to " +
+                            ChatColor.AQUA + ChatColor.BOLD + args[1] + "%");
+
+                } catch (Exception e) {
+                    player.sendMessage(ChatColor.RED + "Invalid number.");
                 }
-                else if (args.length > 2) {
-                    player.sendMessage(ChatColor.RED + "Too many arguments! Usage: /md chance <Double>");
-                }
+                return true;
             }
-            else if (args[0].equalsIgnoreCase("cooldown") || args[0].equalsIgnoreCase("cd")) {
-                if (!player.hasPermission("marbledrop.cooldown")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission");
-                }
-                if (!ListenEvents.cooldown.containsKey(player.getUniqueId())) {
-                    player.sendMessage(ChatColor.GREEN + "You are able to find a marble!");
-                }
-                else {
-                    final long timeElapsed = System.currentTimeMillis() - ListenEvents.cooldown.get(player.getUniqueId());
-                    if (timeElapsed >= 86400000L) {
-                        player.sendMessage(ChatColor.GREEN + "You are able to find a marble!");
-                    }
-                    else {
-                        player.sendMessage(ChatColor.RED + "You cannot find another marble for " + (86400000L - timeElapsed) / 1000L / 60L + " minutes");
-                    }
-                }
-            }
-            else if (args[0].equalsIgnoreCase("removecooldown") || args[0].equalsIgnoreCase("rcd")) {
-                if (!player.hasPermission("marbledrop.removecooldown")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission");
-                }
-                if (args.length >= 3) {
-                    player.sendMessage(ChatColor.RED + "Error: Too many arguments");
-                }
-                else if (args.length == 1) {
-                    player.sendMessage("Usage: /rcd <player>\nRemove a players marble cooldown");
-                }
-                else if (args.length == 2) {
-                    final Player onlinePlayer = Bukkit.getPlayerExact(args[1]);
-                    if (onlinePlayer == null) {
-                        player.sendMessage(ChatColor.RED + "That player is not online!");
-                    }
-                    else if (onlinePlayer != null) {
-                        final UUID onlineUUID = onlinePlayer.getUniqueId();
-                        if (!ListenEvents.cooldown.containsKey(onlineUUID)) {
-                            player.sendMessage(ChatColor.RED + "That player is not on cooldown!");
-                        }
-                        else if (ListenEvents.cooldown.containsKey(onlineUUID)) {
-                            ListenEvents.cooldown.remove(onlineUUID);
-                            player.sendMessage(ChatColor.GREEN + "Removed " + onlinePlayer.getDisplayName() + "'s cooldown!");
-                        }
-                    }
-                }
-            } else if (args[0].equalsIgnoreCase("pdc")) {
+
+            case "pdc" -> {
                 if (!player.hasPermission("marbledrop.debug")) {
                     player.sendMessage(ChatColor.RED + "You don't have permission");
+                    return true;
                 }
 
                 ItemStack item = player.getInventory().getItemInMainHand();
                 if (item == null || item.getType().isAir()) {
-                    player.sendMessage(ChatColor.RED + "You are not holding an item.");
+                    player.sendMessage(ChatColor.RED + "Hold an item first.");
+                    return true;
                 }
 
                 ItemMeta meta = item.getItemMeta();
                 if (meta == null) {
-                    player.sendMessage(ChatColor.RED + "That item has no ItemMeta.");
+                    player.sendMessage(ChatColor.RED + "No ItemMeta.");
+                    return true;
                 }
 
-                JavaPlugin plugin = JavaPlugin.getProvidingPlugin(getClass());
                 NamespacedKey marbleKey = new NamespacedKey(plugin, "marble");
-                NamespacedKey marbleTeamKey = new NamespacedKey(plugin, "marble_team");
+                NamespacedKey teamKey = new NamespacedKey(plugin, "marble_team");
 
-                assert meta != null;
                 PersistentDataContainer pdc = meta.getPersistentDataContainer();
-
-                Byte flag = pdc.get(marbleKey, PersistentDataType.BYTE);
-                boolean isMarble = (flag != null && flag == (byte) 1);
+                boolean isMarble = pdc.getOrDefault(marbleKey,
+                        PersistentDataType.BYTE, (byte) 0) == 1;
 
                 player.sendMessage(ChatColor.GOLD + "=== Marble Debug ===");
-                player.sendMessage(ChatColor.YELLOW + "Type: " + ChatColor.WHITE + item.getType());
-                player.sendMessage(ChatColor.YELLOW + "Is Marble: " + (isMarble ? (ChatColor.GREEN + "YES") : (ChatColor.RED + "NO")));
+                player.sendMessage("Is Marble: " +
+                        (isMarble ? ChatColor.GREEN + "YES" : ChatColor.RED + "NO"));
 
                 if (isMarble) {
-                    String name = meta.hasDisplayName()
-                            ? meta.getDisplayName()
-                            : "none";
-                    String team = pdc.get(marbleTeamKey, PersistentDataType.STRING);
-
-                    player.sendMessage(ChatColor.YELLOW + "marble_name: " + ChatColor.WHITE + name);
-                    player.sendMessage(ChatColor.YELLOW + "marble_team: " + ChatColor.WHITE + (team != null ? team : "null"));
+                    player.sendMessage("Name: " +
+                            (meta.hasDisplayName() ? meta.getDisplayName() : "none"));
+                    player.sendMessage("Team: " +
+                            pdc.getOrDefault(teamKey, PersistentDataType.STRING, "null"));
                 }
+                return true;
             }
-            else {
-                player.sendMessage(ChatColor.RED + "Error: Argument not found");
+
+            default -> {
+                player.sendMessage(ChatColor.RED + "Unknown subcommand. Use /md.");
+                return true;
             }
         }
-        else {
-            System.out.print("Please run all commands as a player!");
+    }
+
+    private void sendHelp(Player player) {
+        boolean admin = player.isOp() || player.hasPermission("marbledrop.admin");
+
+        if (admin) {
+            player.sendMessage(ChatColor.GREEN + "MarbleDrop Admin Commands\n" +
+                    ChatColor.DARK_GREEN + "/md table\n" +
+                    ChatColor.DARK_GREEN + "/md dust\n" +
+                    ChatColor.DARK_GREEN + "/md tasks\n" +
+                    ChatColor.DARK_GREEN + "/md recycler\n" +
+                    ChatColor.DARK_GREEN + "/md debug\n" +
+                    ChatColor.DARK_GREEN + "/md chance <double>\n" +
+                    ChatColor.DARK_GREEN + "/md pdc");
+        } else {
+            player.sendMessage(ChatColor.GREEN + "MarbleDrop Commands\n" +
+                    ChatColor.DARK_GREEN + "/md dust\n" +
+                    ChatColor.DARK_GREEN + "/md tasks\n");
         }
-        return true;
     }
 }

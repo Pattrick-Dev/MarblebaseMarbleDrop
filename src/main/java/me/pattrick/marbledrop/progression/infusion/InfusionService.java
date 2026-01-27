@@ -6,6 +6,10 @@ import me.pattrick.marbledrop.MarbleItem;
 import me.pattrick.marbledrop.MarbleRarity;
 import me.pattrick.marbledrop.MarbleStats;
 import me.pattrick.marbledrop.progression.DustManager;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
@@ -41,6 +45,9 @@ public final class InfusionService {
 
     // reads rarity from marble PDC (for catalyst marbles)
     private final NamespacedKey K_RARITY;
+
+    // Permission that bypasses daily infusion cap (and also avoids incrementing the counter)
+    private static final String PERM_BYPASS_INFUSION_LIMIT = "marbledrop.infusion.bypass";
 
     // Keep 3-arg constructor signature so Main doesn't break
     public InfusionService(Plugin plugin, DustManager dust, me.pattrick.marbledrop.progression.infusion.heads.HeadPool headPool) {
@@ -83,6 +90,9 @@ public final class InfusionService {
 
     /**
      * NEW: Produce the infused marble ItemStack with optional marble catalyst rarity bias.
+     * catalystRarity comes from an "old marble" inserted as a catalyst.
+     *
+     * Returns null if failed (and refunds dust if dust was taken).
      */
     public ItemStack infuseToItem(Player player, int amount, int bonusValue, MarbleRarity catalystRarity) {
         if (amount <= 0) {
@@ -96,9 +106,11 @@ public final class InfusionService {
             return null;
         }
 
-        // daily cap (0 = unlimited)
+        // NEW: daily cap (0 = unlimited) + admin bypass
         int cap = plugin.getConfig().getInt("infusion.daily-cap", 0);
-        if (cap > 0) {
+        boolean bypass = player.isOp() || player.hasPermission(PERM_BYPASS_INFUSION_LIMIT);
+
+        if (cap > 0 && !bypass) {
             int used = getInfusionsUsedToday(player);
             if (used >= cap) {
                 player.sendMessage(ChatColor.RED + "You have reached your daily infusion limit (" + cap + ").");
@@ -186,8 +198,12 @@ public final class InfusionService {
 
         item.setItemMeta(meta);
 
-        // increment daily infusion count ONLY on success
-        if (cap > 0) {
+        // ---- NEW: broadcast rare discoveries with hover tooltip ----
+//        broadcastMarbleDiscovery(player, team, rarity, stats);
+        // -----------------------------------------------------------
+
+        // increment daily infusion count ONLY on success (and do not increment for bypass users)
+        if (cap > 0 && !bypass) {
             incrementInfusionsUsedToday(player);
             int usedNow = getInfusionsUsedToday(player);
             player.sendMessage(ChatColor.GRAY + "Infusions today: " + ChatColor.YELLOW + usedNow + ChatColor.GRAY + "/" + ChatColor.YELLOW + cap);
@@ -201,6 +217,62 @@ public final class InfusionService {
                 + ChatColor.GRAY + ")");
 
         return item;
+    }
+
+    /**
+     * Hoverable broadcast (RARE+ by default):
+     * ✨ <PLAYER> discovered a <RARITY> Marble!
+     * Hovering over <RARITY> shows team + stats.
+     */
+    private void broadcastMarbleDiscovery(Player player, String team, MarbleRarity rarity, MarbleStats stats) {
+        // Broadcast threshold: RARE+
+        if (rarity.ordinal() < MarbleRarity.RARE.ordinal()) return;
+
+        NamedTextColor rarityColor = rarityNamedColor(rarity);
+
+        Component hover = Component.text("")
+                .append(Component.text("Team: ", NamedTextColor.GRAY))
+                .append(Component.text(team, NamedTextColor.WHITE))
+                .append(Component.newline())
+                .append(Component.text("Rarity: ", NamedTextColor.GRAY))
+                .append(Component.text(rarity.name(), rarityColor))
+                .append(Component.newline())
+                .append(Component.newline())
+                .append(Component.text("Speed: ", NamedTextColor.GRAY))
+                .append(Component.text(String.valueOf(stats.speed()), NamedTextColor.WHITE))
+                .append(Component.newline())
+                .append(Component.text("Control: ", NamedTextColor.GRAY))
+                .append(Component.text(String.valueOf(stats.control()), NamedTextColor.WHITE))
+                .append(Component.newline())
+                .append(Component.text("Momentum: ", NamedTextColor.GRAY))
+                .append(Component.text(String.valueOf(stats.momentum()), NamedTextColor.WHITE))
+                .append(Component.newline())
+                .append(Component.text("Stability: ", NamedTextColor.GRAY))
+                .append(Component.text(String.valueOf(stats.stability()), NamedTextColor.WHITE))
+                .append(Component.newline())
+                .append(Component.text("Luck: ", NamedTextColor.GRAY))
+                .append(Component.text(String.valueOf(stats.luck()), NamedTextColor.WHITE));
+
+        Component rarityWord = Component.text(rarity.name(), rarityColor)
+                .hoverEvent(HoverEvent.showText(hover));
+
+        Component msg = Component.text("✨ ", NamedTextColor.GOLD)
+                .append(Component.text(player.getName(), NamedTextColor.YELLOW))
+                .append(Component.text(" discovered a ", NamedTextColor.GRAY))
+                .append(rarityWord)
+                .append(Component.text(" Marble! [BMD]", NamedTextColor.GRAY));
+
+        Bukkit.broadcast(msg);
+    }
+
+    private NamedTextColor rarityNamedColor(MarbleRarity r) {
+        return switch (r) {
+            case COMMON -> NamedTextColor.WHITE;
+            case UNCOMMON -> NamedTextColor.GREEN;
+            case RARE -> NamedTextColor.AQUA;
+            case EPIC -> NamedTextColor.LIGHT_PURPLE;
+            case LEGENDARY -> NamedTextColor.GOLD;
+        };
     }
 
     /**
@@ -255,7 +327,7 @@ public final class InfusionService {
      * so we convert it into me.pattrick.marbledrop.MarbleRarity by name().
      */
     private MarbleRarity rollWithCatalystBias(int effectiveValue, MarbleRarity catalystRarity) {
-        MarbleRarity best = toProjectRarity(rarityRoller.roll(effectiveValue));
+        MarbleRarity best = toProjectRarity(RarityRoller.roll(effectiveValue));
 
         if (catalystRarity == null) {
             return best;
@@ -264,17 +336,33 @@ public final class InfusionService {
         int extraRolls;
         double floorChance;
 
+        // Match the updated "safer" catalyst tuning from RarityRoller
         switch (catalystRarity) {
-            case UNCOMMON -> { extraRolls = 1; floorChance = 0.35; }
-            case RARE -> { extraRolls = 2; floorChance = 0.55; }
-            case EPIC -> { extraRolls = 3; floorChance = 0.75; }
-            case LEGENDARY -> { extraRolls = 4; floorChance = 0.90; }
-            default -> { extraRolls = 0; floorChance = 0.0; }
+            case UNCOMMON -> {
+                extraRolls = 1;
+                floorChance = 0.20;
+            }
+            case RARE -> {
+                extraRolls = 1;
+                floorChance = 0.30;
+            }
+            case EPIC -> {
+                extraRolls = 2;
+                floorChance = 0.40;
+            }
+            case LEGENDARY -> {
+                extraRolls = 2;
+                floorChance = 0.50;
+            }
+            default -> {
+                extraRolls = 0;
+                floorChance = 0.0;
+            }
         }
 
         // Extra rerolls – take best
         for (int i = 0; i < extraRolls; i++) {
-            MarbleRarity rolled = toProjectRarity(rarityRoller.roll(effectiveValue));
+            MarbleRarity rolled = toProjectRarity(RarityRoller.roll(effectiveValue));
             if (rolled.ordinal() > best.ordinal()) {
                 best = rolled;
             }
@@ -328,6 +416,7 @@ public final class InfusionService {
         Integer count = pdc.get(K_INFUSE_COUNT, PersistentDataType.INTEGER);
 
         if (day == null || day != today || count == null) {
+            // reset for a new day / missing values
             pdc.set(K_INFUSE_DAY, PersistentDataType.INTEGER, today);
             pdc.set(K_INFUSE_COUNT, PersistentDataType.INTEGER, 0);
             return 0;

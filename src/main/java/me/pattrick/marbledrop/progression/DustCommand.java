@@ -23,30 +23,8 @@ public final class DustCommand implements CommandExecutor {
             sender.sendMessage(ChatColor.RED + "Players only.");
             return true;
         }
-
-        // /dust infuse <amount>
-        if (args.length > 0 && args[0].equalsIgnoreCase("infuse")) {
-            if (args.length < 2) {
-                player.sendMessage(ChatColor.RED + "Use: /dust infuse <amount>");
-                return true;
-            }
-
-            int amount;
-            try {
-                amount = Integer.parseInt(args[1]);
-            } catch (Exception ex) {
-                player.sendMessage(ChatColor.RED + "That isn't a valid number.");
-                return true;
-            }
-
-            infusionService.infuse(player, amount);
-            return true;
-        }
-
-        // default: /dust
         int dust = dustManager.getDust(player);
         player.sendMessage(ChatColor.GOLD + "Marble Dust: " + ChatColor.YELLOW + dust);
-        player.sendMessage(ChatColor.GRAY + "Use " + ChatColor.WHITE + "/dust infuse <amount>" + ChatColor.GRAY + " to convert dust into a marble.");
         return true;
     }
 }

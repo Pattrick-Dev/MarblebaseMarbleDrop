@@ -1,4 +1,4 @@
-package me.pattrick.marbledrop.progression.infusion.table;
+package me.pattrick.marbledrop.progression;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -12,7 +12,7 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
-public final class InfusionTableManager {
+public final class MarbleRecyclerManager {
 
     private final Plugin plugin;
     private final File file;
@@ -20,9 +20,9 @@ public final class InfusionTableManager {
 
     private final Set<String> keys = new HashSet<>();
 
-    public InfusionTableManager(Plugin plugin) {
+    public MarbleRecyclerManager(Plugin plugin) {
         this.plugin = plugin;
-        this.file = new File(plugin.getDataFolder(), "infusion_tables.yml");
+        this.file = new File(plugin.getDataFolder(), "recyclers.yml");
         reload();
     }
 
@@ -38,8 +38,8 @@ public final class InfusionTableManager {
         this.cfg = YamlConfiguration.loadConfiguration(file);
 
         keys.clear();
-        if (cfg.isConfigurationSection("tables")) {
-            keys.addAll(cfg.getConfigurationSection("tables").getKeys(false));
+        if (cfg.isConfigurationSection("recyclers")) {
+            keys.addAll(cfg.getConfigurationSection("recyclers").getKeys(false));
         }
     }
 
@@ -51,43 +51,42 @@ public final class InfusionTableManager {
         }
     }
 
-    // Made public so other systems can key markers consistently
     public String keyOf(Location loc) {
         return loc.getWorld().getName() + "," + loc.getBlockX() + "," + loc.getBlockY() + "," + loc.getBlockZ();
     }
 
-    public boolean isTable(Location loc) {
+    public boolean isRecycler(Location loc) {
         return keys.contains(keyOf(loc));
     }
 
-    public boolean addTable(Location loc) {
+    public boolean addRecycler(Location loc) {
         String k = keyOf(loc);
         if (keys.contains(k)) return false;
 
         keys.add(k);
-        cfg.set("tables." + k + ".world", loc.getWorld().getName());
-        cfg.set("tables." + k + ".x", loc.getBlockX());
-        cfg.set("tables." + k + ".y", loc.getBlockY());
-        cfg.set("tables." + k + ".z", loc.getBlockZ());
+        cfg.set("recyclers." + k + ".world", loc.getWorld().getName());
+        cfg.set("recyclers." + k + ".x", loc.getBlockX());
+        cfg.set("recyclers." + k + ".y", loc.getBlockY());
+        cfg.set("recyclers." + k + ".z", loc.getBlockZ());
         save();
         return true;
     }
 
-    public boolean removeTable(Location loc) {
+    public boolean removeRecycler(Location loc) {
         String k = keyOf(loc);
         if (!keys.contains(k)) return false;
 
         keys.remove(k);
-        cfg.set("tables." + k, null);
+        cfg.set("recyclers." + k, null);
         save();
         return true;
     }
 
-    /**
-     * NEW: Convenience accessor for ambient visuals.
-     * Returns block locations of all infusion tables.
-     */
-    public Set<Location> getTables() {
+    public int count() {
+        return keys.size();
+    }
+
+    public Set<Location> getRecyclers() {
         Set<Location> out = new HashSet<>();
         for (String k : keys) {
             String[] parts = k.split(",");
@@ -101,9 +100,7 @@ public final class InfusionTableManager {
                 int y = Integer.parseInt(parts[2]);
                 int z = Integer.parseInt(parts[3]);
                 out.add(new Location(w, x, y, z));
-            } catch (NumberFormatException ignored) {
-                // ignore bad entries
-            }
+            } catch (NumberFormatException ignored) {}
         }
         return out;
     }

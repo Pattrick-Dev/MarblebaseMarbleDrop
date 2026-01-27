@@ -11,9 +11,11 @@ import org.bukkit.entity.Player;
 public final class InfusionTableCommand implements CommandExecutor {
 
     private final InfusionTableManager tables;
+    private final InfusionTableAmbient ambient;
 
-    public InfusionTableCommand(InfusionTableManager tables) {
+    public InfusionTableCommand(InfusionTableManager tables, InfusionTableAmbient ambient) {
         this.tables = tables;
+        this.ambient = ambient;
     }
 
     @Override
@@ -29,12 +31,12 @@ public final class InfusionTableCommand implements CommandExecutor {
         }
 
         if (args.length == 0) {
-            player.sendMessage(ChatColor.YELLOW + "Use: /infusiontable add|remove|count");
+            player.sendMessage(ChatColor.YELLOW + "Use: /md table add|remove|count");
             return true;
         }
 
         if (args[0].equalsIgnoreCase("count")) {
-            player.sendMessage(ChatColor.GRAY + "Infusion tables: " + ChatColor.WHITE + tables.count());
+            player.sendMessage(ChatColor.GRAY + "Infusion tables: " + ChatColor.WHITE + tables.getTables().size());
             return true;
         }
 
@@ -54,13 +56,19 @@ public final class InfusionTableCommand implements CommandExecutor {
 
         if (args[0].equalsIgnoreCase("remove")) {
             boolean ok = tables.removeTable(target.getLocation());
-            player.sendMessage(ok
-                    ? (ChatColor.GREEN + "Removed Infusion Table mark from this cauldron.")
-                    : (ChatColor.YELLOW + "This cauldron is not marked as an Infusion Table."));
+            if (ok) {
+                // Remove hologram marker immediately
+                if (ambient != null) {
+                    ambient.removeTable(target.getLocation());
+                }
+                player.sendMessage(ChatColor.GREEN + "Removed Infusion Table mark from this cauldron.");
+            } else {
+                player.sendMessage(ChatColor.YELLOW + "This cauldron is not marked as an Infusion Table.");
+            }
             return true;
         }
 
-        player.sendMessage(ChatColor.YELLOW + "Use: /infusiontable add|remove|count");
+        player.sendMessage(ChatColor.YELLOW + "Use: /md table add|remove|count");
         return true;
     }
 }
