@@ -1,4 +1,3 @@
-drop-chance: 0.17
 debug-mode: false
 infusion:
   daily-cap: 5  # 0 = unlimited

@@ -1,6 +1,6 @@
 package me.pattrick.marbledrop;
 
-import org.bukkit.Bukkit;
+import me.pattrick.marbledrop.progression.upgrades.UpgradeStationCommand;
 import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
@@ -29,6 +29,9 @@ public class CommandKit implements CommandExecutor {
     private final CommandExecutor tasksCommand;
     private final CommandExecutor tasksAdminCommand;
 
+    // ✅ NEW
+    private final CommandExecutor upgradeStationCommand;
+
     private final File filePath;
     private final FileConfiguration config;
 
@@ -39,7 +42,8 @@ public class CommandKit implements CommandExecutor {
             CommandExecutor dustAdminCommand,
             CommandExecutor marbleRecyclerCommand,
             CommandExecutor tasksCommand,
-            CommandExecutor tasksAdminCommand
+            CommandExecutor tasksAdminCommand,
+            UpgradeStationCommand upgradeStationCommand
     ) {
         this.plugin = plugin;
         this.infusionTableCommand = infusionTableCommand;
@@ -48,6 +52,9 @@ public class CommandKit implements CommandExecutor {
         this.marbleRecyclerCommand = marbleRecyclerCommand;
         this.tasksCommand = tasksCommand;
         this.tasksAdminCommand = tasksAdminCommand;
+
+        // ✅ store it
+        this.upgradeStationCommand = upgradeStationCommand;
 
         this.filePath = new File(plugin.getDataFolder(), "config.yml");
         this.config = YamlConfiguration.loadConfiguration(this.filePath);
@@ -88,6 +95,11 @@ public class CommandKit implements CommandExecutor {
 
         if (sub.equals("recycler") || sub.equals("recycle")) {
             return marbleRecyclerCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+        }
+
+        // ✅ NEW: upgrades routing
+        if (sub.equals("upgrade") || sub.equals("upgrades")) {
+            return upgradeStationCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
 
         if (sub.equals("tasks")) {
@@ -132,44 +144,6 @@ public class CommandKit implements CommandExecutor {
                 return true;
             }
 
-            case "chance" -> {
-                if (!player.hasPermission("marbledrop.chance")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission");
-                    return true;
-                }
-
-                if (args.length == 1) {
-                    player.sendMessage(ChatColor.YELLOW +
-                            "The current chance to get a marble is: " +
-                            ChatColor.BOLD + config.getString("drop-chance") + "%");
-                    return true;
-                }
-
-                if (args.length > 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md chance <double>");
-                    return true;
-                }
-
-                try {
-                    double chance = Double.parseDouble(args[1]);
-
-                    if (chance < 0.1 || chance > 100.0) {
-                        player.sendMessage(ChatColor.RED + "Chance must be between 0.1 and 100.");
-                        return true;
-                    }
-
-                    config.set("drop-chance", args[1]);
-                    config.save(filePath);
-
-                    player.sendMessage(ChatColor.BLUE + "Chance set to " +
-                            ChatColor.AQUA + ChatColor.BOLD + args[1] + "%");
-
-                } catch (Exception e) {
-                    player.sendMessage(ChatColor.RED + "Invalid number.");
-                }
-                return true;
-            }
-
             case "pdc" -> {
                 if (!player.hasPermission("marbledrop.debug")) {
                     player.sendMessage(ChatColor.RED + "You don't have permission");
@@ -188,25 +162,45 @@ public class CommandKit implements CommandExecutor {
                     return true;
                 }
 
-                NamespacedKey marbleKey = new NamespacedKey(plugin, "marble");
-                NamespacedKey teamKey = new NamespacedKey(plugin, "marble_team");
-
                 PersistentDataContainer pdc = meta.getPersistentDataContainer();
-                boolean isMarble = pdc.getOrDefault(marbleKey,
-                        PersistentDataType.BYTE, (byte) 0) == 1;
+
+                // legacy keys
+                NamespacedKey legacyMarble = new NamespacedKey(plugin, "marble");
+                NamespacedKey legacyTeam = new NamespacedKey(plugin, "marble_team");
+
+                byte legacyFlag = pdc.getOrDefault(legacyMarble, PersistentDataType.BYTE, (byte) 0);
+                String legacyTeamVal = pdc.getOrDefault(legacyTeam, PersistentDataType.STRING, "null");
+
+                // modern keys (MarbleKeys)
+                boolean mkId = (me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_ID != null)
+                        && pdc.has(me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_ID, PersistentDataType.STRING);
+                boolean mkKey = (me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_KEY != null)
+                        && pdc.has(me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_KEY, PersistentDataType.STRING);
+                boolean mkRarity = (me.pattrick.marbledrop.marble.MarbleKeys.RARITY != null)
+                        && pdc.has(me.pattrick.marbledrop.marble.MarbleKeys.RARITY, PersistentDataType.STRING);
+
+                String idVal = (me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_ID == null) ? "nullKey"
+                        : pdc.getOrDefault(me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_ID, PersistentDataType.STRING, "null");
+                String keyVal = (me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_KEY == null) ? "nullKey"
+                        : pdc.getOrDefault(me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_KEY, PersistentDataType.STRING, "null");
+                String rarityVal = (me.pattrick.marbledrop.marble.MarbleKeys.RARITY == null) ? "nullKey"
+                        : pdc.getOrDefault(me.pattrick.marbledrop.marble.MarbleKeys.RARITY, PersistentDataType.STRING, "null");
 
                 player.sendMessage(ChatColor.GOLD + "=== Marble Debug ===");
-                player.sendMessage("Is Marble: " +
-                        (isMarble ? ChatColor.GREEN + "YES" : ChatColor.RED + "NO"));
+                player.sendMessage(ChatColor.YELLOW + "Legacy:");
+                player.sendMessage("  marble(byte)=" + legacyFlag);
+                player.sendMessage("  marble_team=" + legacyTeamVal);
 
-                if (isMarble) {
-                    player.sendMessage("Name: " +
-                            (meta.hasDisplayName() ? meta.getDisplayName() : "none"));
-                    player.sendMessage("Team: " +
-                            pdc.getOrDefault(teamKey, PersistentDataType.STRING, "null"));
-                }
+                player.sendMessage(ChatColor.YELLOW + "Modern:");
+                player.sendMessage("  has marble_id=" + mkId + " val=" + idVal);
+                player.sendMessage("  has marble_key=" + mkKey + " val=" + keyVal);
+                player.sendMessage("  has rarity=" + mkRarity + " val=" + rarityVal);
+
+                player.sendMessage(ChatColor.YELLOW + "MarbleItem.isMarble=" + me.pattrick.marbledrop.marble.MarbleItem.isMarble(item));
+
                 return true;
             }
+
 
             default -> {
                 player.sendMessage(ChatColor.RED + "Unknown subcommand. Use /md.");
@@ -224,13 +218,14 @@ public class CommandKit implements CommandExecutor {
                     ChatColor.DARK_GREEN + "/md dust\n" +
                     ChatColor.DARK_GREEN + "/md tasks\n" +
                     ChatColor.DARK_GREEN + "/md recycler\n" +
+                    ChatColor.DARK_GREEN + "/md upgrade\n" +   // ✅ NEW
                     ChatColor.DARK_GREEN + "/md debug\n" +
-                    ChatColor.DARK_GREEN + "/md chance <double>\n" +
                     ChatColor.DARK_GREEN + "/md pdc");
         } else {
             player.sendMessage(ChatColor.GREEN + "MarbleDrop Commands\n" +
                     ChatColor.DARK_GREEN + "/md dust\n" +
-                    ChatColor.DARK_GREEN + "/md tasks\n");
+                    ChatColor.DARK_GREEN + "/md tasks\n" +
+                    ChatColor.DARK_GREEN + "/md upgrade\n"); // ✅ NEW (players will use it to open GUI)
         }
     }
 }
