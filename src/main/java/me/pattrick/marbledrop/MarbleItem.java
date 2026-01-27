@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop;
 
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -101,4 +102,27 @@ public class MarbleItem {
 
         return new Marble(id, displayName, team, rarity, stats);
     }
+
+
+    public static ItemStack createItem(Marble marble) {
+        // Pick whatever base item you want marbles to be.
+        // If you currently use a specific material elsewhere, set it here.
+        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return item;
+
+        // Display name is your "marble name" now
+        if (marble.displayName() != null) {
+            meta.setDisplayName(marble.displayName());
+        }
+
+        // THIS is the important part: sets is_marble + all stats/team/rarity/id
+        applyToMeta(meta, marble);
+
+        item.setItemMeta(meta);
+        return item;
+    }
+
+
 }
