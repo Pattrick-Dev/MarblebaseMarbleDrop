@@ -6,6 +6,9 @@ import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -15,9 +18,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.EulerAngle;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -77,13 +78,18 @@ public final class InfusionTableProcess {
     }
 
     /**
-     * heads.yml line format (plain text):
-     *   base64==-§b§lMarble_Name-Team
+     * YAML ONLY format:
      *
-     * Parse rules:
-     * - Base64 = everything up to and including the "==" padding.
-     *   We find the marker "==-§" and take substring(0, markerIndex + 2).
-     * - Team = text after the last "-" in the remainder.
+     * heads:
+     *   1:
+     *     base64: "..."
+     *     name: "§a§lSomething"   (optional)
+     *     team: "Limers"
+     *
+     * - team is used for grouping (lowercased)
+     * - base64 is applied via SkullUtil.applyBase64
+     *
+     * This method is intentionally LOUD if something is wrong.
      */
     private static Map<String, List<ItemStack>> getHeadsByTeam(JavaPlugin plugin) {
         Map<String, List<ItemStack>> cached = HEADS_BY_TEAM_CACHE;
@@ -100,50 +106,97 @@ public final class InfusionTableProcess {
 
             File headsFile = new File(dataFolder, "heads.yml");
             if (!headsFile.exists()) {
+                plugin.getLogger().warning("[Infusion] heads.yml missing at: " + headsFile.getAbsolutePath());
+                plugin.getLogger().warning("[Infusion] Result: no decoy textures will load; animation will show only the result marble.");
                 HEADS_BY_TEAM_CACHE = Collections.emptyMap();
                 return HEADS_BY_TEAM_CACHE;
             }
 
-            final String DELIM = "==-§";
             Map<String, List<ItemStack>> byTeam = new HashMap<>();
 
-            try (BufferedReader br = new BufferedReader(new FileReader(headsFile))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    String raw = line.trim();
-                    if (raw.isEmpty()) continue;
-                    if (raw.startsWith("#")) continue;
+            int totalEntries = 0;
+            int loadedHeads = 0;
+            int skippedMissingTeam = 0;
+            int skippedMissingBase64 = 0;
+            int skippedApplyFailed = 0;
 
-                    int delimIdx = raw.indexOf(DELIM);
-                    if (delimIdx <= 0) continue;
+            try {
+                FileConfiguration cfg = YamlConfiguration.loadConfiguration(headsFile);
 
-                    // Keep "==" in base64
-                    String base64 = raw.substring(0, delimIdx + 2).trim();
-                    String label = raw.substring(delimIdx + 3).trim(); // starts with §b§l...
+                ConfigurationSection headsSec = cfg.getConfigurationSection("heads");
+                if (headsSec == null) {
+                    plugin.getLogger().warning("[Infusion] heads.yml loaded but missing top-level 'heads:' section: " + headsFile.getAbsolutePath());
+                    plugin.getLogger().warning("[Infusion] Result: no decoy textures will load; animation will show only the result marble.");
+                    HEADS_BY_TEAM_CACHE = Collections.emptyMap();
+                    return HEADS_BY_TEAM_CACHE;
+                }
 
-                    if (base64.isEmpty() || label.isEmpty()) continue;
+                for (String id : headsSec.getKeys(false)) {
+                    ConfigurationSection entry = headsSec.getConfigurationSection(id);
+                    if (entry == null) continue;
 
-                    int lastDash = label.lastIndexOf('-');
-                    if (lastDash < 0 || lastDash >= label.length() - 1) continue;
+                    totalEntries++;
 
-                    String teamKey = label.substring(lastDash + 1).trim().toLowerCase(Locale.ROOT);
-                    if (teamKey.isEmpty()) continue;
+                    String base64 = entry.getString("base64");
+                    String team = entry.getString("team");
+                    String name = entry.getString("name", "");
+
+                    if (team == null || team.trim().isEmpty()) {
+                        skippedMissingTeam++;
+                        plugin.getLogger().warning("[Infusion] heads.yml entry '" + id + "' missing 'team' (skipping).");
+                        continue;
+                    }
+
+                    if (base64 == null || base64.trim().isEmpty()) {
+                        skippedMissingBase64++;
+                        plugin.getLogger().warning("[Infusion] heads.yml entry '" + id + "' missing 'base64' (skipping).");
+                        continue;
+                    }
+
+                    String teamKey = team.trim().toLowerCase(Locale.ROOT);
 
                     ItemStack head = new ItemStack(Material.PLAYER_HEAD, 1);
                     SkullMeta meta = (SkullMeta) head.getItemMeta();
-                    if (meta == null) continue;
+                    if (meta == null) {
+                        plugin.getLogger().warning("[Infusion] Unable to get SkullMeta for entry '" + id + "' (skipping).");
+                        continue;
+                    }
 
                     try {
                         SkullUtil.applyBase64(meta, base64);
-                    } catch (Exception ignored) {
+                    } catch (Exception ex) {
+                        skippedApplyFailed++;
+                        plugin.getLogger().warning("[Infusion] SkullUtil.applyBase64 failed for entry '" + id + "' (team=" + team + "): " + ex.getMessage());
                         continue;
+                    }
+
+                    if (name != null && !name.trim().isEmpty()) {
+                        meta.setDisplayName(name);
                     }
 
                     head.setItemMeta(meta);
                     byTeam.computeIfAbsent(teamKey, k -> new ArrayList<>()).add(head);
+                    loadedHeads++;
                 }
+
             } catch (Exception e) {
-                plugin.getLogger().warning("[Infusion] Failed to read heads.yml: " + e.getMessage());
+                plugin.getLogger().severe("[Infusion] Failed to read/parse heads.yml: " + headsFile.getAbsolutePath());
+                plugin.getLogger().severe("[Infusion] Error: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                HEADS_BY_TEAM_CACHE = Collections.emptyMap();
+                return HEADS_BY_TEAM_CACHE;
+            }
+
+            // Summary log (always helpful, not spammy)
+            plugin.getLogger().info("[Infusion] heads.yml parsed. entries=" + totalEntries
+                    + ", loadedHeads=" + loadedHeads
+                    + ", teams=" + byTeam.size()
+                    + ", skippedMissingTeam=" + skippedMissingTeam
+                    + ", skippedMissingBase64=" + skippedMissingBase64
+                    + ", skippedApplyFailed=" + skippedApplyFailed);
+
+            if (byTeam.isEmpty()) {
+                plugin.getLogger().warning("[Infusion] heads.yml produced 0 valid heads. Animation will not show decoy texture swaps.");
+                plugin.getLogger().warning("[Infusion] Check that 'heads:' exists and each entry has 'team' + 'base64'. File: " + headsFile.getAbsolutePath());
             }
 
             HEADS_BY_TEAM_CACHE = byTeam.isEmpty() ? Collections.emptyMap() : byTeam;
@@ -162,7 +215,8 @@ public final class InfusionTableProcess {
         List<ItemStack> decoys = new ArrayList<>();
         Random rng = new Random();
 
-        for (List<ItemStack> teamHeads : byTeam.values()) {
+        for (Map.Entry<String, List<ItemStack>> e : byTeam.entrySet()) {
+            List<ItemStack> teamHeads = e.getValue();
             if (teamHeads == null || teamHeads.isEmpty()) continue;
             ItemStack pick = teamHeads.get(rng.nextInt(teamHeads.size()));
             decoys.add(pick.clone());
@@ -189,6 +243,11 @@ public final class InfusionTableProcess {
 
         final ItemStack resultMarble = marble.clone();
         final List<ItemStack> decoys = buildUniqueTeamDecoys(plugin);
+
+        if (decoys.size() <= 1) {
+            plugin.getLogger().warning("[Infusion] Decoy list size=" + decoys.size()
+                    + " (animation swaps will be invisible). Ensure heads.yml has multiple teams with valid base64.");
+        }
 
         ArmorStand stand = w.spawn(standBase, ArmorStand.class, as -> {
             as.setInvisible(true);
@@ -235,17 +294,11 @@ public final class InfusionTableProcess {
             boolean announced = false;
 
             private void spawnWhitePoof(Location loc) {
-                // Big white poof to hide the stand vanishing
                 w.spawnParticle(Particle.POOF, loc, 28, 0.26, 0.20, 0.26, 0.03);
                 w.spawnParticle(Particle.SMOKE, loc, 18, 0.24, 0.18, 0.24, 0.02);
             }
 
-            /**
-             * Big "WIN" burst (safe particles, no Color-required particles).
-             * Option A: DO NOT use ENTITY_EFFECT / DUST / anything that needs data.
-             */
             private void spawnRevealBurst(Location loc) {
-                // Bigger firework-y burst
                 w.spawnParticle(Particle.FIREWORK, loc, 80, 0.42, 0.30, 0.42, 0.20);
                 w.spawnParticle(Particle.END_ROD, loc, 22, 0.30, 0.22, 0.30, 0.08);
                 w.spawnParticle(Particle.CRIT, loc, 28, 0.30, 0.22, 0.30, 0.18);
@@ -336,11 +389,6 @@ public final class InfusionTableProcess {
                         .append(Component.text(luck != null ? luck : "?", NamedTextColor.WHITE));
             }
 
-            /**
-             * ✅ The ONLY announcement point.
-             * Called AFTER the item has been awarded (inventory add or dropped due to full inv).
-             * EPIC+ only. Hover shows details. Only rarity is colored.
-             */
             private void broadcastIfNeededAfterAward(ItemStack itemJustGiven) {
                 if (announced) return;
                 announced = true;
@@ -353,12 +401,10 @@ public final class InfusionTableProcess {
                 String rarity = findLoreValue(lore, "Rarity");
                 if (rarity == null || rarity.isEmpty()) rarity = "COMMON";
 
-                // EPIC+ only
                 if (rarityRank(rarity) < rarityRank("EPIC")) return;
 
                 Component hover = buildHoverFromItem(itemJustGiven);
 
-                // Only rarity is colored; attach hover to the rarity word
                 Component rarityComp =
                         Component.text(rarity.toUpperCase(Locale.ROOT), rarityColor(rarity))
                                 .hoverEvent(HoverEvent.showText(hover));
@@ -377,10 +423,8 @@ public final class InfusionTableProcess {
                     if (stand != null && stand.isValid()) {
                         Location popLoc = stand.getLocation().clone().add(0, 0.7, 0);
 
-                        // white smoke poof to hide the vanish
                         spawnWhitePoof(popLoc);
 
-                        // small final sparkle (SAFE particles only, no Color data)
                         w.spawnParticle(Particle.FIREWORK, popLoc, 22, 0.24, 0.18, 0.24, 0.10);
                         w.spawnParticle(Particle.END_ROD, popLoc, 10, 0.20, 0.16, 0.20, 0.05);
                         w.spawnParticle(Particle.CRIT, popLoc, 18, 0.25, 0.20, 0.25, 0.15);
@@ -394,8 +438,6 @@ public final class InfusionTableProcess {
 
                     if (giveItem) {
                         final ItemStack award = resultMarble.clone();
-
-                        // decide once (so it's effectively final for lambdas)
                         final boolean dropped = (player.getInventory().firstEmpty() == -1);
 
                         if (dropped) {
@@ -404,15 +446,12 @@ public final class InfusionTableProcess {
                             player.getInventory().addItem(award);
                         }
 
-                        // ✅ delay 2 ticks so client inventory definitely shows it
                         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                            // dropped counts as “awarded”
                             if (dropped) {
                                 broadcastIfNeededAfterAward(award);
                                 return;
                             }
 
-                            // verify it is in inventory before announcing (prevents “early” feeling)
                             for (ItemStack it : player.getInventory().getContents()) {
                                 if (it != null && it.isSimilar(award)) {
                                     broadcastIfNeededAfterAward(award);
@@ -420,7 +459,6 @@ public final class InfusionTableProcess {
                                 }
                             }
 
-                            // if it still isn’t visible, try again 2 ticks later (once)
                             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                                 for (ItemStack it2 : player.getInventory().getContents()) {
                                     if (it2 != null && it2.isSimilar(award)) {
@@ -486,13 +524,10 @@ public final class InfusionTableProcess {
 
                 if (stand != null && stand.isValid()) {
                     stand.getEquipment().setHelmet(resultMarble.clone());
-
-                    // ✅ reveal burst only (NO broadcast here)
                     Location burstLoc = stand.getLocation().clone().add(0, 0.7, 0);
                     spawnRevealBurst(burstLoc);
                 }
 
-                // stop swapping
                 swapCooldown = Integer.MAX_VALUE;
             }
 
@@ -524,13 +559,10 @@ public final class InfusionTableProcess {
                     return;
                 }
 
-                // Reveal winner early so it "lands" before the stop
                 if (!revealedResult && elapsed >= (TOTAL_TICKS - REVEAL_EARLY_TICKS)) {
-                    // reveal immediately (don’t wait for a swap tick)
                     revealResultNow();
                 }
 
-                // normal decoy swapping (only if not revealed)
                 if (!revealedResult && !decoys.isEmpty()) {
                     int swapDelay = swapDelayFor(elapsed);
 
