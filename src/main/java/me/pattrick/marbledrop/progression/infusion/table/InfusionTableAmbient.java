@@ -1,8 +1,8 @@
 package me.pattrick.marbledrop.progression.infusion.table;
 
+import me.pattrick.marbledrop.Main;
 import me.pattrick.marbledrop.progression.DustManager;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Particle;
@@ -17,9 +17,6 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.*;
 
 public final class InfusionTableAmbient {
-
-    private static final String HOLO_NAME =
-            ChatColor.DARK_PURPLE + "✦ " + ChatColor.LIGHT_PURPLE + "Infusion Cauldron" + ChatColor.DARK_PURPLE + " ✦";
 
     private final Plugin plugin;
     private final InfusionTableManager tables;
@@ -71,27 +68,29 @@ public final class InfusionTableAmbient {
         }
 
         // Also remove any duplicates near the spot (if chunk loaded)
-        Location standLoc = loc.clone().add(0.5, 1.25, 0.5);
+        Location standLoc = standLocationFor(loc);
         if (isChunkLoaded(standLoc)) {
             removeDuplicateHolograms(standLoc.getWorld(), standLoc);
         }
     }
 
     private void tick() {
+        final Main main = (plugin instanceof Main m) ? m : null;
+        final double nameRadius = (main != null) ? main.cfg().hologramNameRadius() : 8.0;
+
         for (Location loc : tables.getTables()) {
             World w = loc.getWorld();
             if (w == null) continue;
 
             Location base = loc.clone().add(0.5, 1.0, 0.5);
-            Location standLoc = loc.clone().add(0.5, 1.25, 0.5);
+            Location standLoc = standLocationFor(loc);
 
             // ✅ If chunk is not loaded, DO NOT spawn/replace holograms.
-            // This is the #1 cause of duplicate armor stands.
             if (!isChunkLoaded(standLoc)) {
                 continue;
             }
 
-            List<Player> nearby = getPlayersNear(base, 8.0);
+            List<Player> nearby = getPlayersNear(base, nameRadius);
             boolean active = !nearby.isEmpty();
 
             boolean energized = false;
@@ -107,7 +106,7 @@ public final class InfusionTableAmbient {
             ensureMarker(loc, standLoc, active);
 
             int enchantCount = active ? (energized ? 10 : 6) : 2;
-            int portalCount  = active ? (energized ? 6 : 3) : 1;
+            int portalCount = active ? (energized ? 6 : 3) : 1;
 
             w.spawnParticle(Particle.ENCHANT, base, enchantCount, 0.22, 0.22, 0.22, 0.02);
             w.spawnParticle(Particle.PORTAL, base, portalCount, 0.18, 0.18, 0.18, 0.02);
@@ -125,6 +124,24 @@ public final class InfusionTableAmbient {
         }
     }
 
+    private Location standLocationFor(Location tableLoc) {
+        final double yOffset;
+        if (plugin instanceof Main m) {
+            yOffset = m.cfg().infusionHologramYOffset();
+        } else {
+            yOffset = 1.25;
+        }
+        return tableLoc.clone().add(0.5, yOffset, 0.5);
+    }
+
+    private String holoName() {
+        if (plugin instanceof Main m) {
+            return m.cfg().infusionHologramName();
+        }
+        // fallback (old default)
+        return "§5✦ §dInfusion Cauldron §5✦";
+    }
+
     private void ensureMarker(Location tableLoc, Location standLoc, boolean showName) {
         String key = tables.keyOf(tableLoc);
 
@@ -137,8 +154,7 @@ public final class InfusionTableAmbient {
         if (id != null) {
             stand = getArmorStand(id);
 
-            // IMPORTANT: if stand == null here, it might just be unloaded in some edge cases.
-            // Since we already checked chunk loaded, null should mean "actually gone".
+            // Since chunk is loaded, null here should mean "actually gone"
             if (stand == null || !stand.isValid()) {
                 markerIds.remove(key);
                 stand = null;
@@ -146,12 +162,13 @@ public final class InfusionTableAmbient {
         }
 
         if (stand == null) {
-            // ✅ Before spawning, dedupe any old duplicates (from past bug)
+            // Keep existing one if present, remove extras
             ArmorStand existing = findAnyHologramStand(standLoc.getWorld(), standLoc);
             if (existing != null) {
                 stand = existing;
                 markerIds.put(key, stand.getUniqueId());
             } else {
+                final String name = holoName();
                 stand = standLoc.getWorld().spawn(standLoc, ArmorStand.class, as -> {
                     as.setInvisible(true);
                     as.setMarker(true);
@@ -159,7 +176,7 @@ public final class InfusionTableAmbient {
                     as.setSmall(true);
                     as.setInvulnerable(true);
                     as.setSilent(true);
-                    as.setCustomName(HOLO_NAME);
+                    as.setCustomName(name);
                     as.setCustomNameVisible(showName);
                 });
                 markerIds.put(key, stand.getUniqueId());
@@ -171,8 +188,8 @@ public final class InfusionTableAmbient {
             }
         }
 
-        // keep name state updated
-        stand.setCustomName(HOLO_NAME);
+        // keep name state updated (configurable)
+        stand.setCustomName(holoName());
         stand.setCustomNameVisible(showName);
 
         // HARD guarantee: no helmet ever
@@ -194,13 +211,15 @@ public final class InfusionTableAmbient {
     private ArmorStand findAnyHologramStand(World w, Location standLoc) {
         if (w == null) return null;
 
+        final String expected = holoName();
+
         // Remove duplicates, keep first found
         ArmorStand keep = null;
         for (Entity e : w.getNearbyEntities(standLoc, 0.6, 0.6, 0.6)) {
             if (!(e instanceof ArmorStand as)) continue;
             if (!as.isValid()) continue;
 
-            if (HOLO_NAME.equals(as.getCustomName()) && as.isMarker() && as.isInvisible()) {
+            if (expected.equals(as.getCustomName()) && as.isMarker() && as.isInvisible()) {
                 if (keep == null) {
                     keep = as;
                 } else {
@@ -218,11 +237,13 @@ public final class InfusionTableAmbient {
     private void removeDuplicateHolograms(World w, Location standLoc, UUID keepId) {
         if (w == null) return;
 
+        final String expected = holoName();
+
         for (Entity e : w.getNearbyEntities(standLoc, 0.6, 0.6, 0.6)) {
             if (!(e instanceof ArmorStand as)) continue;
             if (!as.isValid()) continue;
 
-            if (!HOLO_NAME.equals(as.getCustomName())) continue;
+            if (!expected.equals(as.getCustomName())) continue;
             if (!as.isMarker() || !as.isInvisible()) continue;
 
             if (keepId != null && keepId.equals(as.getUniqueId())) continue;

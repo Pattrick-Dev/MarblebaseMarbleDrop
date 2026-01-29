@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.progression.infusion.table;
 
+import me.pattrick.marbledrop.Main;
 import me.pattrick.marbledrop.progression.infusion.heads.SkullUtil;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -186,7 +187,6 @@ public final class InfusionTableProcess {
                 return HEADS_BY_TEAM_CACHE;
             }
 
-            // Summary log (always helpful, not spammy)
             plugin.getLogger().info("[Infusion] heads.yml parsed. entries=" + totalEntries
                     + ", loadedHeads=" + loadedHeads
                     + ", teams=" + byTeam.size()
@@ -236,6 +236,31 @@ public final class InfusionTableProcess {
 
         JavaPlugin plugin = JavaPlugin.getProvidingPlugin(InfusionTableProcess.class);
 
+        // pull animation knobs from config (fallbacks match old behavior)
+        int totalTicks = 120;
+        int holdTicks = 20;
+        int revealEarlyTicks = 10;
+        double bobAmplitude = 0.10;
+        double bobSpeed = 0.22;
+        double startingTurns = 7.0;
+
+        if (plugin instanceof Main main) {
+            totalTicks = main.cfg().infusionAnimTotalTicks();
+            holdTicks = main.cfg().infusionAnimHoldTicks();
+            revealEarlyTicks = main.cfg().infusionAnimRevealEarlyTicks();
+            bobAmplitude = main.cfg().infusionAnimBobAmplitude();
+            bobSpeed = main.cfg().infusionAnimBobSpeed();
+            startingTurns = main.cfg().infusionAnimStartingTurns();
+        }
+
+        // safety clamps (prevents accidental 0/negative configs breaking the animation)
+        totalTicks = Math.max(10, totalTicks);
+        holdTicks = Math.max(0, holdTicks);
+        revealEarlyTicks = Math.max(0, Math.min(revealEarlyTicks, totalTicks));
+        bobAmplitude = Math.max(0.0, bobAmplitude);
+        bobSpeed = Math.max(0.0, bobSpeed);
+        startingTurns = Math.max(0.0, startingTurns);
+
         World w = cauldron.getWorld();
         Location base = cauldron.getLocation().add(0.5, 1.0, 0.5);
         Location cauldronTop = cauldron.getLocation().add(0.5, 0.95, 0.5);
@@ -266,27 +291,21 @@ public final class InfusionTableProcess {
 
         player.playSound(player.getLocation(), Sound.BLOCK_BREWING_STAND_BREW, 1f, 1f);
 
+        final int TOTAL_TICKS_FINAL = totalTicks;
+        final int HOLD_TICKS_FINAL = holdTicks;
+        final int REVEAL_EARLY_TICKS_FINAL = revealEarlyTicks;
+        final double BOB_AMPLITUDE_FINAL = bobAmplitude;
+        final double BOB_SPEED_FINAL = bobSpeed;
+        final double STARTING_SPIN_ANGLE_FINAL = Math.PI * 2.0 * startingTurns; // turns -> radians
+
         new BukkitRunnable() {
-            // --- timing knobs ---
-            final int TOTAL_TICKS = 120;        // 6s spin
-            final int HOLD_TICKS = 20;          // 1s hold
-            final int REVEAL_EARLY_TICKS = 10;  // reveal winner 0.5s before end
-
-            // bob tuning
-            final double BOB_AMPLITUDE = 0.10;
-            final double BOB_SPEED = 0.22;
-
-            // spin ends facing forward
-            final double STARTING_SPIN_ANGLE = Math.PI * 14.0; // 7 turns
-            // --------------------
-
             int elapsed = 0;
 
             int decoyIndex = 0;
             int swapCooldown = 0;
 
             boolean holding = false;
-            int holdLeft = HOLD_TICKS;
+            int holdLeft = HOLD_TICKS_FINAL;
 
             boolean revealedResult = false;
 
@@ -478,11 +497,11 @@ public final class InfusionTableProcess {
             }
 
             private int swapDelayFor(int t) {
-                double p = Math.min(1.0, Math.max(0.0, t / (double) TOTAL_TICKS));
+                double p = Math.min(1.0, Math.max(0.0, t / (double) TOTAL_TICKS_FINAL));
                 double eased = 1.0 - Math.pow(1.0 - p, 3);
 
                 int delay = 1 + (int) Math.round(eased * 7.0); // 1..8
-                if (t > TOTAL_TICKS - 20) delay += 2;          // up to ~10
+                if (t > TOTAL_TICKS_FINAL - 20) delay += 2;          // up to ~10
                 return Math.max(1, delay);
             }
 
@@ -508,14 +527,14 @@ public final class InfusionTableProcess {
 
             private void beginHold() {
                 holding = true;
-                holdLeft = HOLD_TICKS;
+                holdLeft = HOLD_TICKS_FINAL;
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.7f, 2.0f);
             }
 
             private double computedHeadAngle(int t) {
-                double p = Math.min(1.0, Math.max(0.0, t / (double) TOTAL_TICKS));
+                double p = Math.min(1.0, Math.max(0.0, t / (double) TOTAL_TICKS_FINAL));
                 double eased = 1.0 - Math.pow(1.0 - p, 3);
-                return STARTING_SPIN_ANGLE * (1.0 - eased);
+                return STARTING_SPIN_ANGLE_FINAL * (1.0 - eased);
             }
 
             private void revealResultNow() {
@@ -541,7 +560,7 @@ public final class InfusionTableProcess {
                 spawnCauldronActiveParticles(elapsed);
 
                 if (holding) {
-                    double holdBob = 0.02 * Math.sin((HOLD_TICKS - holdLeft) * 0.25);
+                    double holdBob = 0.02 * Math.sin((HOLD_TICKS_FINAL - holdLeft) * 0.25);
 
                     stand.setHeadPose(new EulerAngle(0.0, 0.0, 0.0));
 
@@ -559,7 +578,7 @@ public final class InfusionTableProcess {
                     return;
                 }
 
-                if (!revealedResult && elapsed >= (TOTAL_TICKS - REVEAL_EARLY_TICKS)) {
+                if (!revealedResult && elapsed >= (TOTAL_TICKS_FINAL - REVEAL_EARLY_TICKS_FINAL)) {
                     revealResultNow();
                 }
 
@@ -579,7 +598,7 @@ public final class InfusionTableProcess {
                 double headAngle = computedHeadAngle(elapsed);
                 stand.setHeadPose(new EulerAngle(0.0, headAngle, 0.0));
 
-                double bob = BOB_AMPLITUDE * Math.sin(elapsed * BOB_SPEED);
+                double bob = BOB_AMPLITUDE_FINAL * Math.sin(elapsed * BOB_SPEED_FINAL);
                 Location animLoc = standBase.clone().add(0, bob, 0);
                 stand.teleport(animLoc);
 
@@ -594,7 +613,7 @@ public final class InfusionTableProcess {
 
                 elapsed++;
 
-                if (elapsed >= TOTAL_TICKS) {
+                if (elapsed >= TOTAL_TICKS_FINAL) {
                     stand.setHeadPose(new EulerAngle(0.0, 0.0, 0.0));
 
                     if (!revealedResult) {

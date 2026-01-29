@@ -21,6 +21,7 @@ import java.io.IOException;
 public class CommandKit implements CommandExecutor {
 
     private final JavaPlugin plugin;
+    private final MdConfig mdConfig; // ✅ NEW: your cached config loader
 
     private final CommandExecutor infusionTableCommand;// dust infuse
     private final CommandExecutor dustCommand;
@@ -33,10 +34,11 @@ public class CommandKit implements CommandExecutor {
     private final CommandExecutor upgradeStationCommand;
 
     private final File filePath;
-    private final FileConfiguration config;
+    private FileConfiguration config;
 
     public CommandKit(
             JavaPlugin plugin,
+            MdConfig mdConfig,
             CommandExecutor infusionTableCommand,
             CommandExecutor dustCommand,
             CommandExecutor dustAdminCommand,
@@ -46,6 +48,8 @@ public class CommandKit implements CommandExecutor {
             UpgradeStationCommand upgradeStationCommand
     ) {
         this.plugin = plugin;
+        this.mdConfig = mdConfig;
+
         this.infusionTableCommand = infusionTableCommand;
         this.dustCommand = dustCommand;
         this.dustAdminCommand = dustAdminCommand;
@@ -75,13 +79,9 @@ public class CommandKit implements CommandExecutor {
             return true;
         }
 
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage("Please run all commands as a player!");
-            return true;
-        }
-
         if (args.length == 0) {
-            sendHelp(player);
+            if (sender instanceof Player p) sendHelp(p);
+            else sender.sendMessage("Use /md help");
             return true;
         }
 
@@ -90,19 +90,35 @@ public class CommandKit implements CommandExecutor {
         // ---------------- ROUTING ----------------
 
         if (sub.equals("table") || sub.equals("infusiontable")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Please run this command as a player!");
+                return true;
+            }
             return infusionTableCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
 
         if (sub.equals("recycler") || sub.equals("recycle")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Please run this command as a player!");
+                return true;
+            }
             return marbleRecyclerCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
 
         // ✅ NEW: upgrades routing
         if (sub.equals("upgrade") || sub.equals("upgrades")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Please run this command as a player!");
+                return true;
+            }
             return upgradeStationCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
 
         if (sub.equals("tasks")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Please run this command as a player!");
+                return true;
+            }
             if (args.length >= 2 && args[1].equalsIgnoreCase("admin")) {
                 return tasksAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 2));
             }
@@ -110,6 +126,10 @@ public class CommandKit implements CommandExecutor {
         }
 
         if (sub.equals("dust")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Please run this command as a player!");
+                return true;
+            }
             if (args.length >= 2 && args[1].equalsIgnoreCase("admin")) {
                 return dustAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 2));
             }
@@ -120,31 +140,61 @@ public class CommandKit implements CommandExecutor {
 
         switch (sub) {
             case "help" -> {
-                sendHelp(player);
+                if (sender instanceof Player p) sendHelp(p);
+                else sender.sendMessage("Commands: /md reload");
+                return true;
+            }
+
+            case "reload" -> {
+                if (!sender.hasPermission("marbledrop.admin")) {
+                    sender.sendMessage(ChatColor.RED + "You don't have permission");
+                    return true;
+                }
+
+                try {
+                    plugin.reloadConfig();
+                    if (mdConfig != null) mdConfig.reload();
+
+                    // keep this CommandKit's file-backed view in sync too
+                    this.config = YamlConfiguration.loadConfiguration(this.filePath);
+
+                    sender.sendMessage(ChatColor.GREEN + "MarbleDrop config reloaded.");
+                } catch (Exception ex) {
+                    sender.sendMessage(ChatColor.RED + "Reload failed. Check console.");
+                    ex.printStackTrace();
+                }
                 return true;
             }
 
             case "debug" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage("Please run this command as a player!");
+                    return true;
+                }
                 if (!player.hasPermission("marbledrop.debug")) {
                     player.sendMessage(ChatColor.RED + "You don't have permission");
                     return true;
                 }
 
-                boolean next = !config.getBoolean("debug-mode");
-                config.set("debug-mode", next);
+                // ✅ match your new config structure: debug.enabled
+                boolean next = !plugin.getConfig().getBoolean("debug.enabled", false);
+                plugin.getConfig().set("debug.enabled", next);
+                plugin.saveConfig();
 
-                player.sendMessage(ChatColor.GRAY + "Debug mode: " +
+                player.sendMessage(ChatColor.GRAY + "Debug: " +
                         (next ? ChatColor.GREEN + "enabled." : ChatColor.RED + "disabled."));
 
-                try {
-                    config.save(filePath);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                // keep MdConfig cache updated immediately
+                if (mdConfig != null) mdConfig.reload();
+
                 return true;
             }
 
             case "pdc" -> {
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage("Please run this command as a player!");
+                    return true;
+                }
                 if (!player.hasPermission("marbledrop.debug")) {
                     player.sendMessage(ChatColor.RED + "You don't have permission");
                     return true;
@@ -201,9 +251,8 @@ public class CommandKit implements CommandExecutor {
                 return true;
             }
 
-
             default -> {
-                player.sendMessage(ChatColor.RED + "Unknown subcommand. Use /md.");
+                sender.sendMessage(ChatColor.RED + "Unknown subcommand. Use /md help.");
                 return true;
             }
         }
@@ -218,14 +267,15 @@ public class CommandKit implements CommandExecutor {
                     ChatColor.DARK_GREEN + "/md dust\n" +
                     ChatColor.DARK_GREEN + "/md tasks\n" +
                     ChatColor.DARK_GREEN + "/md recycler\n" +
-                    ChatColor.DARK_GREEN + "/md upgrade\n" +   // ✅ NEW
+                    ChatColor.DARK_GREEN + "/md upgrade\n" +
+                    ChatColor.DARK_GREEN + "/md reload\n" +  // ✅ NEW
                     ChatColor.DARK_GREEN + "/md debug\n" +
                     ChatColor.DARK_GREEN + "/md pdc");
         } else {
             player.sendMessage(ChatColor.GREEN + "MarbleDrop Commands\n" +
                     ChatColor.DARK_GREEN + "/md dust\n" +
                     ChatColor.DARK_GREEN + "/md tasks\n" +
-                    ChatColor.DARK_GREEN + "/md upgrade\n"); // ✅ NEW (players will use it to open GUI)
+                    ChatColor.DARK_GREEN + "/md upgrade\n");
         }
     }
 }
