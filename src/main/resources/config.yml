@@ -1,3 +1,78 @@
-debug-mode: false
+debug:
+  enabled: false
+
+holograms:
+  name-visible-radius: 8.0
+
+  infusion:
+    name: "&5✦ &dInfusion Cauldron &5✦"
+    y-offset: 1.25
+
+  recycler:
+    name: "&8✦ &6Marble Recycler &8✦"
+    y-offset: 1.15
+
 infusion:
-  daily-cap: 5  # 0 = unlimited
+  daily-cap: 5   # 0 = unlimited
+
+  animation:
+    total-ticks: 120
+    hold-ticks: 20
+    reveal-early-ticks: 10
+
+    bob:
+      amplitude: 0.10
+      speed: 0.22
+
+    spin:
+      starting-turns: 7.0
+
+  catalyst:
+    marble-stat-based: true
+    default-per-item: 10
+
+    values:
+      DIAMOND: 200
+      EMERALD: 180
+      NETHERITE_INGOT: 800
+      NETHERITE_SCRAP: 300
+      GOLD_INGOT: 90
+      IRON_INGOT: 45
+      AMETHYST_SHARD: 70
+      PRISMARINE_CRYSTALS: 60
+      BLAZE_ROD: 85
+      ENDER_PEARL: 75
+      SHULKER_SHELL: 250
+
+    marble-value-range:
+      COMMON:     { min: 8,  max: 25 }
+      UNCOMMON:   { min: 12, max: 40 }
+      RARE:       { min: 18, max: 60 }
+      EPIC:       { min: 25, max: 85 }
+      LEGENDARY:  { min: 35, max: 120 }
+
+upgrade-station:
+  gui:
+    show-cap: true
+    show-cost: true
+    click-to-upgrade-text: "&aClick to upgrade"
+
+  cost:
+    base: 10
+    per-point: 0.12
+    rarity-multiplier:
+      COMMON: 1.0
+      UNCOMMON: 1.1
+      RARE: 1.25
+      EPIC: 1.5
+      LEGENDARY: 2.0
+
+  daily-cap: 0  # 0 = unlimited
+
+recycler:
+  dust-return:
+    COMMON: 5
+    UNCOMMON: 10
+    RARE: 20
+    EPIC: 40
+    LEGENDARY: 80

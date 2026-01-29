@@ -1,101 +1,129 @@
 package me.pattrick.marbledrop.progression.infusion.table;
 
+import me.pattrick.marbledrop.Main;
 import me.pattrick.marbledrop.marble.MarbleData;
 import me.pattrick.marbledrop.marble.MarbleItem;
-import me.pattrick.marbledrop.marble.MarbleRarity;
 import org.bukkit.Material;
-import org.bukkit.inventory.ItemStack;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.inventory.ItemStack;
 
-import java.util.Map;
+import java.util.Locale;
 
 public final class CatalystValue {
 
-    // value per item (non-marble catalysts)
-    private static final Map<Material, Integer> VALUES = Map.ofEntries(
-            Map.entry(Material.DIAMOND, 200),
-            Map.entry(Material.EMERALD, 180),
-            Map.entry(Material.NETHERITE_INGOT, 800),
-            Map.entry(Material.NETHERITE_SCRAP, 300),
-            Map.entry(Material.GOLD_INGOT, 90),
-            Map.entry(Material.IRON_INGOT, 45),
-            Map.entry(Material.AMETHYST_SHARD, 70),
-            Map.entry(Material.PRISMARINE_CRYSTALS, 60),
-            Map.entry(Material.BLAZE_ROD, 85),
-            Map.entry(Material.ENDER_PEARL, 75),
-            Map.entry(Material.SHULKER_SHELL, 250)
-    );
-
     private CatalystValue() {}
 
-    /**
-     * Catalyst value rules:
-     * - If item is a Marble (PDC), value is based on that marble's stats (and scaled by rarity caps).
-     * - Otherwise use the material table.
-     * - If missing from table, default is 10 per item.
-     * - Never fails silently: logs if marble read fails unexpectedly.
-     */
     public static int valueOf(ItemStack item) {
         if (item == null || item.getType().isAir()) return 0;
 
-        // ✅ MARBLE catalysts: stat-based value
+        JavaPlugin plugin = JavaPlugin.getProvidingPlugin(CatalystValue.class);
+
+        // --- Marble catalyst (based on stats) ---
         if (MarbleItem.isMarble(item)) {
-            try {
-                MarbleData data = MarbleItem.read(item);
-                if (data == null) {
-                    loud("[Infusion] CatalystValue: item claims marble PDC but MarbleItem.read() returned null. Defaulting to 10.");
-                    return 10 * Math.max(1, item.getAmount());
-                }
-
-                int total = data.getStats().total();
-                MarbleRarity r = data.getRarity();
-                if (r == null) r = MarbleRarity.COMMON;
-
-                // Scale by how “close to cap” this marble is for its rarity
-                // quality: 0.0 .. 1.0
-                double quality = (r.getTotalCap() <= 0) ? 0.0 : Math.min(1.0, Math.max(0.0, total / (double) r.getTotalCap()));
-
-                // Base range per rarity (tuneable)
-                int min = switch (r) {
-                    case COMMON -> 8;
-                    case UNCOMMON -> 12;
-                    case RARE -> 18;
-                    case EPIC -> 25;
-                    case LEGENDARY -> 35;
-                };
-
-                int max = switch (r) {
-                    case COMMON -> 25;
-                    case UNCOMMON -> 40;
-                    case RARE -> 60;
-                    case EPIC -> 85;
-                    case LEGENDARY -> 120;
-                };
-
-                int perMarble = (int) Math.round(min + (max - min) * quality);
-
-                // Safety clamp
-                if (perMarble < 0) perMarble = 0;
-
-                return perMarble * Math.max(1, item.getAmount());
-
-            } catch (Exception ex) {
-                loud("[Infusion] CatalystValue: failed to compute marble catalyst value (" +
-                        ex.getClass().getSimpleName() + ": " + ex.getMessage() + "). Defaulting to 10.");
-                return 10 * Math.max(1, item.getAmount());
-            }
+            int v = marbleCatalystValue(plugin, item);
+            return v * Math.max(1, item.getAmount());
         }
 
-        // Non-marble catalysts: material-based
-        int per = VALUES.getOrDefault(item.getType(), 10); // default small value for “any item”
+        // --- Normal item catalyst (material values) ---
+        int per = materialValue(plugin, item.getType());
         return per * Math.max(1, item.getAmount());
     }
 
-    private static void loud(String msg) {
+    private static int marbleCatalystValue(JavaPlugin plugin, ItemStack item) {
+        // defaults
+        int divisor = cfgInt(plugin, "infusion.catalyst.marble.stat-sum-divisor", 5);
+        int min = cfgInt(plugin, "infusion.catalyst.marble.min", 10);
+        int max = cfgInt(plugin, "infusion.catalyst.marble.max", 1000);
+
+        MarbleData data = null;
         try {
-            JavaPlugin.getProvidingPlugin(CatalystValue.class).getLogger().warning(msg);
-        } catch (Exception ignored) {
-            // last resort: do nothing (logger unavailable very early)
+            data = MarbleItem.read(item);
+        } catch (Throwable t) {
+            plugin.getLogger().warning("[Infusion] Failed to read marble catalyst PDC: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+        }
+
+        if (data == null || data.getStats() == null) {
+            plugin.getLogger().warning("[Infusion] Marble catalyst detected but MarbleItem.read() returned null stats. Using fallback default-item-value.");
+            return cfgInt(plugin, "infusion.catalyst.default-item-value", 10);
+        }
+
+        int sum = data.getStats().total();
+        int d = Math.max(1, divisor);
+        int raw = Math.max(0, sum / d);
+
+        int clamped = raw;
+        if (clamped < min) clamped = min;
+        if (clamped > max) clamped = max;
+
+        return clamped;
+    }
+
+    private static int materialValue(JavaPlugin plugin, Material mat) {
+        int defaultValue = cfgInt(plugin, "infusion.catalyst.default-item-value", 10);
+
+        // support config map:
+        // infusion:
+        //   catalyst:
+        //     material-values:
+        //       DIAMOND: 200
+        //       EMERALD: 180
+        ConfigurationSection sec = cfgSection(plugin, "infusion.catalyst.material-values");
+        if (sec == null) return defaultValue;
+
+        String key = mat.name().toUpperCase(Locale.ROOT);
+        if (!sec.contains(key)) return defaultValue;
+
+        int v = sec.getInt(key, defaultValue);
+        return Math.max(0, v);
+    }
+
+// ✅ Replace your existing cfgInt/cfgSection (and any similar ones) with these:
+
+    private static int cfgInt(JavaPlugin plugin, String path, int def) {
+        try {
+            return plugin.getConfig().getInt(path, def);
+        } catch (Throwable t) {
+            plugin.getLogger().warning("[Config] Failed to read int '" + path + "': " + t.getMessage());
+            return def;
         }
     }
+
+    private static boolean cfgBool(JavaPlugin plugin, String path, boolean def) {
+        try {
+            return plugin.getConfig().getBoolean(path, def);
+        } catch (Throwable t) {
+            plugin.getLogger().warning("[Config] Failed to read boolean '" + path + "': " + t.getMessage());
+            return def;
+        }
+    }
+
+    private static double cfgDouble(JavaPlugin plugin, String path, double def) {
+        try {
+            return plugin.getConfig().getDouble(path, def);
+        } catch (Throwable t) {
+            plugin.getLogger().warning("[Config] Failed to read double '" + path + "': " + t.getMessage());
+            return def;
+        }
+    }
+
+    private static String cfgString(JavaPlugin plugin, String path, String def) {
+        try {
+            String v = plugin.getConfig().getString(path);
+            return (v == null) ? def : v;
+        } catch (Throwable t) {
+            plugin.getLogger().warning("[Config] Failed to read string '" + path + "': " + t.getMessage());
+            return def;
+        }
+    }
+
+    private static ConfigurationSection cfgSection(JavaPlugin plugin, String path) {
+        try {
+            return plugin.getConfig().getConfigurationSection(path);
+        } catch (Throwable t) {
+            plugin.getLogger().warning("[Config] Failed to read section '" + path + "': " + t.getMessage());
+            return null;
+        }
+    }
+
 }

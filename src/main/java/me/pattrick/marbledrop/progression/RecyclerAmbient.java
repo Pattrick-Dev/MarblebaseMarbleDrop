@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.progression;
 
+import me.pattrick.marbledrop.Main;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
@@ -16,9 +17,6 @@ import org.bukkit.scheduler.BukkitTask;
 import java.util.*;
 
 public final class RecyclerAmbient {
-
-    private static final String HOLO_NAME =
-            ChatColor.DARK_GRAY + "✦ " + ChatColor.GOLD + "Marble Recycler" + ChatColor.DARK_GRAY + " ✦";
 
     private final Plugin plugin;
     private final MarbleRecyclerManager recyclers;
@@ -61,9 +59,15 @@ public final class RecyclerAmbient {
             if (as != null && as.isValid()) as.remove();
         }
 
-        Location standLoc = recyclerLoc.clone().add(0.5, 1.15, 0.5);
+        Location standLoc = recyclerLoc.clone().add(0.5, getHologramYOffset(), 0.5);
         if (isChunkLoaded(standLoc)) {
-            removeDuplicateHolograms(standLoc.getWorld(), standLoc);
+            removeDuplicateHolograms(
+                    standLoc.getWorld(),
+                    standLoc,
+                    getHologramName(),
+                    null
+            );
+            ;
         }
     }
 
@@ -78,14 +82,15 @@ public final class RecyclerAmbient {
             liveKeys.add(key);
 
             Location base = loc.clone().add(0.5, 1.0, 0.5);
-            Location standLoc = loc.clone().add(0.5, 1.15, 0.5);
+            Location standLoc = loc.clone().add(0.5, getHologramYOffset(), 0.5);
 
             // ✅ Chunk safety: do not spawn/replace holograms when the chunk is unloaded
             if (!isChunkLoaded(standLoc)) {
                 continue;
             }
 
-            List<Player> nearby = getPlayersNear(base, 8.0);
+            double visibleRadius = getNameVisibleRadius();
+            List<Player> nearby = getPlayersNear(base, visibleRadius);
             boolean active = !nearby.isEmpty();
 
             ensureMarker(key, standLoc, active);
@@ -135,8 +140,11 @@ public final class RecyclerAmbient {
             }
         }
 
+        String holoName = getHologramName();
+
         if (stand == null) {
-            ArmorStand existing = findAnyHologramStand(standLoc.getWorld(), standLoc);
+            // Prefer reusing an existing matching hologram to avoid duplicates.
+            ArmorStand existing = findAnyHologramStand(standLoc.getWorld(), standLoc, holoName);
             if (existing != null) {
                 stand = existing;
                 markerIds.put(key, stand.getUniqueId());
@@ -148,7 +156,7 @@ public final class RecyclerAmbient {
                     as.setSmall(true);
                     as.setInvulnerable(true);
                     as.setSilent(true);
-                    as.setCustomName(HOLO_NAME);
+                    as.setCustomName(holoName);
                     as.setCustomNameVisible(showName);
                 });
                 markerIds.put(key, stand.getUniqueId());
@@ -160,11 +168,34 @@ public final class RecyclerAmbient {
             }
         }
 
-        stand.setCustomName(HOLO_NAME);
+        stand.setCustomName(holoName);
         stand.setCustomNameVisible(showName);
 
         // ✅ Kill duplicates nearby (cleanup old bug)
-        removeDuplicateHolograms(standLoc.getWorld(), standLoc, stand.getUniqueId());
+        removeDuplicateHolograms(standLoc.getWorld(), standLoc, holoName, stand.getUniqueId());
+    }
+
+    private String getHologramName() {
+        // default matches old behavior (but now supports & via MdConfig)
+        if (plugin instanceof Main main) {
+            String s = main.cfg().recyclerHologramName();
+            if (s != null && !s.isBlank()) return s;
+        }
+        return ChatColor.DARK_GRAY + "✦ " + ChatColor.GOLD + "Marble Recycler" + ChatColor.DARK_GRAY + " ✦";
+    }
+
+    private double getHologramYOffset() {
+        if (plugin instanceof Main main) {
+            return main.cfg().recyclerHologramYOffset();
+        }
+        return 1.15;
+    }
+
+    private double getNameVisibleRadius() {
+        if (plugin instanceof Main main) {
+            return main.cfg().hologramNameRadius();
+        }
+        return 8.0;
     }
 
     private boolean isChunkLoaded(Location loc) {
@@ -174,7 +205,7 @@ public final class RecyclerAmbient {
         return c != null && c.isLoaded();
     }
 
-    private ArmorStand findAnyHologramStand(World w, Location standLoc) {
+    private ArmorStand findAnyHologramStand(World w, Location standLoc, String holoName) {
         if (w == null) return null;
 
         ArmorStand keep = null;
@@ -182,7 +213,7 @@ public final class RecyclerAmbient {
             if (!(e instanceof ArmorStand as)) continue;
             if (!as.isValid()) continue;
 
-            if (HOLO_NAME.equals(as.getCustomName()) && as.isMarker() && as.isInvisible()) {
+            if (holoName.equals(as.getCustomName()) && as.isMarker() && as.isInvisible()) {
                 if (keep == null) {
                     keep = as;
                 } else {
@@ -193,18 +224,18 @@ public final class RecyclerAmbient {
         return keep;
     }
 
-    private void removeDuplicateHolograms(World w, Location standLoc) {
-        removeDuplicateHolograms(w, standLoc, null);
+    private void removeDuplicateHolograms(World w, Location standLoc, String holoName) {
+        removeDuplicateHolograms(w, standLoc, holoName, null);
     }
 
-    private void removeDuplicateHolograms(World w, Location standLoc, UUID keepId) {
+    private void removeDuplicateHolograms(World w, Location standLoc, String holoName, UUID keepId) {
         if (w == null) return;
 
         for (Entity e : w.getNearbyEntities(standLoc, 0.6, 0.6, 0.6)) {
             if (!(e instanceof ArmorStand as)) continue;
             if (!as.isValid()) continue;
 
-            if (!HOLO_NAME.equals(as.getCustomName())) continue;
+            if (!holoName.equals(as.getCustomName())) continue;
             if (!as.isMarker() || !as.isInvisible()) continue;
 
             if (keepId != null && keepId.equals(as.getUniqueId())) continue;

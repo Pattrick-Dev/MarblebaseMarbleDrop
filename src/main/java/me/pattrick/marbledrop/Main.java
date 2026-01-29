@@ -20,8 +20,14 @@ import java.io.IOException;
 
 public class Main extends JavaPlugin {
 
+    private MdConfig mdConfig;
+
     private InfusionTableAmbient infusionAmbient;
     private RecyclerAmbient recyclerAmbient;
+
+    public MdConfig cfg() {
+        return mdConfig;
+    }
 
     public InfusionTableAmbient getInfusionAmbient() {
         return infusionAmbient;
@@ -33,13 +39,17 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        // -------------------- Config (defaults) --------------------
+        // This creates config.yml if missing and loads it.
+        saveDefaultConfig();
+        mdConfig = new MdConfig(this);
+
+        // -------------------- Init marble keys --------------------
         MarbleKeys.init(this);
+
         // -------------------- Ensure resource files exist --------------------
         if (!new File(getDataFolder(), "heads.yml").exists()) {
             saveResource("heads.yml", false);
-        }
-        if (!new File(getDataFolder(), "config.yml").exists()) {
-            saveResource("config.yml", false);
         }
 
         // infusion tables storage
@@ -49,6 +59,7 @@ public class Main extends JavaPlugin {
                 getDataFolder().mkdirs();
                 infusionTablesFile.createNewFile();
             } catch (IOException e) {
+                getLogger().severe("Failed to create infusion_tables.yml: " + e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -60,23 +71,22 @@ public class Main extends JavaPlugin {
                 getDataFolder().mkdirs();
                 recyclersFile.createNewFile();
             } catch (IOException e) {
+                getLogger().severe("Failed to create recyclers.yml: " + e.getMessage());
                 e.printStackTrace();
             }
         }
 
-        // ✅ upgrade stations storage (NEW)
+        // upgrade stations storage
         File upgradeStationsFile = new File(getDataFolder(), "upgrade_stations.yml");
         if (!upgradeStationsFile.exists()) {
             try {
                 getDataFolder().mkdirs();
                 upgradeStationsFile.createNewFile();
             } catch (IOException e) {
+                getLogger().severe("Failed to create upgrade_stations.yml: " + e.getMessage());
                 e.printStackTrace();
             }
         }
-
-        // -------------------- Init marble keys --------------------
-        MarbleKeys.init(this);
 
         // -------------------- Progression system --------------------
         DustManager dustManager = new DustManager(this);
@@ -116,10 +126,9 @@ public class Main extends JavaPlugin {
                 this
         );
 
-        // -------------------- Upgrades (NEW: station + GUI) --------------------
+        // -------------------- Upgrades (station + GUI) --------------------
         UpgradeStationManager upgradeStations = new UpgradeStationManager(this);
         UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(upgradeStations);
-
 
         getServer().getPluginManager().registerEvents(
                 new UpgradeStationListener(this, upgradeStations, dustManager),
@@ -135,7 +144,7 @@ public class Main extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ListenEvents(), this);
         getServer().getPluginManager().registerEvents(new TasksMenuListener(this, taskManager), this);
 
-        // -------------------- Command executors (existing constructors) --------------------
+        // -------------------- Command executors --------------------
         DustCommand dustCommand = new DustCommand(dustManager, infusionService);
         TasksCommand tasksCommand = new TasksCommand(this, taskManager);
         TasksAdminCommand tasksAdminCommand = new TasksAdminCommand(taskManager);
@@ -143,9 +152,9 @@ public class Main extends JavaPlugin {
                 new me.pattrick.marbledrop.progression.DustAdminCommand(dustManager);
 
         // -------------------- Register ONLY /md (router) --------------------
-        // ✅ Added upgradeStationCommand into the router list
         CommandKit md = new CommandKit(
                 this,
+                mdConfig,
                 infusionTableCommand,
                 dustCommand,
                 dustAdminCommand,
@@ -162,10 +171,6 @@ public class Main extends JavaPlugin {
             getLogger().severe("Command 'md' is not defined in plugin.yml!");
         }
 
-        // -------------------- Config handling --------------------
-        getConfig().options().copyDefaults(true);
-        saveConfig();
-
         // -------------------- Action bar tracker --------------------
         ActionBarTaskTracker tracker = new ActionBarTaskTracker(this, taskManager);
         tracker.start();
@@ -173,7 +178,6 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onDisable() {
-
         if (infusionAmbient != null) {
             infusionAmbient.stop();
             infusionAmbient = null;
@@ -183,5 +187,7 @@ public class Main extends JavaPlugin {
             recyclerAmbient.stop();
             recyclerAmbient = null;
         }
+
+        mdConfig = null;
     }
 }

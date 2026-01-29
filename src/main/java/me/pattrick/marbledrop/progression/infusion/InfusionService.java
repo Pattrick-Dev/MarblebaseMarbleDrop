@@ -1,6 +1,7 @@
 package me.pattrick.marbledrop.progression.infusion;
 
 import me.pattrick.marbledrop.HeadDatabase;
+import me.pattrick.marbledrop.Main;
 import me.pattrick.marbledrop.marble.MarbleData;
 import me.pattrick.marbledrop.marble.MarbleItem;
 import me.pattrick.marbledrop.marble.MarbleKeys;
@@ -83,14 +84,14 @@ public final class InfusionService {
             return null;
         }
 
-        int min = 50;
+        int min = cfgInt("infusion.min-dust", 50);
         if (amount < min) {
             player.sendMessage(ChatColor.RED + "Minimum infusion is " + min + " dust.");
             return null;
         }
 
         // daily cap (0 = unlimited) + admin bypass
-        int cap = plugin.getConfig().getInt("infusion.daily-cap", 0);
+        int cap = cfgInt("infusion.daily-cap", 0);
         boolean bypass = player.isOp() || player.hasPermission(PERM_BYPASS_INFUSION_LIMIT);
 
         if (cap > 0 && !bypass) {
@@ -158,7 +159,6 @@ public final class InfusionService {
 
         // Stats: modern stats only
         MarbleStats stats = StatRoller.rollStats(rarity);
-
 
         // Write MODERN schema (single system)
         String marbleKey = teamKeyFromTeam(team);
@@ -274,8 +274,6 @@ public final class InfusionService {
         return best;
     }
 
-
-
     private String teamKeyFromTeam(String team) {
         if (team == null) return "neutral";
         String cleaned = ChatColor.stripColor(team);
@@ -349,4 +347,19 @@ public final class InfusionService {
             case LEGENDARY -> ChatColor.GOLD.toString();
         };
     }
+
+    /**
+     * Config getter:
+     * - Prefer Main.cfg() if available
+     * - Fallback to plugin.getConfig()
+     */
+    private int cfgInt(String path, int def) {
+        try {
+            return plugin.getConfig().getInt(path, def);
+        } catch (Throwable t) {
+            plugin.getLogger().warning("[Config] Failed to read int '" + path + "': " + t.getMessage());
+            return def;
+        }
+    }
+
 }
