@@ -1,8 +1,10 @@
 package me.pattrick.marbledrop.progression;
 
+import me.pattrick.marbledrop.marble.MarbleData;
+import me.pattrick.marbledrop.marble.MarbleItem;
+import me.pattrick.marbledrop.marble.MarbleRarity;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.block.Block;
@@ -12,34 +14,29 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
-
-import java.util.List;
-import java.util.Locale;
 
 public final class MarbleRecyclerListener implements Listener {
 
     private final MarbleRecyclerManager recyclers;
     private final DustManager dust;
-
-    private final NamespacedKey K_MARBLE;
-    private final NamespacedKey K_RARITY;
+    @SuppressWarnings("unused")
+    private final Plugin plugin;
 
     public MarbleRecyclerListener(Plugin plugin, MarbleRecyclerManager recyclers, DustManager dust) {
+        this.plugin = plugin;
         this.recyclers = recyclers;
         this.dust = dust;
-
-        this.K_MARBLE = new NamespacedKey(plugin, "marble");
-        this.K_RARITY = new NamespacedKey(plugin, "rarity");
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onUseRecycler(PlayerInteractEvent e) {
         if (e.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+
+        // Avoid double-fire (main hand + offhand)
+        if (e.getHand() != EquipmentSlot.HAND) return;
 
         Block block = e.getClickedBlock();
         if (block == null) return;
@@ -53,7 +50,8 @@ public final class MarbleRecyclerListener implements Listener {
         // Stop vanilla grindstone UI from opening
         e.setCancelled(true);
 
-        ItemStack hand = player.getInventory().getItemInMainHand();
+        // Use the item actually used in the interaction (more reliable than main hand in some cases)
+        ItemStack hand = e.getItem();
         if (hand == null || hand.getType().isAir() || !hand.hasItemMeta()) {
             player.sendMessage(ChatColor.GRAY + "Hold a marble and " + ChatColor.YELLOW + "Shift + Right-click"
                     + ChatColor.GRAY + " to recycle it into dust.");
@@ -61,14 +59,22 @@ public final class MarbleRecyclerListener implements Listener {
             return;
         }
 
-        if (!isMarble(hand)) {
+        // MODERN marble check
+        if (!MarbleItem.isMarble(hand)) {
             player.sendMessage(ChatColor.RED + "That item is not a marble.");
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.6f, 1.2f);
             return;
         }
 
-        String rarity = readRarity(hand);
-        if (rarity == null) rarity = "COMMON";
+        MarbleData data = MarbleItem.read(hand);
+        if (data == null) {
+            player.sendMessage(ChatColor.RED + "That marble is missing data. (Try re-infusing.)");
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.6f, 1.2f);
+            return;
+        }
+
+        MarbleRarity rarityEnum = data.getRarity();
+        String rarity = (rarityEnum != null ? rarityEnum.name() : "COMMON");
 
         int amount = hand.getAmount();
         int per = dustReturnFor(rarity);
@@ -87,6 +93,7 @@ public final class MarbleRecyclerListener implements Listener {
         // --- CONFIRMED RECYCLE (sneaking) ---
 
         // Remove item(s) first (anti-dupe)
+        // IMPORTANT: remove the exact stack in the player's main hand
         player.getInventory().setItemInMainHand(null);
 
         // Award dust
@@ -104,54 +111,6 @@ public final class MarbleRecyclerListener implements Listener {
         player.sendMessage(ChatColor.GRAY + "Recycled marble"
                 + ChatColor.GRAY + " (" + ChatColor.AQUA + rarity + ChatColor.GRAY + ") into "
                 + ChatColor.GOLD + total + ChatColor.GRAY + " dust.");
-    }
-
-    private boolean isMarble(ItemStack item) {
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return false;
-
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        Byte flag = pdc.get(K_MARBLE, PersistentDataType.BYTE);
-        return flag != null && flag == (byte) 1;
-    }
-
-    private String readRarity(ItemStack item) {
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return null;
-
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        String rarityStr = pdc.get(K_RARITY, PersistentDataType.STRING);
-        if (rarityStr != null && !rarityStr.isEmpty()) {
-            return normalizeRarity(rarityStr);
-        }
-
-        List<String> lore = meta.getLore();
-        if (lore != null) {
-            for (String line : lore) {
-                if (line == null) continue;
-                String stripped = ChatColor.stripColor(line);
-                if (stripped == null) continue;
-
-                if (stripped.toLowerCase(Locale.ROOT).startsWith("rarity:")) {
-                    String after = stripped.substring("rarity:".length()).trim();
-                    return normalizeRarity(after);
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private String normalizeRarity(String raw) {
-        String cleaned = ChatColor.stripColor(raw);
-        if (cleaned == null) cleaned = raw;
-
-        cleaned = cleaned.trim().replace(' ', '_').toUpperCase(Locale.ROOT);
-
-        return switch (cleaned) {
-            case "COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY" -> cleaned;
-            default -> "COMMON";
-        };
     }
 
     private int dustReturnFor(String rarity) {

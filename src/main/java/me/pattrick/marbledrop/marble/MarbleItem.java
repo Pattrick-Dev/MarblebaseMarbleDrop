@@ -1,10 +1,13 @@
 package me.pattrick.marbledrop.marble;
 
+import org.bukkit.ChatColor;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public final class MarbleItem {
@@ -60,8 +63,14 @@ public final class MarbleItem {
         return new MarbleData(id, marbleKey, teamKey, rarity, stats, foundBy, createdAt, xp, level);
     }
 
+    /**
+     * Writes modern marble PDC and ALSO keeps lore in sync with stats.
+     * This prevents “upgrade works but lore doesn't change”.
+     */
     public static void write(ItemStack item, MarbleData data) {
         if (item == null) return;
+        if (data == null) return;
+
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return;
 
@@ -88,7 +97,49 @@ public final class MarbleItem {
         pdc.set(MarbleKeys.XP, PersistentDataType.INTEGER, data.getXp());
         pdc.set(MarbleKeys.LEVEL, PersistentDataType.INTEGER, data.getLevel());
 
+        // ✅ Keep lore synced to the real stats
+        syncLore(meta, data);
+
         item.setItemMeta(meta);
+    }
+
+    private static void syncLore(ItemMeta meta, MarbleData data) {
+        if (meta == null || data == null) return;
+
+        String team = data.getTeamKey();
+        if (team == null || team.trim().isEmpty()) team = "Neutral";
+
+        MarbleRarity rarity = data.getRarity();
+        if (rarity == null) rarity = MarbleRarity.COMMON;
+
+        int speed = data.getStats().get(MarbleStat.SPEED);
+        int accel = data.getStats().get(MarbleStat.ACCEL);
+        int handling = data.getStats().get(MarbleStat.HANDLING);
+        int stability = data.getStats().get(MarbleStat.STABILITY);
+        int boost = data.getStats().get(MarbleStat.BOOST);
+
+        List<String> lore = new ArrayList<>();
+        lore.add(ChatColor.GRAY + "Team: " + ChatColor.WHITE + team);
+        lore.add(ChatColor.GRAY + "Rarity: " + rarityColor(rarity) + rarity.name());
+        lore.add("");
+        lore.add(ChatColor.GRAY + "Speed: " + ChatColor.WHITE + speed);
+        lore.add(ChatColor.GRAY + "Accel: " + ChatColor.WHITE + accel);
+        lore.add(ChatColor.GRAY + "Handling: " + ChatColor.WHITE + handling);
+        lore.add(ChatColor.GRAY + "Stability: " + ChatColor.WHITE + stability);
+        lore.add(ChatColor.GRAY + "Boost: " + ChatColor.WHITE + boost);
+
+        meta.setLore(lore);
+    }
+
+    private static String rarityColor(MarbleRarity r) {
+        if (r == null) return ChatColor.WHITE.toString();
+        return switch (r) {
+            case COMMON -> ChatColor.WHITE.toString();
+            case UNCOMMON -> ChatColor.GREEN.toString();
+            case RARE -> ChatColor.AQUA.toString();
+            case EPIC -> ChatColor.LIGHT_PURPLE.toString();
+            case LEGENDARY -> ChatColor.GOLD.toString();
+        };
     }
 
     private static int getInt(PersistentDataContainer pdc, org.bukkit.NamespacedKey key, int def) {

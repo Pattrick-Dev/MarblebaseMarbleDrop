@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop;
 
+import me.pattrick.marbledrop.marble.MarbleKeys;
 import me.pattrick.marbledrop.progression.*;
 import me.pattrick.marbledrop.progression.infusion.InfusionService;
 import me.pattrick.marbledrop.progression.infusion.heads.HeadPool;
@@ -8,9 +9,10 @@ import me.pattrick.marbledrop.progression.infusion.table.InfusionTableCommand;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableListener;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableManager;
 import me.pattrick.marbledrop.progression.taskmenu.TasksMenuListener;
-import org.bukkit.Bukkit;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
+import me.pattrick.marbledrop.progression.upgrades.UpgradeMenuListener;
+import me.pattrick.marbledrop.progression.upgrades.UpgradeStationCommand;
+import me.pattrick.marbledrop.progression.upgrades.UpgradeStationListener;
+import me.pattrick.marbledrop.progression.upgrades.UpgradeStationManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -31,7 +33,7 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onEnable() {
-
+        MarbleKeys.init(this);
         // -------------------- Ensure resource files exist --------------------
         if (!new File(getDataFolder(), "heads.yml").exists()) {
             saveResource("heads.yml", false);
@@ -62,8 +64,19 @@ public class Main extends JavaPlugin {
             }
         }
 
+        // ✅ upgrade stations storage (NEW)
+        File upgradeStationsFile = new File(getDataFolder(), "upgrade_stations.yml");
+        if (!upgradeStationsFile.exists()) {
+            try {
+                getDataFolder().mkdirs();
+                upgradeStationsFile.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
         // -------------------- Init marble keys --------------------
-        MarbleItem.init(this);
+        MarbleKeys.init(this);
 
         // -------------------- Progression system --------------------
         DustManager dustManager = new DustManager(this);
@@ -103,6 +116,21 @@ public class Main extends JavaPlugin {
                 this
         );
 
+        // -------------------- Upgrades (NEW: station + GUI) --------------------
+        UpgradeStationManager upgradeStations = new UpgradeStationManager(this);
+        UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(upgradeStations);
+
+
+        getServer().getPluginManager().registerEvents(
+                new UpgradeStationListener(this, upgradeStations, dustManager),
+                this
+        );
+
+        getServer().getPluginManager().registerEvents(
+                new UpgradeMenuListener(dustManager),
+                this
+        );
+
         // -------------------- Core listeners --------------------
         getServer().getPluginManager().registerEvents(new ListenEvents(), this);
         getServer().getPluginManager().registerEvents(new TasksMenuListener(this, taskManager), this);
@@ -114,9 +142,8 @@ public class Main extends JavaPlugin {
         me.pattrick.marbledrop.progression.DustAdminCommand dustAdminCommand =
                 new me.pattrick.marbledrop.progression.DustAdminCommand(dustManager);
 
-
-
         // -------------------- Register ONLY /md (router) --------------------
+        // ✅ Added upgradeStationCommand into the router list
         CommandKit md = new CommandKit(
                 this,
                 infusionTableCommand,
@@ -124,7 +151,8 @@ public class Main extends JavaPlugin {
                 dustAdminCommand,
                 marbleRecyclerCommand,
                 tasksCommand,
-                tasksAdminCommand
+                tasksAdminCommand,
+                upgradeStationCommand
         );
 
         if (getCommand("md") != null) {

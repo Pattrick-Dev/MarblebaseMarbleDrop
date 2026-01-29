@@ -19,6 +19,7 @@ public class CommandKitTabCompletion implements TabCompleter {
   private static List<String> filterStartsWith(List<String> options, String token) {
     if (options == null || options.isEmpty()) return Collections.emptyList();
     if (token == null || token.isEmpty()) return options;
+
     String lower = token.toLowerCase();
     List<String> out = new ArrayList<>();
     for (String s : options) {
@@ -51,6 +52,10 @@ public class CommandKitTabCompletion implements TabCompleter {
       base.add("dust");
       base.add("tasks");
 
+      // ✅ NEW: upgrades (player-facing)
+      base.add("upgrade");
+      base.add("upgrades");
+
       // admin-only router targets
       if (isAdmin(sender)) {
         base.add("table");
@@ -59,12 +64,37 @@ public class CommandKitTabCompletion implements TabCompleter {
         base.add("recycle");
 
         base.add("debug");
-        base.add("chance");
         base.add("rcd");
         base.add("pdc");
       }
 
       return filterStartsWith(base, args[0]);
+    }
+
+    // ---- /md upgrade|upgrades <sub> ----
+    // (Adjust these once your UpgradeStationCommand has real subcommands)
+    if (args.length == 2 && (args[0].equalsIgnoreCase("upgrade") || args[0].equalsIgnoreCase("upgrades"))) {
+      List<String> upSubs = new ArrayList<>();
+
+      // common: open GUI
+      upSubs.add("open");
+
+      // admin actions (optional; keep if you plan to add them)
+      if (isAdmin(sender)) {
+        upSubs.add("set");
+        upSubs.add("remove");
+        upSubs.add("list");
+      }
+
+      return filterStartsWith(upSubs, args[1]);
+    }
+
+    // ---- /md upgrade|upgrades set <player> ----
+    if (args.length == 3
+            && (args[0].equalsIgnoreCase("upgrade") || args[0].equalsIgnoreCase("upgrades"))
+            && args[1].equalsIgnoreCase("set")) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+      return filterStartsWith(onlinePlayerNames(), args[2]);
     }
 
     // ---- /md dust <sub> ----
@@ -100,12 +130,7 @@ public class CommandKitTabCompletion implements TabCompleter {
       if (!isAdmin(sender)) return Collections.emptyList();
 
       String action = args[2].toLowerCase();
-      if (action.equals("give") || action.equals("take") || action.equals("set")) {
-        return filterStartsWith(onlinePlayerNames(), args[3]);
-      }
-
-      // reset might still want a player depending on your command
-      if (action.equals("reset")) {
+      if (action.equals("give") || action.equals("take") || action.equals("set") || action.equals("reset")) {
         return filterStartsWith(onlinePlayerNames(), args[3]);
       }
 

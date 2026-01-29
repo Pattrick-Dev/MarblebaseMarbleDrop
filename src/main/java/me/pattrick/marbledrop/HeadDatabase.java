@@ -1,88 +1,90 @@
 package me.pattrick.marbledrop;
 
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.UUID;
 
+import me.pattrick.marbledrop.marble.MarbleKeys;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
 
 public class HeadDatabase {
 
+    /**
+     * Returns a PLAYER_HEAD with:
+     * - skull texture set from heads.yml (base64)
+     * - display name set from heads.yml (name)
+     * - team written to MODERN PDC (MarbleKeys.TEAM_KEY) so InfusionService can read it
+     *
+     * IMPORTANT:
+     * - NO stats rolling here
+     * - NO rarity/stats PDC here
+     *
+     * InfusionService / MarbleItem.write(...) handles the full schema.
+     */
     public static ItemStack getMarbleHead(String user) throws IOException {
         final ItemStack head = new ItemStack(Material.PLAYER_HEAD, 1);
-        final ItemMeta baseMeta = head.getItemMeta();
-        if (baseMeta == null) {
-            return head;
+
+        final ItemMeta meta = head.getItemMeta();
+        if (meta == null) return head;
+
+        // Sampler returns [base64, name, team]
+        final ArrayList<String> sample = Sampler.main();
+        final String textureBase64 = safeGet(sample, 0);
+        final String displayName  = safeGet(sample, 1);
+        final String team         = safeGet(sample, 2);
+
+        // Always keep a visible name
+        if (displayName != null && !displayName.isEmpty()) {
+            meta.setDisplayName(displayName);
         }
 
-        // base64, display name, team
-        final ArrayList<String> sample = Sampler.main();
-        final String textureBase64 = sample.get(0);
-        final String displayName = sample.get(1);
-        final String team = sample.get(2);
-
-        // Roll rarity + base stats
-        final MarbleRarity rarity = MarbleRarity.roll();
-        final MarbleStats stats = MarbleRoller.rollBaseStats(rarity);
-
-        // Build Marble object (id is random UUID string)
-        final Marble marble = new Marble(
-                UUID.randomUUID().toString(),
-                displayName,
-                team,
-                rarity,
-                stats
-        );
-
-        // Display name (unchanged behavior)
-        baseMeta.setDisplayName(displayName);
-
-        // Lore:
-        baseMeta.setLore(Arrays.asList(
-                "§7Team: " + team,
-                "§7Rarity: §f" + rarity.displayName() + " §8(Cap " + rarity.statCap() + ")",
-                " ",
-                "§7Speed: §f" + stats.speed(),
-                "§7Control: §f" + stats.control(),
-                "§7Momentum: §f" + stats.momentum(),
-                "§7Stability: §f" + stats.stability(),
-                "§7Luck: §f" + stats.luck(),
-                " ",
-                "§7Found by: " + user,
-                "§7On: " + LocalDate.now(),
-                " ",
-                "§8Marblebase Marble"
-        ));
-
-        // Stamp the REAL data onto the item (PDC)
-        MarbleItem.applyToMeta(baseMeta, marble);
+        // ✅ Write team to MODERN PDC so InfusionService doesn't default to Neutral
+        if (team != null && !team.isEmpty() && MarbleKeys.TEAM_KEY != null) {
+            PersistentDataContainer pdc = meta.getPersistentDataContainer();
+            pdc.set(MarbleKeys.TEAM_KEY, PersistentDataType.STRING, team);
+        }
 
         // Apply texture
-        if (baseMeta instanceof SkullMeta skullMeta) {
+        if (meta instanceof SkullMeta skullMeta) {
             PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID(), null);
-            profile.setProperty(new ProfileProperty("textures", textureBase64));
+
+            if (textureBase64 != null && !textureBase64.isEmpty()) {
+                profile.setProperty(new ProfileProperty("textures", textureBase64));
+            }
 
             skullMeta.setPlayerProfile(profile);
 
-            // IMPORTANT: apply the same PDC-stamped meta to the skull meta instance
-            // (skullMeta is a meta subclass; it should already contain the same container fields,
-            // but we keep it safe by re-applying the marble data if needed)
-            MarbleItem.applyToMeta(skullMeta, marble);
+            // Ensure the name survives the cast
+            if (displayName != null && !displayName.isEmpty()) {
+                skullMeta.setDisplayName(displayName);
+            }
+
+            // ✅ Team must be written on the actual meta we set onto the item
+            if (team != null && !team.isEmpty() && MarbleKeys.TEAM_KEY != null) {
+                PersistentDataContainer pdc = skullMeta.getPersistentDataContainer();
+                pdc.set(MarbleKeys.TEAM_KEY, PersistentDataType.STRING, team);
+            }
 
             head.setItemMeta(skullMeta);
         } else {
-            head.setItemMeta(baseMeta);
+            head.setItemMeta(meta);
         }
 
         return head;
+    }
+
+    private static String safeGet(ArrayList<String> list, int idx) {
+        if (list == null) return null;
+        if (idx < 0 || idx >= list.size()) return null;
+        return list.get(idx);
     }
 }
