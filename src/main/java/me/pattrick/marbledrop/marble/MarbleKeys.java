@@ -29,7 +29,10 @@ public final class MarbleKeys {
 
         MARBLE_ID = new NamespacedKey(plugin, "marble_id");
         MARBLE_KEY = new NamespacedKey(plugin, "marble_key");
-        TEAM_KEY = new NamespacedKey(plugin, "team_key");
+
+        // ✅ Single source of truth (matches the rest of your project)
+        TEAM_KEY = new NamespacedKey(plugin, "marble_team");
+
         RARITY = new NamespacedKey(plugin, "rarity");
 
         SPEED = new NamespacedKey(plugin, "stat_speed");

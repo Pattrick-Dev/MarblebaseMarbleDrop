@@ -15,10 +15,19 @@ public final class UpgradeMenu {
         int slot = player.getInventory().getHeldItemSlot();
         org.bukkit.inventory.ItemStack held = player.getInventory().getItem(slot);
 
+        if (held == null || held.getType().isAir()) {
+            player.sendMessage(org.bukkit.ChatColor.RED + "Hold a marble in your main hand to upgrade it.");
+            return;
+        }
+
+        // No legacy support: must be a modern PDC marble
         if (!me.pattrick.marbledrop.marble.MarbleItem.isMarble(held)) {
             player.sendMessage(org.bukkit.ChatColor.RED + "Hold a marble in your main hand to upgrade it.");
             return;
         }
+
+        // Re-fetch (some clients behave better this way)
+        held = player.getInventory().getItem(slot);
 
         me.pattrick.marbledrop.marble.MarbleData data = me.pattrick.marbledrop.marble.MarbleItem.read(held);
         if (data == null) {
@@ -40,8 +49,7 @@ public final class UpgradeMenu {
         for (int i = 0; i < inv.getSize(); i++) inv.setItem(i, filler);
 
         // Marble preview in center
-        org.bukkit.inventory.ItemStack preview = held.clone();
-        inv.setItem(13, preview);
+        inv.setItem(13, held.clone());
 
         // Stat buttons
         inv.setItem(10, makeStatButton(data, me.pattrick.marbledrop.marble.MarbleStat.SPEED, org.bukkit.Material.FEATHER));
@@ -57,9 +65,9 @@ public final class UpgradeMenu {
             im.setDisplayName(org.bukkit.ChatColor.YELLOW + "Info");
             java.util.List<String> lore = new java.util.ArrayList<>();
             lore.add(org.bukkit.ChatColor.GRAY + "Click a stat to upgrade.");
-            lore.add(org.bukkit.ChatColor.GRAY + "Rarity caps prevent maxing commons.");
+            lore.add(org.bukkit.ChatColor.GRAY + "Dust: " + org.bukkit.ChatColor.WHITE + dustManager.getDust(player));
             lore.add("");
-            lore.add(org.bukkit.ChatColor.DARK_GRAY + "Station: Upgrade Table");
+            lore.add(org.bukkit.ChatColor.DARK_GRAY + "Rarity caps apply per-stat.");
             im.setLore(lore);
             info.setItemMeta(im);
         }
@@ -80,8 +88,7 @@ public final class UpgradeMenu {
     public static boolean isUpgradeMenu(org.bukkit.event.inventory.InventoryClickEvent e) {
         if (e == null) return false;
         if (e.getView() == null) return false;
-        String title = e.getView().getTitle();
-        return TITLE.equals(title);
+        return TITLE.equals(e.getView().getTitle());
     }
 
     public static void onClose(org.bukkit.entity.Player p) {
@@ -92,7 +99,7 @@ public final class UpgradeMenu {
             org.bukkit.event.inventory.InventoryClickEvent e,
             me.pattrick.marbledrop.progression.DustManager dustManager
     ) {
-        org.bukkit.entity.Player player = (org.bukkit.entity.Player) e.getWhoClicked();
+        if (!(e.getWhoClicked() instanceof org.bukkit.entity.Player player)) return;
 
         e.setCancelled(true);
 
@@ -109,144 +116,94 @@ public final class UpgradeMenu {
         if (stat == null) return;
 
         Integer slot = OPEN_SLOT.get(player.getUniqueId());
-        if (slot == null) {
-            player.sendMessage(org.bukkit.ChatColor.RED + "Upgrade session expired. Re-open the station.");
+        if (slot == null) return;
+
+        org.bukkit.inventory.ItemStack inHand = player.getInventory().getItem(slot);
+        if (inHand == null || inHand.getType().isAir() || !me.pattrick.marbledrop.marble.MarbleItem.isMarble(inHand)) {
+            player.sendMessage(org.bukkit.ChatColor.RED + "Your marble is missing.");
             player.closeInventory();
             return;
         }
 
-        org.bukkit.inventory.ItemStack held = player.getInventory().getItem(slot);
-        if (!me.pattrick.marbledrop.marble.MarbleItem.isMarble(held)) {
-            player.sendMessage(org.bukkit.ChatColor.RED + "You must still be holding the marble you want to upgrade.");
-            player.closeInventory();
-            return;
-        }
-
-        me.pattrick.marbledrop.marble.MarbleData data = me.pattrick.marbledrop.marble.MarbleItem.read(held);
+        me.pattrick.marbledrop.marble.MarbleData data = me.pattrick.marbledrop.marble.MarbleItem.read(inHand);
         if (data == null) {
-            player.sendMessage(org.bukkit.ChatColor.RED + "That marble couldn't be read.");
+            player.sendMessage(org.bukkit.ChatColor.RED + "That item doesn't look like a valid marble.");
             player.closeInventory();
             return;
         }
 
         int current = data.getStats().get(stat);
-        int cap = capFor(data.getRarity());
+        int cap = UpgradeRules.capFor(data.getRarity(), stat);
+        int cost = UpgradeRules.costFor(data.getRarity(), stat, current);
+
         if (current >= cap) {
-            player.sendMessage(org.bukkit.ChatColor.RED + "That stat is at the cap for " + data.getRarity().name() + " (" + cap + ").");
+            player.sendMessage(org.bukkit.ChatColor.RED + "That stat is already capped for " + data.getRarity().name() + ".");
             return;
         }
 
-        int cost = costFor(data.getRarity(), current);
+        int dust = dustManager.getDust(player);
+        if (dust < cost) {
+            player.sendMessage(org.bukkit.ChatColor.RED + "You need " + cost + " dust to upgrade that. (You have " + dust + ")");
+            return;
+        }
 
-        // Charge dust
         if (!dustManager.takeDust(player, cost)) {
-            player.sendMessage(org.bukkit.ChatColor.RED + "Not enough Marble Dust. Cost: " + cost);
+            player.sendMessage(org.bukkit.ChatColor.RED + "Not enough dust.");
             return;
         }
 
-        // Build updated stats
-        int speed = data.getStats().get(me.pattrick.marbledrop.marble.MarbleStat.SPEED);
-        int accel = data.getStats().get(me.pattrick.marbledrop.marble.MarbleStat.ACCEL);
-        int handling = data.getStats().get(me.pattrick.marbledrop.marble.MarbleStat.HANDLING);
-        int stability = data.getStats().get(me.pattrick.marbledrop.marble.MarbleStat.STABILITY);
-        int boost = data.getStats().get(me.pattrick.marbledrop.marble.MarbleStat.BOOST);
+        // apply upgrade
+        data.getStats().set(stat, current + 1);
 
-        switch (stat) {
-            case SPEED -> speed++;
-            case ACCEL -> accel++;
-            case HANDLING -> handling++;
-            case STABILITY -> stability++;
-            case BOOST -> boost++;
+        // write back
+        me.pattrick.marbledrop.marble.MarbleItem.write(inHand, data);
+
+        // refresh preview + buttons
+        org.bukkit.inventory.Inventory inv = e.getInventory();
+        inv.setItem(13, inHand.clone());
+        inv.setItem(10, makeStatButton(data, me.pattrick.marbledrop.marble.MarbleStat.SPEED, org.bukkit.Material.FEATHER));
+        inv.setItem(11, makeStatButton(data, me.pattrick.marbledrop.marble.MarbleStat.ACCEL, org.bukkit.Material.SUGAR));
+        inv.setItem(12, makeStatButton(data, me.pattrick.marbledrop.marble.MarbleStat.HANDLING, org.bukkit.Material.TRIPWIRE_HOOK));
+        inv.setItem(14, makeStatButton(data, me.pattrick.marbledrop.marble.MarbleStat.STABILITY, org.bukkit.Material.SHIELD));
+        inv.setItem(15, makeStatButton(data, me.pattrick.marbledrop.marble.MarbleStat.BOOST, org.bukkit.Material.BLAZE_POWDER));
+
+        // update info dust line
+        org.bukkit.inventory.ItemStack info = inv.getItem(22);
+        if (info != null && info.getType() == org.bukkit.Material.PAPER) {
+            org.bukkit.inventory.meta.ItemMeta meta = info.getItemMeta();
+            if (meta != null) {
+                java.util.List<String> lore = meta.getLore();
+                if (lore == null) lore = new java.util.ArrayList<>();
+                // rebuild info lore cleanly
+                lore.clear();
+                lore.add(org.bukkit.ChatColor.GRAY + "Click a stat to upgrade.");
+                lore.add(org.bukkit.ChatColor.GRAY + "Dust: " + org.bukkit.ChatColor.WHITE + dustManager.getDust(player));
+                lore.add("");
+                lore.add(org.bukkit.ChatColor.DARK_GRAY + "Rarity caps apply per-stat.");
+                meta.setLore(lore);
+                info.setItemMeta(meta);
+                inv.setItem(22, info);
+            }
         }
 
-        me.pattrick.marbledrop.marble.MarbleStats newStats =
-                new me.pattrick.marbledrop.marble.MarbleStats(speed, accel, handling, stability, boost);
-
-        // Create new MarbleData preserving everything else
-        me.pattrick.marbledrop.marble.MarbleData updated =
-                new me.pattrick.marbledrop.marble.MarbleData(
-                        data.getId(),
-                        data.getMarbleKey(),
-                        data.getTeamKey(),
-                        data.getRarity(),
-                        newStats,
-                        data.getFoundBy(),
-                        data.getCreatedAt(),
-                        data.getXp(),
-                        data.getLevel()
-                );
-
-        // Write back to the SAME item
-        me.pattrick.marbledrop.marble.MarbleItem.write(held, updated);
-
-        // Refresh lore so players see it on hover
-        applyUpgradeLore(held, updated);
-
-        // Ensure it updates in hand
-        player.getInventory().setItem(slot, held);
-
-        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_ANVIL_USE, 0.6f, 1.6f);
-        player.sendMessage(org.bukkit.ChatColor.GREEN + "Upgraded " + prettyStat(stat) + " to " + (current + 1) + " (Cost: " + cost + " dust)");
-
-        // Re-open / refresh GUI contents
-        open(player, dustManager);
-    }
-
-    private static org.bukkit.inventory.ItemStack makeStatButton(me.pattrick.marbledrop.marble.MarbleData data,
-                                                                 me.pattrick.marbledrop.marble.MarbleStat stat,
-                                                                 org.bukkit.Material mat) {
-        org.bukkit.inventory.ItemStack it = new org.bukkit.inventory.ItemStack(mat);
-        org.bukkit.inventory.meta.ItemMeta meta = it.getItemMeta();
-        if (meta != null) {
-            int cur = data.getStats().get(stat);
-            int cap = capFor(data.getRarity());
-            int cost = costFor(data.getRarity(), cur);
-
-            meta.setDisplayName(org.bukkit.ChatColor.YELLOW + prettyStat(stat));
-            java.util.List<String> lore = new java.util.ArrayList<>();
-            lore.add(org.bukkit.ChatColor.GRAY + "Current: " + org.bukkit.ChatColor.WHITE + cur);
-            lore.add(org.bukkit.ChatColor.GRAY + "Cap: " + org.bukkit.ChatColor.WHITE + cap);
-            lore.add("");
-            lore.add(org.bukkit.ChatColor.GRAY + "Cost: " + org.bukkit.ChatColor.GOLD + cost + " dust");
-            lore.add(org.bukkit.ChatColor.DARK_GRAY + "Click to upgrade +1");
-            meta.setLore(lore);
-            it.setItemMeta(meta);
-        }
-        return it;
+        player.playSound(player.getLocation(), org.bukkit.Sound.BLOCK_ANVIL_USE, 0.8f, 1.4f);
     }
 
     private static me.pattrick.marbledrop.marble.MarbleStat statFromButton(org.bukkit.Material mat) {
-        if (mat == org.bukkit.Material.FEATHER) return me.pattrick.marbledrop.marble.MarbleStat.SPEED;
-        if (mat == org.bukkit.Material.SUGAR) return me.pattrick.marbledrop.marble.MarbleStat.ACCEL;
-        if (mat == org.bukkit.Material.TRIPWIRE_HOOK) return me.pattrick.marbledrop.marble.MarbleStat.HANDLING;
-        if (mat == org.bukkit.Material.SHIELD) return me.pattrick.marbledrop.marble.MarbleStat.STABILITY;
-        if (mat == org.bukkit.Material.BLAZE_POWDER) return me.pattrick.marbledrop.marble.MarbleStat.BOOST;
-        return null;
-    }
-
-    private static int capFor(me.pattrick.marbledrop.marble.MarbleRarity r) {
-        return switch (r) {
-            case COMMON -> 6;
-            case UNCOMMON -> 8;
-            case RARE -> 10;
-            case EPIC -> 12;
-            case LEGENDARY -> 14;
+        if (mat == null) return null;
+        return switch (mat) {
+            case FEATHER -> me.pattrick.marbledrop.marble.MarbleStat.SPEED;
+            case SUGAR -> me.pattrick.marbledrop.marble.MarbleStat.ACCEL;
+            case TRIPWIRE_HOOK -> me.pattrick.marbledrop.marble.MarbleStat.HANDLING;
+            case SHIELD -> me.pattrick.marbledrop.marble.MarbleStat.STABILITY;
+            case BLAZE_POWDER -> me.pattrick.marbledrop.marble.MarbleStat.BOOST;
+            default -> null;
         };
     }
 
-    private static int costFor(me.pattrick.marbledrop.marble.MarbleRarity r, int currentValue) {
-        int base = switch (r) {
-            case COMMON -> 25;
-            case UNCOMMON -> 40;
-            case RARE -> 65;
-            case EPIC -> 95;
-            case LEGENDARY -> 140;
-        };
-        return base + (currentValue * 10);
-    }
-
-    private static String prettyStat(me.pattrick.marbledrop.marble.MarbleStat s) {
-        return switch (s) {
+    private static String statDisplayName(me.pattrick.marbledrop.marble.MarbleStat stat) {
+        if (stat == null) return "Stat";
+        return switch (stat) {
             case SPEED -> "Speed";
             case ACCEL -> "Accel";
             case HANDLING -> "Handling";
@@ -255,33 +212,30 @@ public final class UpgradeMenu {
         };
     }
 
-    private static org.bukkit.ChatColor rarityColor(me.pattrick.marbledrop.marble.MarbleRarity r) {
-        return switch (r) {
-            case COMMON -> org.bukkit.ChatColor.WHITE;
-            case UNCOMMON -> org.bukkit.ChatColor.GREEN;
-            case RARE -> org.bukkit.ChatColor.AQUA;
-            case EPIC -> org.bukkit.ChatColor.LIGHT_PURPLE;
-            case LEGENDARY -> org.bukkit.ChatColor.GOLD;
-        };
-    }
+    private static org.bukkit.inventory.ItemStack makeStatButton(
+            me.pattrick.marbledrop.marble.MarbleData data,
+            me.pattrick.marbledrop.marble.MarbleStat stat,
+            org.bukkit.Material mat
+    ) {
+        org.bukkit.inventory.ItemStack it = new org.bukkit.inventory.ItemStack(mat);
+        org.bukkit.inventory.meta.ItemMeta meta = it.getItemMeta();
+        if (meta == null) return it;
 
-    private static void applyUpgradeLore(org.bukkit.inventory.ItemStack item, me.pattrick.marbledrop.marble.MarbleData data) {
-        org.bukkit.inventory.meta.ItemMeta meta = item.getItemMeta();
-        if (meta == null) return;
+        int val = data.getStats().get(stat);
+        int cap = UpgradeRules.capFor(data.getRarity(), stat);
+        int cost = UpgradeRules.costFor(data.getRarity(), stat, val);
+
+        meta.setDisplayName(org.bukkit.ChatColor.AQUA + statDisplayName(stat));
 
         java.util.List<String> lore = new java.util.ArrayList<>();
-
-        lore.add(org.bukkit.ChatColor.GRAY + "Team: " + org.bukkit.ChatColor.WHITE + data.getTeamKey());
-        lore.add(org.bukkit.ChatColor.GRAY + "Rarity: " + rarityColor(data.getRarity()) + data.getRarity().name());
+        lore.add(org.bukkit.ChatColor.GRAY + "Current: " + org.bukkit.ChatColor.WHITE + val);
+        lore.add(org.bukkit.ChatColor.GRAY + "Cap: " + org.bukkit.ChatColor.WHITE + cap);
         lore.add("");
-
-        lore.add(org.bukkit.ChatColor.GRAY + "Speed: " + org.bukkit.ChatColor.WHITE + data.getStats().get(me.pattrick.marbledrop.marble.MarbleStat.SPEED));
-        lore.add(org.bukkit.ChatColor.GRAY + "Accel: " + org.bukkit.ChatColor.WHITE + data.getStats().get(me.pattrick.marbledrop.marble.MarbleStat.ACCEL));
-        lore.add(org.bukkit.ChatColor.GRAY + "Handling: " + org.bukkit.ChatColor.WHITE + data.getStats().get(me.pattrick.marbledrop.marble.MarbleStat.HANDLING));
-        lore.add(org.bukkit.ChatColor.GRAY + "Stability: " + org.bukkit.ChatColor.WHITE + data.getStats().get(me.pattrick.marbledrop.marble.MarbleStat.STABILITY));
-        lore.add(org.bukkit.ChatColor.GRAY + "Boost: " + org.bukkit.ChatColor.WHITE + data.getStats().get(me.pattrick.marbledrop.marble.MarbleStat.BOOST));
-
+        lore.add(org.bukkit.ChatColor.YELLOW + "Cost: " + cost + " dust");
+        lore.add(org.bukkit.ChatColor.GREEN + "Click to upgrade");
         meta.setLore(lore);
-        item.setItemMeta(meta);
+
+        it.setItemMeta(meta);
+        return it;
     }
 }

@@ -1,14 +1,12 @@
 package me.pattrick.marbledrop.progression.infusion;
 
 import me.pattrick.marbledrop.HeadDatabase;
-import me.pattrick.marbledrop.Marble;
-import me.pattrick.marbledrop.MarbleItem;
-import me.pattrick.marbledrop.MarbleRarity;
-import me.pattrick.marbledrop.MarbleStats;
+import me.pattrick.marbledrop.marble.MarbleData;
+import me.pattrick.marbledrop.marble.MarbleItem;
+import me.pattrick.marbledrop.marble.MarbleKeys;
+import me.pattrick.marbledrop.marble.MarbleRarity;
+import me.pattrick.marbledrop.marble.MarbleStats;
 import me.pattrick.marbledrop.progression.DustManager;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
@@ -29,22 +27,12 @@ public final class InfusionService {
 
     private final Plugin plugin;
     private final DustManager dust;
-    private final RarityRoller rarityRoller;
 
     private final NamespacedKey K_ATTUNEMENT;
-
-    // Optional compatibility: legacy flag some older checks may still use
-    private final NamespacedKey K_LEGACY_MARBLE;
-
-    // Reads the team from the item's PDC (source of truth)
-    private final NamespacedKey K_TEAM;
 
     // per-player daily infusion cap tracking
     private final NamespacedKey K_INFUSE_DAY;   // int: YYYYMMDD
     private final NamespacedKey K_INFUSE_COUNT; // int: used today
-
-    // reads rarity from marble PDC (for catalyst marbles)
-    private final NamespacedKey K_RARITY;
 
     // Permission that bypasses daily infusion cap (and also avoids incrementing the counter)
     private static final String PERM_BYPASS_INFUSION_LIMIT = "marbledrop.infusion.bypass";
@@ -53,16 +41,11 @@ public final class InfusionService {
     public InfusionService(Plugin plugin, DustManager dust, me.pattrick.marbledrop.progression.infusion.heads.HeadPool headPool) {
         this.plugin = plugin;
         this.dust = dust;
-        this.rarityRoller = new RarityRoller();
 
         this.K_ATTUNEMENT = new NamespacedKey(plugin, "dust_attunement");
-        this.K_LEGACY_MARBLE = new NamespacedKey(plugin, "marble");
-        this.K_TEAM = new NamespacedKey(plugin, "marble_team");
 
         this.K_INFUSE_DAY = new NamespacedKey(plugin, "infuse_day");
         this.K_INFUSE_COUNT = new NamespacedKey(plugin, "infuse_count");
-
-        this.K_RARITY = new NamespacedKey(plugin, "rarity");
     }
 
     /**
@@ -89,8 +72,8 @@ public final class InfusionService {
     }
 
     /**
-     * NEW: Produce the infused marble ItemStack with optional marble catalyst rarity bias.
-     * catalystRarity comes from an "old marble" inserted as a catalyst.
+     * Produce the infused marble ItemStack with optional marble catalyst rarity bias.
+     * catalystRarity comes from a marble catalyst (MODERN schema).
      *
      * Returns null if failed (and refunds dust if dust was taken).
      */
@@ -106,7 +89,7 @@ public final class InfusionService {
             return null;
         }
 
-        // NEW: daily cap (0 = unlimited) + admin bypass
+        // daily cap (0 = unlimited) + admin bypass
         int cap = plugin.getConfig().getInt("infusion.daily-cap", 0);
         boolean bypass = player.isOp() || player.hasPermission(PERM_BYPASS_INFUSION_LIMIT);
 
@@ -162,45 +145,51 @@ public final class InfusionService {
             return null;
         }
 
+        // Ensure a name exists
         String displayName = meta.getDisplayName();
         if (displayName == null || displayName.isEmpty()) {
             displayName = ChatColor.WHITE + "Marble";
             meta.setDisplayName(displayName);
         }
 
-        // TEAM from existing PDC (already set by HeadDatabase/Sampler)
-        String team = readTeamFromPdc(meta);
+        // TEAM: modern key only (if your head generator doesn't set it yet, it will default)
+        String team = readTeamFromModernPdc(meta);
         if (team == null || team.isEmpty()) team = "Neutral";
 
-        // Stats
+        // Stats: modern stats only
         MarbleStats stats = StatRoller.rollStats(rarity);
-        if (stats == null) stats = new MarbleStats(1, 1, 1, 1, 1);
 
-        // Apply NEW PDC model
-        Marble marble = new Marble(UUID.randomUUID().toString(), displayName, team, rarity, stats);
-        MarbleItem.applyToMeta(meta, marble);
 
-        // Legacy flag for old checks/debug
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
-        pdc.set(K_LEGACY_MARBLE, PersistentDataType.BYTE, (byte) 1);
+        // Write MODERN schema (single system)
+        String marbleKey = teamKeyFromTeam(team);
 
-        // Visible lore
+        MarbleData data = new MarbleData(
+                UUID.randomUUID(),
+                marbleKey,
+                team,
+                rarity,
+                stats,
+                player.getUniqueId(),
+                System.currentTimeMillis(),
+                0,
+                1
+        );
+
+        // Set any cosmetic/lore changes, then write schema LAST.
         meta.setLore(List.of(
                 ChatColor.GRAY + "Team: " + ChatColor.WHITE + team,
                 ChatColor.GRAY + "Rarity: " + rarityColor(rarity) + rarity.name(),
                 "",
-                ChatColor.GRAY + "Speed: " + ChatColor.WHITE + stats.speed(),
-                ChatColor.GRAY + "Control: " + ChatColor.WHITE + stats.control(),
-                ChatColor.GRAY + "Momentum: " + ChatColor.WHITE + stats.momentum(),
-                ChatColor.GRAY + "Stability: " + ChatColor.WHITE + stats.stability(),
-                ChatColor.GRAY + "Luck: " + ChatColor.WHITE + stats.luck()
+                ChatColor.GRAY + "Speed: " + ChatColor.WHITE + stats.get(me.pattrick.marbledrop.marble.MarbleStat.SPEED),
+                ChatColor.GRAY + "Accel: " + ChatColor.WHITE + stats.get(me.pattrick.marbledrop.marble.MarbleStat.ACCEL),
+                ChatColor.GRAY + "Handling: " + ChatColor.WHITE + stats.get(me.pattrick.marbledrop.marble.MarbleStat.HANDLING),
+                ChatColor.GRAY + "Stability: " + ChatColor.WHITE + stats.get(me.pattrick.marbledrop.marble.MarbleStat.STABILITY),
+                ChatColor.GRAY + "Boost: " + ChatColor.WHITE + stats.get(me.pattrick.marbledrop.marble.MarbleStat.BOOST)
         ));
-
         item.setItemMeta(meta);
 
-        // ---- NEW: broadcast rare discoveries with hover tooltip ----
-//        broadcastMarbleDiscovery(player, team, rarity, stats);
-        // -----------------------------------------------------------
+        // ✅ The one-and-only marble schema
+        MarbleItem.write(item, data);
 
         // increment daily infusion count ONLY on success (and do not increment for bypass users)
         if (cap > 0 && !bypass) {
@@ -220,114 +209,22 @@ public final class InfusionService {
     }
 
     /**
-     * Hoverable broadcast (RARE+ by default):
-     * ✨ <PLAYER> discovered a <RARITY> Marble!
-     * Hovering over <RARITY> shows team + stats.
-     */
-    private void broadcastMarbleDiscovery(Player player, String team, MarbleRarity rarity, MarbleStats stats) {
-        // Broadcast threshold: RARE+
-        if (rarity.ordinal() < MarbleRarity.RARE.ordinal()) return;
-
-        NamedTextColor rarityColor = rarityNamedColor(rarity);
-
-        Component hover = Component.text("")
-                .append(Component.text("Team: ", NamedTextColor.GRAY))
-                .append(Component.text(team, NamedTextColor.WHITE))
-                .append(Component.newline())
-                .append(Component.text("Rarity: ", NamedTextColor.GRAY))
-                .append(Component.text(rarity.name(), rarityColor))
-                .append(Component.newline())
-                .append(Component.newline())
-                .append(Component.text("Speed: ", NamedTextColor.GRAY))
-                .append(Component.text(String.valueOf(stats.speed()), NamedTextColor.WHITE))
-                .append(Component.newline())
-                .append(Component.text("Control: ", NamedTextColor.GRAY))
-                .append(Component.text(String.valueOf(stats.control()), NamedTextColor.WHITE))
-                .append(Component.newline())
-                .append(Component.text("Momentum: ", NamedTextColor.GRAY))
-                .append(Component.text(String.valueOf(stats.momentum()), NamedTextColor.WHITE))
-                .append(Component.newline())
-                .append(Component.text("Stability: ", NamedTextColor.GRAY))
-                .append(Component.text(String.valueOf(stats.stability()), NamedTextColor.WHITE))
-                .append(Component.newline())
-                .append(Component.text("Luck: ", NamedTextColor.GRAY))
-                .append(Component.text(String.valueOf(stats.luck()), NamedTextColor.WHITE));
-
-        Component rarityWord = Component.text(rarity.name(), rarityColor)
-                .hoverEvent(HoverEvent.showText(hover));
-
-        Component msg = Component.text("✨ ", NamedTextColor.GOLD)
-                .append(Component.text(player.getName(), NamedTextColor.YELLOW))
-                .append(Component.text(" discovered a ", NamedTextColor.GRAY))
-                .append(rarityWord)
-                .append(Component.text(" Marble! [BMD]", NamedTextColor.GRAY));
-
-        Bukkit.broadcast(msg);
-    }
-
-    private NamedTextColor rarityNamedColor(MarbleRarity r) {
-        return switch (r) {
-            case COMMON -> NamedTextColor.WHITE;
-            case UNCOMMON -> NamedTextColor.GREEN;
-            case RARE -> NamedTextColor.AQUA;
-            case EPIC -> NamedTextColor.LIGHT_PURPLE;
-            case LEGENDARY -> NamedTextColor.GOLD;
-        };
-    }
-
-    /**
-     * Reads rarity from a catalyst marble item.
-     * Returns null if item is not a marble catalyst.
+     * Reads catalyst rarity from a MODERN marble item.
+     * Returns null if the item is not a modern marble.
      */
     public MarbleRarity readMarbleCatalystRarity(ItemStack item) {
-        if (item == null || !item.hasItemMeta()) return null;
+        if (item == null) return null;
+        if (!MarbleItem.isMarble(item)) return null;
 
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) return null;
+        MarbleData data = MarbleItem.read(item);
+        if (data == null) return null;
 
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
-
-        // must be a marble (legacy flag)
-        Byte isMarble = pdc.get(K_LEGACY_MARBLE, PersistentDataType.BYTE);
-        if (isMarble == null || isMarble != (byte) 1) {
-            return null;
-        }
-
-        // preferred: PDC rarity
-        String rarityStr = pdc.get(K_RARITY, PersistentDataType.STRING);
-        if (rarityStr != null && !rarityStr.isEmpty()) {
-            MarbleRarity parsed = parseRaritySafe(rarityStr);
-            if (parsed != null) return parsed;
-        }
-
-        // fallback: lore parsing ("Rarity: <RARITY>")
-        List<String> lore = meta.getLore();
-        if (lore != null) {
-            for (String line : lore) {
-                if (line == null) continue;
-                String stripped = ChatColor.stripColor(line);
-                if (stripped == null) continue;
-
-                if (stripped.toLowerCase(Locale.ROOT).startsWith("rarity:")) {
-                    String after = stripped.substring("rarity:".length()).trim();
-                    MarbleRarity parsed = parseRaritySafe(after);
-                    if (parsed != null) return parsed;
-                }
-            }
-        }
-
-        // legacy unknown rarity -> treat as COMMON
-        return MarbleRarity.COMMON;
+        return data.getRarity();
     }
 
-    /**
-     * Catalyst bias while keeping your project rarity enum as the public type.
-     *
-     * IMPORTANT: RarityRoller currently returns me.pattrick.marbledrop.marble.MarbleRarity,
-     * so we convert it into me.pattrick.marbledrop.MarbleRarity by name().
-     */
     private MarbleRarity rollWithCatalystBias(int effectiveValue, MarbleRarity catalystRarity) {
-        MarbleRarity best = toProjectRarity(RarityRoller.roll(effectiveValue));
+        // Base roll (modern roller)
+        MarbleRarity best = RarityRoller.roll(effectiveValue);
 
         if (catalystRarity == null) {
             return best;
@@ -336,7 +233,6 @@ public final class InfusionService {
         int extraRolls;
         double floorChance;
 
-        // Match the updated "safer" catalyst tuning from RarityRoller
         switch (catalystRarity) {
             case UNCOMMON -> {
                 extraRolls = 1;
@@ -362,7 +258,7 @@ public final class InfusionService {
 
         // Extra rerolls – take best
         for (int i = 0; i < extraRolls; i++) {
-            MarbleRarity rolled = toProjectRarity(RarityRoller.roll(effectiveValue));
+            MarbleRarity rolled = RarityRoller.roll(effectiveValue);
             if (rolled.ordinal() > best.ordinal()) {
                 best = rolled;
             }
@@ -378,34 +274,27 @@ public final class InfusionService {
         return best;
     }
 
-    /**
-     * Converts the roller's enum type (me.pattrick.marbledrop.marble.MarbleRarity)
-     * into your project enum type (me.pattrick.marbledrop.MarbleRarity).
-     */
-    private MarbleRarity toProjectRarity(me.pattrick.marbledrop.marble.MarbleRarity rollerRarity) {
-        if (rollerRarity == null) return MarbleRarity.COMMON;
-        try {
-            return MarbleRarity.valueOf(rollerRarity.name());
-        } catch (IllegalArgumentException ex) {
-            return MarbleRarity.COMMON;
+
+
+    private String teamKeyFromTeam(String team) {
+        if (team == null) return "neutral";
+        String cleaned = ChatColor.stripColor(team);
+        if (cleaned == null) cleaned = team;
+
+        cleaned = cleaned.trim().toLowerCase(Locale.ROOT);
+        if (cleaned.isEmpty()) return "neutral";
+
+        cleaned = cleaned.replace(' ', '_');
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < cleaned.length(); i++) {
+            char c = cleaned.charAt(i);
+            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
+                sb.append(c);
+            }
         }
-    }
-
-    private MarbleRarity parseRaritySafe(String raw) {
-        if (raw == null) return null;
-
-        String cleaned = ChatColor.stripColor(raw);
-        if (cleaned == null) cleaned = raw;
-
-        cleaned = cleaned.trim()
-                .replace(' ', '_')
-                .toUpperCase(Locale.ROOT);
-
-        try {
-            return MarbleRarity.valueOf(cleaned);
-        } catch (IllegalArgumentException ex) {
-            return null;
-        }
+        String out = sb.toString();
+        return out.isEmpty() ? "neutral" : out;
     }
 
     private int getInfusionsUsedToday(Player player) {
@@ -416,7 +305,6 @@ public final class InfusionService {
         Integer count = pdc.get(K_INFUSE_COUNT, PersistentDataType.INTEGER);
 
         if (day == null || day != today || count == null) {
-            // reset for a new day / missing values
             pdc.set(K_INFUSE_DAY, PersistentDataType.INTEGER, today);
             pdc.set(K_INFUSE_COUNT, PersistentDataType.INTEGER, 0);
             return 0;
@@ -444,9 +332,9 @@ public final class InfusionService {
         return (d.getYear() * 10000) + (d.getMonthValue() * 100) + d.getDayOfMonth();
     }
 
-    private String readTeamFromPdc(ItemMeta meta) {
+    private String readTeamFromModernPdc(ItemMeta meta) {
         try {
-            return meta.getPersistentDataContainer().get(K_TEAM, PersistentDataType.STRING);
+            return meta.getPersistentDataContainer().get(MarbleKeys.TEAM_KEY, PersistentDataType.STRING);
         } catch (Exception ignored) {
             return null;
         }
