@@ -16,22 +16,21 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
-import java.io.IOException;
 
 public class CommandKit implements CommandExecutor {
 
     private final JavaPlugin plugin;
-    private final MdConfig mdConfig; // ✅ NEW: your cached config loader
+    private final MdConfig mdConfig;
 
-    private final CommandExecutor infusionTableCommand;// dust infuse
+    private final CommandExecutor infusionTableCommand;
     private final CommandExecutor dustCommand;
     private final CommandExecutor dustAdminCommand;
     private final CommandExecutor marbleRecyclerCommand;
     private final CommandExecutor tasksCommand;
     private final CommandExecutor tasksAdminCommand;
-
-    // ✅ NEW
     private final CommandExecutor upgradeStationCommand;
+    private final CommandExecutor trackCommand;
+    private final CommandExecutor raceCommand;
 
     private final File filePath;
     private FileConfiguration config;
@@ -45,8 +44,11 @@ public class CommandKit implements CommandExecutor {
             CommandExecutor marbleRecyclerCommand,
             CommandExecutor tasksCommand,
             CommandExecutor tasksAdminCommand,
-            UpgradeStationCommand upgradeStationCommand
+            UpgradeStationCommand upgradeStationCommand,
+            CommandExecutor trackCommand,
+            CommandExecutor raceCommand
     ) {
+
         this.plugin = plugin;
         this.mdConfig = mdConfig;
 
@@ -56,9 +58,9 @@ public class CommandKit implements CommandExecutor {
         this.marbleRecyclerCommand = marbleRecyclerCommand;
         this.tasksCommand = tasksCommand;
         this.tasksAdminCommand = tasksAdminCommand;
-
-        // ✅ store it
         this.upgradeStationCommand = upgradeStationCommand;
+        this.trackCommand = trackCommand;
+        this.raceCommand = raceCommand;
 
         this.filePath = new File(plugin.getDataFolder(), "config.yml");
         this.config = YamlConfiguration.loadConfiguration(this.filePath);
@@ -89,6 +91,23 @@ public class CommandKit implements CommandExecutor {
 
         // ---------------- ROUTING ----------------
 
+        if (sub.equals("track")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Please run this command as a player!");
+                return true;
+            }
+            return trackCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+        }
+
+        // ✅ NEW: race routing
+        if (sub.equals("race") || sub.equals("races")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Please run this command as a player!");
+                return true;
+            }
+            return raceCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+        }
+
         if (sub.equals("table") || sub.equals("infusiontable")) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("Please run this command as a player!");
@@ -105,7 +124,6 @@ public class CommandKit implements CommandExecutor {
             return marbleRecyclerCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
 
-        // ✅ NEW: upgrades routing
         if (sub.equals("upgrade") || sub.equals("upgrades")) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("Please run this command as a player!");
@@ -151,32 +169,21 @@ public class CommandKit implements CommandExecutor {
                     return true;
                 }
 
-                try {
-                    plugin.reloadConfig();
-                    if (mdConfig != null) mdConfig.reload();
+                plugin.reloadConfig();
+                if (mdConfig != null) mdConfig.reload();
+                this.config = YamlConfiguration.loadConfiguration(this.filePath);
 
-                    // keep this CommandKit's file-backed view in sync too
-                    this.config = YamlConfiguration.loadConfiguration(this.filePath);
-
-                    sender.sendMessage(ChatColor.GREEN + "MarbleDrop config reloaded.");
-                } catch (Exception ex) {
-                    sender.sendMessage(ChatColor.RED + "Reload failed. Check console.");
-                    ex.printStackTrace();
-                }
+                sender.sendMessage(ChatColor.GREEN + "MarbleDrop config reloaded.");
                 return true;
             }
 
             case "debug" -> {
-                if (!(sender instanceof Player player)) {
-                    sender.sendMessage("Please run this command as a player!");
-                    return true;
-                }
+                if (!(sender instanceof Player player)) return true;
                 if (!player.hasPermission("marbledrop.debug")) {
                     player.sendMessage(ChatColor.RED + "You don't have permission");
                     return true;
                 }
 
-                // ✅ match your new config structure: debug.enabled
                 boolean next = !plugin.getConfig().getBoolean("debug.enabled", false);
                 plugin.getConfig().set("debug.enabled", next);
                 plugin.saveConfig();
@@ -184,69 +191,30 @@ public class CommandKit implements CommandExecutor {
                 player.sendMessage(ChatColor.GRAY + "Debug: " +
                         (next ? ChatColor.GREEN + "enabled." : ChatColor.RED + "disabled."));
 
-                // keep MdConfig cache updated immediately
                 if (mdConfig != null) mdConfig.reload();
-
                 return true;
             }
 
             case "pdc" -> {
-                if (!(sender instanceof Player player)) {
-                    sender.sendMessage("Please run this command as a player!");
-                    return true;
-                }
-                if (!player.hasPermission("marbledrop.debug")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission");
-                    return true;
-                }
+                if (!(sender instanceof Player player)) return true;
+                if (!player.hasPermission("marbledrop.debug")) return true;
 
                 ItemStack item = player.getInventory().getItemInMainHand();
-                if (item == null || item.getType().isAir()) {
-                    player.sendMessage(ChatColor.RED + "Hold an item first.");
-                    return true;
-                }
+                if (item == null || item.getType().isAir()) return true;
 
                 ItemMeta meta = item.getItemMeta();
-                if (meta == null) {
-                    player.sendMessage(ChatColor.RED + "No ItemMeta.");
-                    return true;
-                }
+                if (meta == null) return true;
 
                 PersistentDataContainer pdc = meta.getPersistentDataContainer();
 
-                // legacy keys
                 NamespacedKey legacyMarble = new NamespacedKey(plugin, "marble");
                 NamespacedKey legacyTeam = new NamespacedKey(plugin, "marble_team");
 
-                byte legacyFlag = pdc.getOrDefault(legacyMarble, PersistentDataType.BYTE, (byte) 0);
-                String legacyTeamVal = pdc.getOrDefault(legacyTeam, PersistentDataType.STRING, "null");
-
-                // modern keys (MarbleKeys)
-                boolean mkId = (me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_ID != null)
-                        && pdc.has(me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_ID, PersistentDataType.STRING);
-                boolean mkKey = (me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_KEY != null)
-                        && pdc.has(me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_KEY, PersistentDataType.STRING);
-                boolean mkRarity = (me.pattrick.marbledrop.marble.MarbleKeys.RARITY != null)
-                        && pdc.has(me.pattrick.marbledrop.marble.MarbleKeys.RARITY, PersistentDataType.STRING);
-
-                String idVal = (me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_ID == null) ? "nullKey"
-                        : pdc.getOrDefault(me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_ID, PersistentDataType.STRING, "null");
-                String keyVal = (me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_KEY == null) ? "nullKey"
-                        : pdc.getOrDefault(me.pattrick.marbledrop.marble.MarbleKeys.MARBLE_KEY, PersistentDataType.STRING, "null");
-                String rarityVal = (me.pattrick.marbledrop.marble.MarbleKeys.RARITY == null) ? "nullKey"
-                        : pdc.getOrDefault(me.pattrick.marbledrop.marble.MarbleKeys.RARITY, PersistentDataType.STRING, "null");
-
                 player.sendMessage(ChatColor.GOLD + "=== Marble Debug ===");
-                player.sendMessage(ChatColor.YELLOW + "Legacy:");
-                player.sendMessage("  marble(byte)=" + legacyFlag);
-                player.sendMessage("  marble_team=" + legacyTeamVal);
-
-                player.sendMessage(ChatColor.YELLOW + "Modern:");
-                player.sendMessage("  has marble_id=" + mkId + " val=" + idVal);
-                player.sendMessage("  has marble_key=" + mkKey + " val=" + keyVal);
-                player.sendMessage("  has rarity=" + mkRarity + " val=" + rarityVal);
-
-                player.sendMessage(ChatColor.YELLOW + "MarbleItem.isMarble=" + me.pattrick.marbledrop.marble.MarbleItem.isMarble(item));
+                player.sendMessage("legacy marble=" +
+                        pdc.getOrDefault(legacyMarble, PersistentDataType.BYTE, (byte) 0));
+                player.sendMessage("legacy team=" +
+                        pdc.getOrDefault(legacyTeam, PersistentDataType.STRING, "null"));
 
                 return true;
             }
@@ -268,14 +236,18 @@ public class CommandKit implements CommandExecutor {
                     ChatColor.DARK_GREEN + "/md tasks\n" +
                     ChatColor.DARK_GREEN + "/md recycler\n" +
                     ChatColor.DARK_GREEN + "/md upgrade\n" +
-                    ChatColor.DARK_GREEN + "/md reload\n" +  // ✅ NEW
+                    ChatColor.DARK_GREEN + "/md track\n" +
+                    ChatColor.DARK_GREEN + "/md race\n" +   // ✅ NEW
+                    ChatColor.DARK_GREEN + "/md reload\n" +
                     ChatColor.DARK_GREEN + "/md debug\n" +
                     ChatColor.DARK_GREEN + "/md pdc");
         } else {
             player.sendMessage(ChatColor.GREEN + "MarbleDrop Commands\n" +
                     ChatColor.DARK_GREEN + "/md dust\n" +
                     ChatColor.DARK_GREEN + "/md tasks\n" +
-                    ChatColor.DARK_GREEN + "/md upgrade\n");
+                    ChatColor.DARK_GREEN + "/md upgrade\n" +
+                    ChatColor.DARK_GREEN + "/md track\n" +
+                    ChatColor.DARK_GREEN + "/md race\n");    // ✅ NEW
         }
     }
 }

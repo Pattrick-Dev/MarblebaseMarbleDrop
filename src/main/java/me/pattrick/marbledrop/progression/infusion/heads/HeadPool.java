@@ -1,11 +1,11 @@
 package me.pattrick.marbledrop.progression.infusion.heads;
 
 import org.bukkit.ChatColor;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.Plugin;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -27,19 +27,35 @@ public final class HeadPool {
 
             File file = new File(data, "heads.yml");
             if (!file.exists()) {
-                // copies from src/main/resources/heads.yml inside your jar
                 plugin.saveResource("heads.yml", false);
             }
 
-            List<String> lines = Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
+            YamlConfiguration cfg = YamlConfiguration.loadConfiguration(file);
             entries.clear();
 
-            for (String raw : lines) {
-                String line = raw.trim();
-                if (line.isEmpty() || line.startsWith("#")) continue;
+            ConfigurationSection root = cfg.getConfigurationSection("heads");
+            if (root == null) {
+                plugin.getLogger().severe("[MarbleDrop] heads.yml missing 'heads:' root!");
+                return;
+            }
 
-                HeadEntry parsed = parseLine(line);
-                if (parsed != null) entries.add(parsed);
+            for (String key : root.getKeys(false)) {
+                ConfigurationSection sec = root.getConfigurationSection(key);
+                if (sec == null) continue;
+
+                String base64 = sec.getString("base64");
+                String name = sec.getString("name", key);
+                String team = sec.getString("team", "Unknown");
+
+                if (base64 == null || base64.isEmpty()) {
+                    plugin.getLogger().warning("[MarbleDrop] Head " + key + " missing base64, skipped.");
+                    continue;
+                }
+
+                String displayName =
+                        ChatColor.translateAlternateColorCodes('&', name);
+
+                entries.add(new HeadEntry(base64, displayName, team));
             }
 
             plugin.getLogger().info("[MarbleDrop] Loaded " + entries.size() + " marble heads.");
@@ -58,30 +74,7 @@ public final class HeadPool {
         return entries.get(rng.nextInt(entries.size()));
     }
 
-    private HeadEntry parseLine(String line) {
-        // Your delimiter appears as "==-"
-        int idx = line.indexOf("==-");
-        int base64EndLen = 2;
-        int sepLen = 3;
-
-        // Fallback if any line ends with "=-"
-        if (idx < 0) {
-            idx = line.indexOf("=-");
-            base64EndLen = 1;
-            sepLen = 2;
-        }
-
-        if (idx < 0) return null;
-
-        String base64 = line.substring(0, idx + base64EndLen);
-        String nameTeam = line.substring(idx + sepLen);
-
-        int dash = nameTeam.lastIndexOf('-');
-        if (dash < 0) return null;
-
-        String displayName = ChatColor.translateAlternateColorCodes('&', nameTeam.substring(0, dash));
-        String team = nameTeam.substring(dash + 1).trim();
-
-        return new HeadEntry(base64, displayName, team);
+    public List<HeadEntry> all() {
+        return List.copyOf(entries);
     }
 }

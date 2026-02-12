@@ -13,6 +13,7 @@ import me.pattrick.marbledrop.progression.upgrades.UpgradeMenuListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationCommand;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationManager;
+import me.pattrick.marbledrop.races.*;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -22,6 +23,11 @@ public class Main extends JavaPlugin {
 
     private MdConfig mdConfig;
 
+    // racing
+    private TrackVisualizer trackVisualizer;
+    private MarbleRaceEngine raceEngine;
+
+    // progression ambience
     private InfusionTableAmbient infusionAmbient;
     private RecyclerAmbient recyclerAmbient;
 
@@ -39,8 +45,8 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        // -------------------- Config (defaults) --------------------
-        // This creates config.yml if missing and loads it.
+
+        // -------------------- Config --------------------
         saveDefaultConfig();
         mdConfig = new MdConfig(this);
 
@@ -52,46 +58,38 @@ public class Main extends JavaPlugin {
             saveResource("heads.yml", false);
         }
 
-        // infusion tables storage
-        File infusionTablesFile = new File(getDataFolder(), "infusion_tables.yml");
-        if (!infusionTablesFile.exists()) {
-            try {
-                getDataFolder().mkdirs();
-                infusionTablesFile.createNewFile();
-            } catch (IOException e) {
-                getLogger().severe("Failed to create infusion_tables.yml: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
+        // -------------------- Storage files --------------------
+        ensureFile("infusion_tables.yml");
+        ensureFile("recyclers.yml");
+        ensureFile("upgrade_stations.yml");
+        ensureFile("tracks.yml");
 
-        // recyclers storage
-        File recyclersFile = new File(getDataFolder(), "recyclers.yml");
-        if (!recyclersFile.exists()) {
-            try {
-                getDataFolder().mkdirs();
-                recyclersFile.createNewFile();
-            } catch (IOException e) {
-                getLogger().severe("Failed to create recyclers.yml: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
+        // -------------------- Racing --------------------
+        TrackManager trackManager = new TrackManager(this);
+        trackVisualizer = new TrackVisualizer(this, trackManager);
 
-        // upgrade stations storage
-        File upgradeStationsFile = new File(getDataFolder(), "upgrade_stations.yml");
-        if (!upgradeStationsFile.exists()) {
-            try {
-                getDataFolder().mkdirs();
-                upgradeStationsFile.createNewFile();
-            } catch (IOException e) {
-                getLogger().severe("Failed to create upgrade_stations.yml: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
+        raceEngine = new MarbleRaceEngine(this);
+        raceEngine.start();
+
+        TrackCommand trackCommand = new TrackCommand(trackManager, trackVisualizer, raceEngine);
+
+        // Track GUI listener (only if you already created these classes)
+        getServer().getPluginManager().registerEvents(
+                new TrackGuiListener(this, trackManager, trackVisualizer),
+                this
+        );
+
+        // Race entry flow
+        RaceManager raceManager = new RaceManager(trackManager, raceEngine);
+        RaceCommand raceCommand = new RaceCommand(raceManager);
 
         // -------------------- Progression system --------------------
         DustManager dustManager = new DustManager(this);
         TaskManager taskManager = new TaskManager(this, dustManager);
-        getServer().getPluginManager().registerEvents(new ProgressionListener(taskManager), this);
+        getServer().getPluginManager().registerEvents(
+                new ProgressionListener(taskManager),
+                this
+        );
 
         // -------------------- Load heads pool --------------------
         HeadPool headPool = new HeadPool(this);
@@ -100,7 +98,7 @@ public class Main extends JavaPlugin {
         // -------------------- Infusion service --------------------
         InfusionService infusionService = new InfusionService(this, dustManager, headPool);
 
-        // -------------------- Infusion tables (single manager + ambient) --------------------
+        // -------------------- Infusion tables --------------------
         InfusionTableManager tableManager = new InfusionTableManager(this);
 
         infusionAmbient = new InfusionTableAmbient(this, tableManager, dustManager);
@@ -113,7 +111,7 @@ public class Main extends JavaPlugin {
 
         InfusionTableCommand infusionTableCommand = new InfusionTableCommand(tableManager, infusionAmbient);
 
-        // -------------------- Recycler (single manager + ambient) --------------------
+        // -------------------- Recycler --------------------
         MarbleRecyclerManager recyclerManager = new MarbleRecyclerManager(this);
 
         recyclerAmbient = new RecyclerAmbient(this, recyclerManager);
@@ -126,7 +124,7 @@ public class Main extends JavaPlugin {
                 this
         );
 
-        // -------------------- Upgrades (station + GUI) --------------------
+        // -------------------- Upgrades --------------------
         UpgradeStationManager upgradeStations = new UpgradeStationManager(this);
         UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(upgradeStations);
 
@@ -144,12 +142,11 @@ public class Main extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ListenEvents(), this);
         getServer().getPluginManager().registerEvents(new TasksMenuListener(this, taskManager), this);
 
-        // -------------------- Command executors --------------------
+        // -------------------- Commands --------------------
         DustCommand dustCommand = new DustCommand(dustManager, infusionService);
         TasksCommand tasksCommand = new TasksCommand(this, taskManager);
         TasksAdminCommand tasksAdminCommand = new TasksAdminCommand(taskManager);
-        me.pattrick.marbledrop.progression.DustAdminCommand dustAdminCommand =
-                new me.pattrick.marbledrop.progression.DustAdminCommand(dustManager);
+        DustAdminCommand dustAdminCommand = new DustAdminCommand(dustManager);
 
         // -------------------- Register ONLY /md (router) --------------------
         CommandKit md = new CommandKit(
@@ -161,7 +158,9 @@ public class Main extends JavaPlugin {
                 marbleRecyclerCommand,
                 tasksCommand,
                 tasksAdminCommand,
-                upgradeStationCommand
+                upgradeStationCommand,
+                trackCommand,
+                raceCommand
         );
 
         if (getCommand("md") != null) {
@@ -178,6 +177,7 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onDisable() {
+
         if (infusionAmbient != null) {
             infusionAmbient.stop();
             infusionAmbient = null;
@@ -188,6 +188,31 @@ public class Main extends JavaPlugin {
             recyclerAmbient = null;
         }
 
+        if (trackVisualizer != null) {
+            trackVisualizer.shutdown();
+            trackVisualizer = null;
+        }
+
+        if (raceEngine != null) {
+            raceEngine.stop();
+            raceEngine = null;
+        }
+
         mdConfig = null;
+    }
+
+    // -------------------- helpers --------------------
+
+    private void ensureFile(String name) {
+        File f = new File(getDataFolder(), name);
+        if (!f.exists()) {
+            try {
+                getDataFolder().mkdirs();
+                f.createNewFile();
+            } catch (IOException e) {
+                getLogger().severe("Failed to create " + name + ": " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
     }
 }
