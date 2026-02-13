@@ -75,8 +75,40 @@ public final class TrackManager {
         return tracks.get(id.toLowerCase());
     }
 
+    public boolean setWatchLocation(String id, Location loc) {
+        if (id == null || id.isBlank() || loc == null) return false;
+
+        id = id.toLowerCase();
+        MarbleTrack track = tracks.get(id);
+        if (track == null) return false;
+
+        if (!track.getWorld().equals(loc.getWorld())) return false;
+
+        track.setWatchLocation(loc);
+        saveNow();
+        return true;
+    }
+
+    public boolean clearWatchLocation(String id) {
+        if (id == null || id.isBlank()) return false;
+
+        id = id.toLowerCase();
+        MarbleTrack track = tracks.get(id);
+        if (track == null) return false;
+
+        track.setWatchLocation(null);
+        saveNow();
+        return true;
+    }
+
     public Set<String> ids() {
         return Collections.unmodifiableSet(tracks.keySet());
+    }
+
+    public List<String> sortedIds() {
+        List<String> list = new ArrayList<>(tracks.keySet());
+        Collections.sort(list);
+        return list;
     }
 
     public Collection<MarbleTrack> getTracks() {

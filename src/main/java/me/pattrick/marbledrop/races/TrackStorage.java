@@ -47,6 +47,17 @@ public final class TrackStorage {
 
                 MarbleTrack track = new MarbleTrack(id, world);
 
+                // ✅ Optional watch location
+                ConfigurationSection watch = sec.getConfigurationSection("watch");
+                if (watch != null) {
+                    double x = watch.getDouble("x");
+                    double y = watch.getDouble("y");
+                    double z = watch.getDouble("z");
+                    float yaw = (float) watch.getDouble("yaw");
+                    float pitch = (float) watch.getDouble("pitch");
+                    track.setWatchLocation(new Location(world, x, y, z, yaw, pitch));
+                }
+
                 List<Map<?, ?>> points = sec.getMapList("points");
                 for (Map<?, ?> m : points) {
                     double x = asDouble(m.get("x"));
@@ -95,6 +106,17 @@ public final class TrackStorage {
                 }
 
                 sec.set("points", pts);
+
+                // ✅ Save watch location
+                Location w = t.getWatchLocation();
+                if (w != null) {
+                    ConfigurationSection watch = sec.createSection("watch");
+                    watch.set("x", w.getX());
+                    watch.set("y", w.getY());
+                    watch.set("z", w.getZ());
+                    watch.set("yaw", w.getYaw());
+                    watch.set("pitch", w.getPitch());
+                }
             }
 
             cfg.save(file);

@@ -12,9 +12,9 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.event.HoverEvent;
 
 import java.util.*;
 
@@ -25,22 +25,117 @@ public final class RaceManager {
     private final TrackManager tracks;
     private final MarbleRaceEngine engine;
 
+    // ✅ Watch manager (optional)
+    private RaceWatchManager watch;
+
     // trackId -> active session
     private final Map<String, RaceSession> active = new HashMap<>();
 
     // trackId -> lobby entries
     private final Map<String, List<RaceEntry>> lobby = new HashMap<>();
 
+    // ✅ NEW: trackId -> OPEN state
+    private final Set<String> openTracks = new HashSet<>();
+
     public RaceManager(TrackManager tracks, MarbleRaceEngine engine) {
         this.tracks = tracks;
         this.engine = engine;
     }
+
+    // ✅ allow Main to wire watch manager without redesigning flow
+    public void setWatchManager(RaceWatchManager watch) {
+        this.watch = watch;
+    }
+
+    // ----------------------------
+    // ✅ OPEN / CLOSE (Lobby state)
+    // ----------------------------
+
+    public boolean open(Player opener, String trackId) {
+        if (trackId == null || trackId.isBlank()) return false;
+        trackId = trackId.toLowerCase();
+
+        if (active.containsKey(trackId)) {
+            if (opener != null) opener.sendMessage(ChatColor.RED + "A race is already running on '" + trackId + "'.");
+            return false;
+        }
+
+        MarbleTrack track = tracks.getTrack(trackId);
+        if (track == null || track.size() < 2) {
+            if (opener != null) opener.sendMessage(ChatColor.RED + "Track not found or not enough points.");
+            return false;
+        }
+
+        openTracks.add(trackId);
+        lobby.computeIfAbsent(trackId, k -> new ArrayList<>());
+
+        if (opener != null) {
+            opener.sendMessage(ChatColor.GREEN + "Track '" + trackId + "' is now OPEN for entries.");
+            opener.sendMessage(ChatColor.GRAY + "Players can join via " + ChatColor.AQUA + "/md race");
+        }
+        return true;
+    }
+
+    public boolean close(Player closer, String trackId) {
+        if (trackId == null || trackId.isBlank()) return false;
+        trackId = trackId.toLowerCase();
+
+        openTracks.remove(trackId);
+
+        if (closer != null) {
+            closer.sendMessage(ChatColor.YELLOW + "Track '" + trackId + "' is now CLOSED for entries.");
+        }
+        return true;
+    }
+
+    public boolean isOpen(String trackId) {
+        if (trackId == null) return false;
+        return openTracks.contains(trackId.toLowerCase());
+    }
+
+    public boolean isRunning(String trackId) {
+        if (trackId == null) return false;
+        return active.containsKey(trackId.toLowerCase());
+    }
+
+    public int lobbyCount(String trackId) {
+        if (trackId == null) return 0;
+        List<RaceEntry> list = lobby.get(trackId.toLowerCase());
+        return list == null ? 0 : list.size();
+    }
+
+    public boolean hasEntry(String trackId, UUID playerId) {
+        if (trackId == null || playerId == null) return false;
+        List<RaceEntry> list = lobby.get(trackId.toLowerCase());
+        if (list == null) return false;
+        for (RaceEntry e : list) {
+            if (playerId.equals(e.owner)) return true;
+        }
+        return false;
+    }
+
+    public List<String> openTrackIds() {
+        List<String> out = new ArrayList<>(openTracks);
+        Collections.sort(out);
+        return out;
+    }
+
+    // ----------------------------
+    // Entries
+    // ----------------------------
 
     public void enter(Player player, String trackId, ItemStack marbleItem) {
         if (player == null) return;
         if (trackId == null || trackId.isBlank()) return;
 
         trackId = trackId.toLowerCase();
+
+        // ✅ NEW: must be open to join (this is the “tracks open so players can join” rule)
+        if (!isOpen(trackId)) {
+            player.sendMessage(ChatColor.RED + "That track is not open for entries.");
+            player.sendMessage(ChatColor.GRAY + "Wait for an admin to open it, then use " + ChatColor.AQUA + "/md race");
+            return;
+        }
 
         if (active.containsKey(trackId)) {
             player.sendMessage(ChatColor.RED + "A race is already running on '" + trackId + "'.");
@@ -84,24 +179,22 @@ public final class RaceManager {
         // one entry per player per track
         for (RaceEntry e : list) {
             if (e.owner.equals(player.getUniqueId())) {
-                player.sendMessage(ChatColor.RED + "You are already entered on this track. Use /md race leave " + trackId);
+                player.sendMessage(ChatColor.RED + "You are already entered on this track. Right-click it in /md race to leave.");
                 return;
             }
         }
 
-        // Snapshot helmet visual (the marble item itself)
         ItemStack helmet = marbleItem.clone();
         helmet.setAmount(1);
 
-        // Capture display name (fallback if none)
         String marbleDisplayName = getMarbleDisplayName(helmet);
 
-        // Stats-driven speed baseline
+        // Stats-driven speed
         double speedPerTick = computeSpeedPerTick(data);
 
-        // Option C: stats also drive HOW chaotic / aggressive the marble behaves
-        double chaos = computeChaos(data);           // lower = cleaner lines, fewer bad hits
-        double aggression = computeAggression(data); // higher = more pass attempts / bumping
+        // Option C personality (you already wired chaos/aggression in MarbleRunner)
+        double chaos = computeChaos(data);
+        double aggression = computeAggression(data);
 
         list.add(new RaceEntry(player.getUniqueId(), marbleId, helmet, data, marbleDisplayName, speedPerTick, chaos, aggression));
 
@@ -141,7 +234,6 @@ public final class RaceManager {
         trackId = trackId.toLowerCase();
 
         if (active.containsKey(trackId)) {
-            // we won't kill a running race in this KISS version
             return;
         }
 
@@ -195,7 +287,6 @@ public final class RaceManager {
             return;
         }
 
-        // create active session (stores recipients)
         RaceSession session = new RaceSession(trackId, starter.getUniqueId(), list);
         active.put(trackId, session);
 
@@ -203,7 +294,16 @@ public final class RaceManager {
 
         starter.sendMessage(ChatColor.GREEN + "Starting race on '" + trackId + "' with " + list.size() + " marbles...");
 
-        // spread spawn points in a small circle at the start
+        // ✅ AUTO-WATCH: put all entered players into watch mode when race starts
+        if (watch != null) {
+            for (RaceEntry entry : list) {
+                Player owner = Bukkit.getPlayer(entry.owner);
+                if (owner != null && owner.isOnline()) {
+                    watch.start(owner, trackId);
+                }
+            }
+        }
+
         double radius = 0.35;
         int n = list.size();
 
@@ -216,7 +316,6 @@ public final class RaceManager {
 
             Location spawn = start.clone().add(ox, 0.0, oz);
 
-            // ✅ Pass chaos + aggression into MarbleRunner for Option C
             MarbleRunner runner = new MarbleRunner(
                     track,
                     spawn,
@@ -230,15 +329,15 @@ public final class RaceManager {
             engine.addRunner(runner);
         }
 
-        // remove lobby entries now that race started
+        // once started: clear lobby + close track
         lobby.remove(trackId);
+        openTracks.remove(trackId);
     }
 
     private void onFinish(String trackId, RaceEntry entry) {
         RaceSession session = active.get(trackId);
         if (session == null) return;
 
-        // prevent double-finish (defensive)
         if (session.finishedIds.contains(entry.marbleId)) return;
 
         session.finishedIds.add(entry.marbleId);
@@ -356,14 +455,7 @@ public final class RaceManager {
         c = c.append(Component.text("Accel: ", NamedTextColor.GRAY)).append(Component.text(String.valueOf(accel), NamedTextColor.WHITE)).append(Component.newline());
         c = c.append(Component.text("Handling: ", NamedTextColor.GRAY)).append(Component.text(String.valueOf(handling), NamedTextColor.WHITE)).append(Component.newline());
         c = c.append(Component.text("Stability: ", NamedTextColor.GRAY)).append(Component.text(String.valueOf(stability), NamedTextColor.WHITE)).append(Component.newline());
-        c = c.append(Component.text("Boost: ", NamedTextColor.GRAY)).append(Component.text(String.valueOf(boost), NamedTextColor.WHITE))
-                .append(Component.newline())
-                .append(Component.text("----------------", NamedTextColor.DARK_GRAY))
-                .append(Component.newline())
-                .append(Component.text("Race Style:", NamedTextColor.GRAY))
-                .append(Component.newline())
-                .append(Component.text("Chaos: ", NamedTextColor.GRAY)).append(Component.text(String.format(Locale.US, "%.2f", entry.chaos), NamedTextColor.WHITE)).append(Component.newline())
-                .append(Component.text("Aggro: ", NamedTextColor.GRAY)).append(Component.text(String.format(Locale.US, "%.2f", entry.aggression), NamedTextColor.WHITE));
+        c = c.append(Component.text("Boost: ", NamedTextColor.GRAY)).append(Component.text(String.valueOf(boost), NamedTextColor.WHITE));
 
         return c;
     }
@@ -378,7 +470,7 @@ public final class RaceManager {
     }
 
     // ------------------------------------------------------------
-    // Speed logic (Option C tuned)
+    // Speed logic + Option C personality
     // ------------------------------------------------------------
 
     private double computeSpeedPerTick(MarbleData data) {
@@ -390,23 +482,18 @@ public final class RaceManager {
         int stability = stats.get(MarbleStat.STABILITY);
         int boost = stats.get(MarbleStat.BOOST);
 
-        // baseline similar to what you had
         double base = 0.014;
 
-        // primary performance: SPEED + ACCEL matter most
         double statBoost =
                 (speed * 0.00038) +
                         (accel * 0.00030) +
                         (handling * 0.00012);
 
-        // Option C: keep randomness but reduce it, and let STABILITY suppress it
-        // lower stability -> more variance (more upsets), higher stability -> more consistent
-        double variance = 0.0012; // reduced vs earlier
-        double stabilitySuppress = clamp01(stability / 100.0); // assumes typical stat range ~0-100
-        double randomness = (Math.random() - 0.5) * (variance * (1.05 - 0.85 * stabilitySuppress));
+        double variance = 0.0012;
+        double stab = clamp01(stability / 100.0);
+        double randomness = (Math.random() - 0.5) * (variance * (1.05 - 0.85 * stab));
 
-        // boost: occasional small pop (upsides), but not huge
-        double boostChance = clamp01(boost * 0.008); // 0..~0.8 if boost=100 (adjust to your stat ranges)
+        double boostChance = clamp01(boost * 0.008);
         double boostBonus = (Math.random() < boostChance) ? 0.00055 : 0;
 
         double finalSpeed = base + statBoost + randomness + boostBonus;
@@ -417,48 +504,22 @@ public final class RaceManager {
         return finalSpeed;
     }
 
-    // ------------------------------------------------------------
-    // Option C behavior mapping: stats -> chaos/aggression
-    // ------------------------------------------------------------
-
     private double computeChaos(MarbleData data) {
         MarbleStats s = data.getStats();
+        double stab = clamp01(s.get(MarbleStat.STABILITY) / 100.0);
+        double hand = clamp01(s.get(MarbleStat.HANDLING) / 100.0);
 
-        int stability = s.get(MarbleStat.STABILITY);
-        int handling = s.get(MarbleStat.HANDLING);
-
-        // normalize assuming ~0..100 stats; clamp for safety
-        double stab = clamp01(stability / 100.0);
-        double hand = clamp01(handling / 100.0);
-
-        // higher stability/handling => lower chaos
-        // keep a floor so races are still fun
-        double chaos = 0.55
-                - (stab * 0.28)
-                - (hand * 0.18);
-
-        // clamp to a sane range that matches your MarbleRunner expectations
-        // (lower chaos => cleaner lines)
+        double chaos = 0.55 - (stab * 0.28) - (hand * 0.18);
         return clamp(chaos, 0.12, 0.65);
     }
 
     private double computeAggression(MarbleData data) {
         MarbleStats s = data.getStats();
+        double b = clamp01(s.get(MarbleStat.BOOST) / 100.0);
+        double a = clamp01(s.get(MarbleStat.ACCEL) / 100.0);
+        double sp = clamp01(s.get(MarbleStat.SPEED) / 100.0);
 
-        int boost = s.get(MarbleStat.BOOST);
-        int accel = s.get(MarbleStat.ACCEL);
-        int speed = s.get(MarbleStat.SPEED);
-
-        double b = clamp01(boost / 100.0);
-        double a = clamp01(accel / 100.0);
-        double sp = clamp01(speed / 100.0);
-
-        // boost/accel lean aggressive; speed slightly contributes
-        double aggro = 0.35
-                + (b * 0.30)
-                + (a * 0.20)
-                + (sp * 0.10);
-
+        double aggro = 0.35 + (b * 0.30) + (a * 0.20) + (sp * 0.10);
         return clamp(aggro, 0.20, 0.95);
     }
 
@@ -487,8 +548,6 @@ public final class RaceManager {
         public final String marbleDisplayName;
 
         public final double speedPerTick;
-
-        // Option C: behavior traits passed into MarbleRunner
         public final double chaos;
         public final double aggression;
 
@@ -519,10 +578,7 @@ public final class RaceManager {
             this.trackId = trackId;
             this.total = entries.size();
 
-            for (RaceEntry e : entries) {
-                recipients.add(e.owner);
-            }
-
+            for (RaceEntry e : entries) recipients.add(e.owner);
             if (starter != null) recipients.add(starter);
         }
     }

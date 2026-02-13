@@ -27,6 +27,12 @@ public class Main extends JavaPlugin {
     private TrackVisualizer trackVisualizer;
     private MarbleRaceEngine raceEngine;
 
+    // persisted signs
+    private RaceSignManager raceSignManager;
+
+    // watch manager
+    private RaceWatchManager raceWatchManager;
+
     // progression ambience
     private InfusionTableAmbient infusionAmbient;
     private RecyclerAmbient recyclerAmbient;
@@ -63,6 +69,8 @@ public class Main extends JavaPlugin {
         ensureFile("recyclers.yml");
         ensureFile("upgrade_stations.yml");
         ensureFile("tracks.yml");
+        ensureFile("race-signs.yml");
+        ensureFile("race-watch.yml");
 
         // -------------------- Racing --------------------
         TrackManager trackManager = new TrackManager(this);
@@ -73,15 +81,42 @@ public class Main extends JavaPlugin {
 
         TrackCommand trackCommand = new TrackCommand(trackManager, trackVisualizer, raceEngine);
 
-        // Track GUI listener (only if you already created these classes)
+        // Track GUI listener
         getServer().getPluginManager().registerEvents(
                 new TrackGuiListener(this, trackManager, trackVisualizer),
                 this
         );
 
+        // Point tool listener
+        getServer().getPluginManager().registerEvents(
+                new TrackPointToolListener(this, trackManager),
+                this
+        );
+
         // Race entry flow
         RaceManager raceManager = new RaceManager(trackManager, raceEngine);
-        RaceCommand raceCommand = new RaceCommand(raceManager);
+
+        // Watch manager (inventory safe)
+        raceWatchManager = new RaceWatchManager(this, trackManager);
+        getServer().getPluginManager().registerEvents(raceWatchManager, this);
+
+        // Wire watch into race manager (auto-watch on start)
+        raceManager.setWatchManager(raceWatchManager);
+
+        RaceCommand raceCommand = new RaceCommand(raceManager, trackManager, raceWatchManager);
+
+        // Race GUI listener (click-to-join menu)
+        getServer().getPluginManager().registerEvents(
+                new RaceGuiListener(trackManager, raceManager),
+                this
+        );
+
+        // Race Signs (create + click signs) - now expects watch manager too
+        raceSignManager = new RaceSignManager(this);
+        getServer().getPluginManager().registerEvents(
+                new RaceSignListener(trackManager, raceManager, raceSignManager, raceWatchManager),
+                this
+        );
 
         // -------------------- Progression system --------------------
         DustManager dustManager = new DustManager(this);
@@ -198,10 +233,10 @@ public class Main extends JavaPlugin {
             raceEngine = null;
         }
 
+        raceSignManager = null;
+        raceWatchManager = null;
         mdConfig = null;
     }
-
-    // -------------------- helpers --------------------
 
     private void ensureFile(String name) {
         File f = new File(getDataFolder(), name);

@@ -8,10 +8,11 @@ import org.bukkit.entity.Player;
 
 public final class TrackCommand implements CommandExecutor {
 
+    private static final String PERM = "marbledrop.admin";
+
     private final TrackManager tracks;
     private final MarbleRaceEngine raceEngine;
     private final TrackVisualizer visualizer;
-
 
     public TrackCommand(
             TrackManager tracks,
@@ -23,9 +24,6 @@ public final class TrackCommand implements CommandExecutor {
         this.raceEngine = raceEngine;
     }
 
-
-
-
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 
@@ -34,11 +32,18 @@ public final class TrackCommand implements CommandExecutor {
             return true;
         }
 
-        if (args.length == 0) {
-            sendUsage(player);
+        if (!player.hasPermission(PERM)) {
+            player.sendMessage(ChatColor.RED + "You don't have permission.");
             return true;
         }
 
+        // ✅ GUI-first
+        if (args.length == 0 || args[0].equalsIgnoreCase("gui") || args[0].equalsIgnoreCase("menu")) {
+            TrackGui.openList(player, tracks, 0);
+            return true;
+        }
+
+        // Keep existing commands as backup tools
         String sub = args[0].toLowerCase();
 
         switch (sub) {
@@ -76,6 +81,32 @@ public final class TrackCommand implements CommandExecutor {
                 player.sendMessage(ChatColor.GREEN + "Added point #" + count + " to '" + id + "'.");
             }
 
+            case "setwatch" -> {
+                if (args.length < 2) {
+                    player.sendMessage(ChatColor.RED + "Usage: /md track setwatch <id>");
+                    return true;
+                }
+                String id = args[1].toLowerCase();
+                if (!tracks.setWatchLocation(id, player.getLocation())) {
+                    player.sendMessage(ChatColor.RED + "Track not found (or wrong world).");
+                    return true;
+                }
+                player.sendMessage(ChatColor.LIGHT_PURPLE + "Set watch spot for '" + id + "'.");
+            }
+
+            case "clearwatch" -> {
+                if (args.length < 2) {
+                    player.sendMessage(ChatColor.RED + "Usage: /md track clearwatch <id>");
+                    return true;
+                }
+                String id = args[1].toLowerCase();
+                if (!tracks.clearWatchLocation(id)) {
+                    player.sendMessage(ChatColor.RED + "Track not found.");
+                    return true;
+                }
+                player.sendMessage(ChatColor.YELLOW + "Cleared watch spot for '" + id + "'.");
+            }
+
             case "info" -> {
                 if (args.length < 2) {
                     player.sendMessage(ChatColor.RED + "Usage: /md track info <id>");
@@ -93,6 +124,7 @@ public final class TrackCommand implements CommandExecutor {
                 player.sendMessage(ChatColor.YELLOW + "Track: " + id);
                 player.sendMessage(ChatColor.GRAY + "World: " + track.getWorld().getName());
                 player.sendMessage(ChatColor.GRAY + "Points: " + track.size());
+                player.sendMessage(ChatColor.GRAY + "Watch: " + (track.getWatchLocation() != null ? ChatColor.GREEN + "set" : ChatColor.RED + "not set"));
             }
 
             case "delete" -> {
@@ -110,6 +142,7 @@ public final class TrackCommand implements CommandExecutor {
 
                 player.sendMessage(ChatColor.GREEN + "Deleted track '" + id + "'.");
             }
+
             case "show" -> {
                 if (args.length < 2) {
                     player.sendMessage("§cUsage: /md track show <id>");
@@ -118,9 +151,8 @@ public final class TrackCommand implements CommandExecutor {
                 visualizer.show(player, args[1].toLowerCase());
             }
 
-            case "hide" -> {
-                visualizer.hide(player);
-            }
+            case "hide" -> visualizer.hide(player);
+
             case "run" -> {
                 if (args.length < 2) {
                     player.sendMessage("§cUsage: /md track run <id>");
@@ -135,31 +167,18 @@ public final class TrackCommand implements CommandExecutor {
                     return true;
                 }
 
-                MarbleRunner runner =
-                        new MarbleRunner(track, track.getPoint(0));
+                MarbleRunner runner = new MarbleRunner(track, track.getPoint(0));
                 raceEngine.addRunner(runner);
-
 
                 player.sendMessage("§aMarble started on track §e" + id);
             }
-            case "gui" -> {
-                TrackGui.openList(player, tracks);
+
+            default -> {
+                player.sendMessage(ChatColor.YELLOW + "Use /md track to open the admin track GUI.");
+                player.sendMessage(ChatColor.GRAY + "Or: create/addpoint/info/delete/show/hide/run/setwatch/clearwatch");
             }
-
-
-
-
-            default -> sendUsage(player);
         }
 
         return true;
-    }
-
-    private void sendUsage(Player player) {
-        player.sendMessage(ChatColor.YELLOW + "Track commands:");
-        player.sendMessage(ChatColor.GRAY + "/md track create <id>");
-        player.sendMessage(ChatColor.GRAY + "/md track addpoint <id>");
-        player.sendMessage(ChatColor.GRAY + "/md track info <id>");
-        player.sendMessage(ChatColor.GRAY + "/md track delete <id>");
     }
 }

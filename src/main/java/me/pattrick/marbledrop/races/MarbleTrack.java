@@ -13,6 +13,9 @@ public final class MarbleTrack {
     private final World world;
     private final List<Location> points = new ArrayList<>();
 
+    // ✅ Optional watch spot for spectating
+    private Location watchLocation;
+
     public MarbleTrack(String id, World world) {
         this.id = id;
         this.world = world;
@@ -41,6 +44,14 @@ public final class MarbleTrack {
 
     public List<Location> getPoints() {
         return Collections.unmodifiableList(points);
+    }
+
+    public Location getWatchLocation() {
+        return (watchLocation == null) ? null : watchLocation.clone();
+    }
+
+    public void setWatchLocation(Location loc) {
+        this.watchLocation = (loc == null) ? null : loc.clone();
     }
 
     void removeLastPoint() {
