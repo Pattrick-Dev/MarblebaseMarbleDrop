@@ -1,11 +1,14 @@
 name: MarbleBaseMD
 main: me.pattrick.marbledrop.Main
 version: 1.0
-api-version: 1.21
+api-version: "26.2"
 commands:
    md:
       description: Base command for marble drop
       usage: /md
+   feedback:
+      description: Send feedback about the server
+      usage: /feedback <message>
 
 permissions:
    marbledrop.admin:

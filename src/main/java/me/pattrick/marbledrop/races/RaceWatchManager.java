@@ -18,6 +18,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.io.File;
 import java.io.IOException;
@@ -27,9 +28,16 @@ public final class RaceWatchManager implements Listener {
 
     private final Plugin plugin;
     private final TrackManager tracks;
+    private final MarbleRaceEngine engine;
 
-    // Small leash radius so they can look around but not wander into SMP areas
-    private final double watchRadius = 2.25;
+    // How far a spectator can stray from the marble pack before being snapped back.
+    // Large enough for comfortable aerial views and side angles.
+    private static final double WATCH_RADIUS = 40.0;
+
+    // How often (in ticks) the leash anchor chases the marble pack centroid.
+    private static final long ANCHOR_UPDATE_INTERVAL = 10L;
+
+    private BukkitTask anchorTask;
 
     private final File file;
     private YamlConfiguration cfg;
@@ -54,12 +62,34 @@ public final class RaceWatchManager implements Listener {
     private final Map<UUID, WatchState> watching = new HashMap<>();
     private final Map<UUID, Location> anchor = new HashMap<>();
 
-    public RaceWatchManager(Plugin plugin, TrackManager tracks) {
+    public RaceWatchManager(Plugin plugin, TrackManager tracks, MarbleRaceEngine engine) {
         this.plugin = plugin;
         this.tracks = tracks;
+        this.engine = engine;
 
         this.file = new File(plugin.getDataFolder(), "race-watch.yml");
         reloadFile();
+        startAnchorTask();
+    }
+
+    private void startAnchorTask() {
+        anchorTask = plugin.getServer().getScheduler().runTaskTimer(plugin, () -> {
+            if (watching.isEmpty()) return;
+
+            Location centroid = engine.getCentroid();
+            if (centroid == null) return;
+
+            for (UUID id : watching.keySet()) {
+                anchor.put(id, centroid.clone());
+            }
+        }, ANCHOR_UPDATE_INTERVAL, ANCHOR_UPDATE_INTERVAL);
+    }
+
+    public void shutdown() {
+        if (anchorTask != null) {
+            anchorTask.cancel();
+            anchorTask = null;
+        }
     }
 
     public void reloadFile() {
@@ -379,11 +409,7 @@ public final class RaceWatchManager implements Listener {
             return;
         }
 
-        double dx = to.getX() - a.getX();
-        double dz = to.getZ() - a.getZ();
-        double dy = Math.abs(to.getY() - a.getY());
-
-        if ((dx * dx + dz * dz) > (watchRadius * watchRadius) || dy > 2.0) {
+        if (to.distance(a) > WATCH_RADIUS) {
             Location snap = a.clone();
             snap.setYaw(to.getYaw());
             snap.setPitch(to.getPitch());

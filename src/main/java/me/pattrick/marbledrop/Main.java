@@ -8,12 +8,26 @@ import me.pattrick.marbledrop.progression.infusion.table.InfusionTableAmbient;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableCommand;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableListener;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableManager;
+import me.pattrick.marbledrop.feedback.FeedbackCommand;
 import me.pattrick.marbledrop.progression.taskmenu.TasksMenuListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeMenuListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationCommand;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationManager;
 import me.pattrick.marbledrop.races.*;
+import me.pattrick.marbledrop.races.team.CustomTeamManager;
+import me.pattrick.marbledrop.races.team.TeamCommand;
+import me.pattrick.marbledrop.races.team.TeamMenuListener;
+import me.pattrick.marbledrop.tutorial.TutorialCommand;
+import me.pattrick.marbledrop.tutorial.TutorialInteractionGuard;
+import me.pattrick.marbledrop.tutorial.TutorialListener;
+import me.pattrick.marbledrop.tutorial.TutorialLocationStore;
+import me.pattrick.marbledrop.tutorial.TutorialManager;
+import me.pattrick.marbledrop.tutorial.TutorialProgressPoller;
+import me.pattrick.marbledrop.tutorial.TutorialRaceService;
+import me.pattrick.marbledrop.tutorial.TutorialRecyclerHook;
+import me.pattrick.marbledrop.tutorial.TutorialTasksHandler;
+import me.pattrick.marbledrop.tutorial.TutorialUpgradeHook;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -36,6 +50,9 @@ public class Main extends JavaPlugin {
     // progression ambience
     private InfusionTableAmbient infusionAmbient;
     private RecyclerAmbient recyclerAmbient;
+
+    // tutorial
+    private TutorialProgressPoller tutorialPoller;
 
     public MdConfig cfg() {
         return mdConfig;
@@ -97,7 +114,7 @@ public class Main extends JavaPlugin {
         RaceManager raceManager = new RaceManager(trackManager, raceEngine);
 
         // Watch manager (inventory safe)
-        raceWatchManager = new RaceWatchManager(this, trackManager);
+        raceWatchManager = new RaceWatchManager(this, trackManager, raceEngine);
         getServer().getPluginManager().registerEvents(raceWatchManager, this);
 
         // Wire watch into race manager (auto-watch on start)
@@ -118,9 +135,15 @@ public class Main extends JavaPlugin {
                 this
         );
 
+        // -------------------- Custom teams --------------------
+        CustomTeamManager teamManager = new CustomTeamManager(this);
+        getServer().getPluginManager().registerEvents(new TeamMenuListener(this, teamManager), this);
+        TeamCommand teamCommand = new TeamCommand(teamManager);
+
         // -------------------- Progression system --------------------
         DustManager dustManager = new DustManager(this);
         TaskManager taskManager = new TaskManager(this, dustManager);
+
         getServer().getPluginManager().registerEvents(
                 new ProgressionListener(taskManager),
                 this
@@ -173,6 +196,47 @@ public class Main extends JavaPlugin {
                 this
         );
 
+        // -------------------- Tutorial --------------------
+        // Wired here (not earlier) because it needs trackManager/raceEngine/
+        // raceManager (racing section), dustManager (progression section),
+        // and tableManager/recyclerManager/upgradeStations (all just above)
+        // to already exist.
+        TutorialLocationStore tutorialLocations = new TutorialLocationStore(this);
+        TutorialManager tutorialManager = new TutorialManager(this, dustManager, tutorialLocations);
+
+        TutorialTasksHandler tutorialTasksHandler = new TutorialTasksHandler(tutorialManager);
+        getServer().getPluginManager().registerEvents(tutorialTasksHandler, this);
+
+        TutorialRaceService tutorialRaceService = new TutorialRaceService(
+                this, tutorialManager, tutorialLocations, raceManager, trackManager, raceEngine, raceWatchManager, headPool
+        );
+
+        getServer().getPluginManager().registerEvents(
+                new TutorialListener(tutorialManager, tutorialTasksHandler, tutorialRaceService),
+                this
+        );
+
+        getServer().getPluginManager().registerEvents(
+                new TutorialRecyclerHook(this, tutorialManager, recyclerManager),
+                this
+        );
+
+        getServer().getPluginManager().registerEvents(
+                new TutorialInteractionGuard(tutorialManager, tableManager, upgradeStations, recyclerManager),
+                this
+        );
+
+        getServer().getPluginManager().registerEvents(
+                new TutorialUpgradeHook(tutorialManager),
+                this
+        );
+
+        TutorialProgressPoller poller = new TutorialProgressPoller(this, tutorialManager);
+        poller.start();
+        this.tutorialPoller = poller;
+
+        TutorialCommand tutorialCommand = new TutorialCommand(tutorialManager);
+
         // -------------------- Core listeners --------------------
         getServer().getPluginManager().registerEvents(new ListenEvents(), this);
         getServer().getPluginManager().registerEvents(new TasksMenuListener(this, taskManager), this);
@@ -195,7 +259,9 @@ public class Main extends JavaPlugin {
                 tasksAdminCommand,
                 upgradeStationCommand,
                 trackCommand,
-                raceCommand
+                raceCommand,
+                teamCommand,
+                tutorialCommand
         );
 
         if (getCommand("md") != null) {
@@ -205,6 +271,24 @@ public class Main extends JavaPlugin {
             getLogger().severe("Command 'md' is not defined in plugin.yml!");
         }
 
+        // -------------------- Feedback --------------------
+        // Shares a backend with the marblebase.net website's feedback
+        // form (a Cloudflare Pages Function + D1), tagged source=minecraft.
+        // See website-side setup notes for the corresponding endpoint.
+        getConfig().addDefault("feedback.endpoint-url", "https://marblebase.net/api/feedback");
+        getConfig().addDefault("feedback.secret", "CHANGE_ME");
+        getConfig().options().copyDefaults(true);
+        saveConfig();
+
+        String feedbackUrl = getConfig().getString("feedback.endpoint-url");
+        String feedbackSecret = getConfig().getString("feedback.secret");
+
+        if (getCommand("feedback") != null) {
+            getCommand("feedback").setExecutor(new FeedbackCommand(this, feedbackUrl, feedbackSecret));
+        } else {
+            getLogger().severe("Command 'feedback' is not defined in plugin.yml!");
+        }
+
         // -------------------- Action bar tracker --------------------
         ActionBarTaskTracker tracker = new ActionBarTaskTracker(this, taskManager);
         tracker.start();
@@ -212,6 +296,11 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onDisable() {
+
+        if (tutorialPoller != null) {
+            tutorialPoller.stop();
+            tutorialPoller = null;
+        }
 
         if (infusionAmbient != null) {
             infusionAmbient.stop();
@@ -234,7 +323,12 @@ public class Main extends JavaPlugin {
         }
 
         raceSignManager = null;
-        raceWatchManager = null;
+
+        if (raceWatchManager != null) {
+            raceWatchManager.shutdown();
+            raceWatchManager = null;
+        }
+
         mdConfig = null;
     }
 

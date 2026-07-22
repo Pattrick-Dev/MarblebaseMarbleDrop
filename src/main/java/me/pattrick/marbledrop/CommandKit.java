@@ -31,6 +31,8 @@ public class CommandKit implements CommandExecutor {
     private final CommandExecutor upgradeStationCommand;
     private final CommandExecutor trackCommand;
     private final CommandExecutor raceCommand;
+    private final CommandExecutor teamCommand;
+    private final CommandExecutor tutorialCommand;
 
     private final File filePath;
     private FileConfiguration config;
@@ -46,7 +48,9 @@ public class CommandKit implements CommandExecutor {
             CommandExecutor tasksAdminCommand,
             UpgradeStationCommand upgradeStationCommand,
             CommandExecutor trackCommand,
-            CommandExecutor raceCommand
+            CommandExecutor raceCommand,
+            CommandExecutor teamCommand,
+            CommandExecutor tutorialCommand
     ) {
 
         this.plugin = plugin;
@@ -61,6 +65,8 @@ public class CommandKit implements CommandExecutor {
         this.upgradeStationCommand = upgradeStationCommand;
         this.trackCommand = trackCommand;
         this.raceCommand = raceCommand;
+        this.teamCommand = teamCommand;
+        this.tutorialCommand = tutorialCommand;
 
         this.filePath = new File(plugin.getDataFolder(), "config.yml");
         this.config = YamlConfiguration.loadConfiguration(this.filePath);
@@ -99,13 +105,25 @@ public class CommandKit implements CommandExecutor {
             return trackCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
 
-        // ✅ NEW: race routing
+        if (sub.equals("team")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Please run this command as a player!");
+                return true;
+            }
+            return teamCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+        }
+
+        // race routing
         if (sub.equals("race") || sub.equals("races")) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("Please run this command as a player!");
                 return true;
             }
             return raceCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+        }
+
+        if (sub.equals("tutorial")) {
+            return tutorialCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
 
         if (sub.equals("table") || sub.equals("infusiontable")) {
@@ -237,7 +255,9 @@ public class CommandKit implements CommandExecutor {
                     ChatColor.DARK_GREEN + "/md recycler\n" +
                     ChatColor.DARK_GREEN + "/md upgrade\n" +
                     ChatColor.DARK_GREEN + "/md track\n" +
-                    ChatColor.DARK_GREEN + "/md race\n" +   // ✅ NEW
+                    ChatColor.DARK_GREEN + "/md race\n" +
+                    ChatColor.DARK_GREEN + "/md team\n" +
+                    ChatColor.DARK_GREEN + "/md tutorial\n" +
                     ChatColor.DARK_GREEN + "/md reload\n" +
                     ChatColor.DARK_GREEN + "/md debug\n" +
                     ChatColor.DARK_GREEN + "/md pdc");
@@ -247,7 +267,8 @@ public class CommandKit implements CommandExecutor {
                     ChatColor.DARK_GREEN + "/md tasks\n" +
                     ChatColor.DARK_GREEN + "/md upgrade\n" +
                     ChatColor.DARK_GREEN + "/md track\n" +
-                    ChatColor.DARK_GREEN + "/md race\n");    // ✅ NEW
+                    ChatColor.DARK_GREEN + "/md race\n" +
+                    ChatColor.DARK_GREEN + "/md team\n");
         }
     }
 }

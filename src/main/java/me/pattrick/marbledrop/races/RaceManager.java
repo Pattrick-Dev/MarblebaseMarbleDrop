@@ -340,8 +340,10 @@ public final class RaceManager {
 
         if (session.finishedIds.contains(entry.marbleId)) return;
 
+        long elapsed = System.currentTimeMillis() - session.startMs;
         session.finishedIds.add(entry.marbleId);
         session.finished.add(entry);
+        session.finishTimes.put(entry.marbleId, elapsed);
 
         int place = session.finished.size();
 
@@ -352,7 +354,8 @@ public final class RaceManager {
                 .append(Component.text(ownerName, NamedTextColor.YELLOW))
                 .append(Component.text(" (", NamedTextColor.DARK_GRAY))
                 .append(buildMarbleNameComponent(entry))
-                .append(Component.text(")", NamedTextColor.DARK_GRAY));
+                .append(Component.text(")", NamedTextColor.DARK_GRAY))
+                .append(Component.text(" — " + formatTime(elapsed), NamedTextColor.GREEN));
 
         broadcastToSession(session, line);
 
@@ -379,10 +382,14 @@ public final class RaceManager {
                 default -> NamedTextColor.WHITE;
             };
 
+            Long finishMs = session.finishTimes.get(e.marbleId);
+            String timeStr = finishMs != null ? formatTime(finishMs) : "—";
+
             Component line = Component.text((i + 1) + ". ", medal)
                     .append(Component.text(ownerName, NamedTextColor.YELLOW))
                     .append(Component.text(" — ", NamedTextColor.DARK_GRAY))
-                    .append(buildMarbleNameComponent(e));
+                    .append(buildMarbleNameComponent(e))
+                    .append(Component.text(" " + timeStr, NamedTextColor.GREEN));
 
             broadcastToSession(session, line);
         }
@@ -470,6 +477,20 @@ public final class RaceManager {
     }
 
     // ------------------------------------------------------------
+    // Public helper: build a single stats-driven runner without going
+    // through the shared lobby/session system. Used by the tutorial's
+    // isolated practice race (and safe for any other future one-off use).
+    // ------------------------------------------------------------
+
+    public MarbleRunner buildStatsRunner(MarbleTrack track, Location spawn, ItemStack helmet,
+                                          MarbleData data, MarbleRunner.FinishListener listener) {
+        double speedPerTick = computeSpeedPerTick(data);
+        double chaos = computeChaos(data);
+        double aggression = computeAggression(data);
+        return new MarbleRunner(track, spawn, helmet, speedPerTick, chaos, aggression, listener);
+    }
+
+    // ------------------------------------------------------------
     // Speed logic + Option C personality
     // ------------------------------------------------------------
 
@@ -535,6 +556,18 @@ public final class RaceManager {
         return v;
     }
 
+    private static String formatTime(long ms) {
+        long totalTenths = ms / 100;
+        long tenths = totalTenths % 10;
+        long totalSeconds = ms / 1000;
+        long seconds = totalSeconds % 60;
+        long minutes = totalSeconds / 60;
+        if (minutes > 0) {
+            return minutes + ":" + String.format("%02d", seconds) + "." + tenths;
+        }
+        return seconds + "." + tenths + "s";
+    }
+
     // ------------------------------------------------------------
     // Data
     // ------------------------------------------------------------
@@ -568,9 +601,11 @@ public final class RaceManager {
     private static final class RaceSession {
         final String trackId;
         final int total;
+        final long startMs = System.currentTimeMillis();
 
         final List<RaceEntry> finished = new ArrayList<>();
         final Set<UUID> finishedIds = new HashSet<>();
+        final Map<UUID, Long> finishTimes = new LinkedHashMap<>();
 
         final Set<UUID> recipients = new HashSet<>();
 

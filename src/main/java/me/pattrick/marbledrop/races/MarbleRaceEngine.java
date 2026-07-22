@@ -1,6 +1,8 @@
 package me.pattrick.marbledrop.races;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -50,6 +52,25 @@ public final class MarbleRaceEngine {
     public void addRunner(MarbleRunner runner) {
         if (runner == null) return;
         runners.add(runner);
+    }
+
+    /** Returns the average position of all active runners, or null if none. */
+    public Location getCentroid() {
+        if (runners.isEmpty()) return null;
+        double x = 0, y = 0, z = 0;
+        World world = null;
+        int count = 0;
+        for (MarbleRunner r : runners) {
+            Location loc = r.getLocation();
+            if (loc == null || loc.getWorld() == null) continue;
+            world = loc.getWorld();
+            x += loc.getX();
+            y += loc.getY();
+            z += loc.getZ();
+            count++;
+        }
+        if (count == 0 || world == null) return null;
+        return new Location(world, x / count, y / count, z / count);
     }
 
     private void tick() {

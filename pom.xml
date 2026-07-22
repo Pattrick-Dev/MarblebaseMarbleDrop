@@ -10,10 +10,10 @@
 	<name>MarbleDropPlugin</name>
 
 	<properties>
-		<!-- Paper 1.21.x targets Java 21 -->
-		<java.version>21</java.version>
+		<!-- Paper 26.2 targets Java 25 -->
+		<java.version>25</java.version>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<paper.api.version>1.21.11-R0.1-SNAPSHOT</paper.api.version>
+		<paper.api.version>26.2.build.39-alpha</paper.api.version>
 	</properties>
 
 	<repositories>
@@ -38,6 +38,7 @@
 			<version>${paper.api.version}</version>
 			<scope>provided</scope>
 		</dependency>
+
 	</dependencies>
 
 	<build>
@@ -55,6 +56,7 @@
 					<target>${java.version}</target>
 				</configuration>
 			</plugin>
+
 		</plugins>
 
 		<resources>
@@ -68,7 +70,7 @@
 					<include>cooldowns.yml</include>
 				</includes>
 			</resource>
-		</resources>
+			</resources>
 	</build>
 
 </project>

@@ -38,7 +38,7 @@ public final class InfusionTableListener implements Listener {
         this.infusion = infusion;
     }
 
-    @EventHandler
+    @EventHandler(ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent e) {
         if (e.getHand() != EquipmentSlot.HAND) return;
         if (e.getAction() != Action.RIGHT_CLICK_BLOCK) return;
@@ -108,13 +108,21 @@ public final class InfusionTableListener implements Listener {
             return;
         }
 
+        // An earlier-priority handler (e.g. the tutorial's interaction
+        // guard, which locks the infusion amount at its default during
+        // the tutorial) may have already cancelled this click -- capture
+        // that before we unconditionally cancel it ourselves below, so
+        // the +/- buttons specifically can respect it while catalyst/
+        // confirm handling above and below is unaffected.
+        boolean preCancelled = e.isCancelled();
+
         // prevent taking background/buttons
         e.setCancelled(true);
 
         if (rawSlot == InfusionTableMenu.SLOT_MINUS) {
-            menu.adjust(player, top, -50);
+            if (!preCancelled) menu.adjust(player, top, -50);
         } else if (rawSlot == InfusionTableMenu.SLOT_PLUS) {
-            menu.adjust(player, top, +50);
+            if (!preCancelled) menu.adjust(player, top, +50);
         } else if (rawSlot == InfusionTableMenu.SLOT_CONFIRM) {
             menu.confirm(player, top);
         }

@@ -51,9 +51,10 @@ public final class ProgressionListener implements Listener {
 
     @EventHandler
     public void onEntityDeath(EntityDeathEvent e) {
-        Player killer = e.getEntity().getKiller();
-        if (killer == null) return;
-        if (killer.getGameMode() == GameMode.CREATIVE) return; // optional
+        if (e.getEntity() instanceof Player) return; // don't count PvP as mob kill
+        Entity causing = e.getDamageSource().getCausingEntity();
+        if (!(causing instanceof Player killer)) return;
+        if (killer.getGameMode() == GameMode.CREATIVE) return;
         taskManager.increment(killer, TaskTrigger.KILL_MOBS, 1);
     }
 
