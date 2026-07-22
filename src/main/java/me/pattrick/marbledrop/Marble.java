@@ -1,5 +1,7 @@
 package me.pattrick.marbledrop;
 
+import me.pattrick.marbledrop.marble.MarbleStats;
+
 public class Marble {
     private final String id;          // unique, persistent per item
     private final String displayName; // colored name shown to players

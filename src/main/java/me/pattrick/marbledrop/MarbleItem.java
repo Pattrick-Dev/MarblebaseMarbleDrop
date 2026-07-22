@@ -1,5 +1,7 @@
 package me.pattrick.marbledrop;
 
+import me.pattrick.marbledrop.marble.MarbleStat;
+import me.pattrick.marbledrop.marble.MarbleStats;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
@@ -58,11 +60,23 @@ public class MarbleItem {
         pdc.set(K_TEAM, PersistentDataType.STRING, marble.team());
         pdc.set(K_RARITY, PersistentDataType.STRING, marble.rarity().name());
 
-        pdc.set(K_SPEED, PersistentDataType.INTEGER, marble.stats().speed());
-        pdc.set(K_CONTROL, PersistentDataType.INTEGER, marble.stats().control());
-        pdc.set(K_MOMENTUM, PersistentDataType.INTEGER, marble.stats().momentum());
-        pdc.set(K_STABILITY, PersistentDataType.INTEGER, marble.stats().stability());
-        pdc.set(K_LUCK, PersistentDataType.INTEGER, marble.stats().luck());
+        MarbleStats stats = marble.stats();
+
+        pdc.set(K_SPEED, PersistentDataType.INTEGER,
+                stats.get(MarbleStat.SPEED));
+
+        pdc.set(K_CONTROL, PersistentDataType.INTEGER,
+                stats.get(MarbleStat.ACCEL));
+
+        pdc.set(K_MOMENTUM, PersistentDataType.INTEGER,
+                stats.get(MarbleStat.HANDLING));
+
+        pdc.set(K_STABILITY, PersistentDataType.INTEGER,
+                stats.get(MarbleStat.STABILITY));
+
+        pdc.set(K_LUCK, PersistentDataType.INTEGER,
+                stats.get(MarbleStat.BOOST));
+
     }
 
     public static Marble read(ItemStack item) {

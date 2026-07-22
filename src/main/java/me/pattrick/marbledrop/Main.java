@@ -8,11 +8,26 @@ import me.pattrick.marbledrop.progression.infusion.table.InfusionTableAmbient;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableCommand;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableListener;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableManager;
+import me.pattrick.marbledrop.feedback.FeedbackCommand;
 import me.pattrick.marbledrop.progression.taskmenu.TasksMenuListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeMenuListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationCommand;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationManager;
+import me.pattrick.marbledrop.races.*;
+import me.pattrick.marbledrop.races.team.CustomTeamManager;
+import me.pattrick.marbledrop.races.team.TeamCommand;
+import me.pattrick.marbledrop.races.team.TeamMenuListener;
+import me.pattrick.marbledrop.tutorial.TutorialCommand;
+import me.pattrick.marbledrop.tutorial.TutorialInteractionGuard;
+import me.pattrick.marbledrop.tutorial.TutorialListener;
+import me.pattrick.marbledrop.tutorial.TutorialLocationStore;
+import me.pattrick.marbledrop.tutorial.TutorialManager;
+import me.pattrick.marbledrop.tutorial.TutorialProgressPoller;
+import me.pattrick.marbledrop.tutorial.TutorialRaceService;
+import me.pattrick.marbledrop.tutorial.TutorialRecyclerHook;
+import me.pattrick.marbledrop.tutorial.TutorialTasksHandler;
+import me.pattrick.marbledrop.tutorial.TutorialUpgradeHook;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -22,8 +37,22 @@ public class Main extends JavaPlugin {
 
     private MdConfig mdConfig;
 
+    // racing
+    private TrackVisualizer trackVisualizer;
+    private MarbleRaceEngine raceEngine;
+
+    // persisted signs
+    private RaceSignManager raceSignManager;
+
+    // watch manager
+    private RaceWatchManager raceWatchManager;
+
+    // progression ambience
     private InfusionTableAmbient infusionAmbient;
     private RecyclerAmbient recyclerAmbient;
+
+    // tutorial
+    private TutorialProgressPoller tutorialPoller;
 
     public MdConfig cfg() {
         return mdConfig;
@@ -39,8 +68,8 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        // -------------------- Config (defaults) --------------------
-        // This creates config.yml if missing and loads it.
+
+        // -------------------- Config --------------------
         saveDefaultConfig();
         mdConfig = new MdConfig(this);
 
@@ -52,46 +81,73 @@ public class Main extends JavaPlugin {
             saveResource("heads.yml", false);
         }
 
-        // infusion tables storage
-        File infusionTablesFile = new File(getDataFolder(), "infusion_tables.yml");
-        if (!infusionTablesFile.exists()) {
-            try {
-                getDataFolder().mkdirs();
-                infusionTablesFile.createNewFile();
-            } catch (IOException e) {
-                getLogger().severe("Failed to create infusion_tables.yml: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
+        // -------------------- Storage files --------------------
+        ensureFile("infusion_tables.yml");
+        ensureFile("recyclers.yml");
+        ensureFile("upgrade_stations.yml");
+        ensureFile("tracks.yml");
+        ensureFile("race-signs.yml");
+        ensureFile("race-watch.yml");
 
-        // recyclers storage
-        File recyclersFile = new File(getDataFolder(), "recyclers.yml");
-        if (!recyclersFile.exists()) {
-            try {
-                getDataFolder().mkdirs();
-                recyclersFile.createNewFile();
-            } catch (IOException e) {
-                getLogger().severe("Failed to create recyclers.yml: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
+        // -------------------- Racing --------------------
+        TrackManager trackManager = new TrackManager(this);
+        trackVisualizer = new TrackVisualizer(this, trackManager);
 
-        // upgrade stations storage
-        File upgradeStationsFile = new File(getDataFolder(), "upgrade_stations.yml");
-        if (!upgradeStationsFile.exists()) {
-            try {
-                getDataFolder().mkdirs();
-                upgradeStationsFile.createNewFile();
-            } catch (IOException e) {
-                getLogger().severe("Failed to create upgrade_stations.yml: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
+        raceEngine = new MarbleRaceEngine(this);
+        raceEngine.start();
+
+        TrackCommand trackCommand = new TrackCommand(trackManager, trackVisualizer, raceEngine);
+
+        // Track GUI listener
+        getServer().getPluginManager().registerEvents(
+                new TrackGuiListener(this, trackManager, trackVisualizer),
+                this
+        );
+
+        // Point tool listener
+        getServer().getPluginManager().registerEvents(
+                new TrackPointToolListener(this, trackManager),
+                this
+        );
+
+        // Race entry flow
+        RaceManager raceManager = new RaceManager(trackManager, raceEngine);
+
+        // Watch manager (inventory safe)
+        raceWatchManager = new RaceWatchManager(this, trackManager, raceEngine);
+        getServer().getPluginManager().registerEvents(raceWatchManager, this);
+
+        // Wire watch into race manager (auto-watch on start)
+        raceManager.setWatchManager(raceWatchManager);
+
+        RaceCommand raceCommand = new RaceCommand(raceManager, trackManager, raceWatchManager);
+
+        // Race GUI listener (click-to-join menu)
+        getServer().getPluginManager().registerEvents(
+                new RaceGuiListener(trackManager, raceManager),
+                this
+        );
+
+        // Race Signs (create + click signs) - now expects watch manager too
+        raceSignManager = new RaceSignManager(this);
+        getServer().getPluginManager().registerEvents(
+                new RaceSignListener(trackManager, raceManager, raceSignManager, raceWatchManager),
+                this
+        );
+
+        // -------------------- Custom teams --------------------
+        CustomTeamManager teamManager = new CustomTeamManager(this);
+        getServer().getPluginManager().registerEvents(new TeamMenuListener(this, teamManager), this);
+        TeamCommand teamCommand = new TeamCommand(teamManager);
 
         // -------------------- Progression system --------------------
         DustManager dustManager = new DustManager(this);
         TaskManager taskManager = new TaskManager(this, dustManager);
-        getServer().getPluginManager().registerEvents(new ProgressionListener(taskManager), this);
+
+        getServer().getPluginManager().registerEvents(
+                new ProgressionListener(taskManager),
+                this
+        );
 
         // -------------------- Load heads pool --------------------
         HeadPool headPool = new HeadPool(this);
@@ -100,7 +156,7 @@ public class Main extends JavaPlugin {
         // -------------------- Infusion service --------------------
         InfusionService infusionService = new InfusionService(this, dustManager, headPool);
 
-        // -------------------- Infusion tables (single manager + ambient) --------------------
+        // -------------------- Infusion tables --------------------
         InfusionTableManager tableManager = new InfusionTableManager(this);
 
         infusionAmbient = new InfusionTableAmbient(this, tableManager, dustManager);
@@ -113,7 +169,7 @@ public class Main extends JavaPlugin {
 
         InfusionTableCommand infusionTableCommand = new InfusionTableCommand(tableManager, infusionAmbient);
 
-        // -------------------- Recycler (single manager + ambient) --------------------
+        // -------------------- Recycler --------------------
         MarbleRecyclerManager recyclerManager = new MarbleRecyclerManager(this);
 
         recyclerAmbient = new RecyclerAmbient(this, recyclerManager);
@@ -126,7 +182,7 @@ public class Main extends JavaPlugin {
                 this
         );
 
-        // -------------------- Upgrades (station + GUI) --------------------
+        // -------------------- Upgrades --------------------
         UpgradeStationManager upgradeStations = new UpgradeStationManager(this);
         UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(upgradeStations);
 
@@ -140,16 +196,56 @@ public class Main extends JavaPlugin {
                 this
         );
 
+        // -------------------- Tutorial --------------------
+        // Wired here (not earlier) because it needs trackManager/raceEngine/
+        // raceManager (racing section), dustManager (progression section),
+        // and tableManager/recyclerManager/upgradeStations (all just above)
+        // to already exist.
+        TutorialLocationStore tutorialLocations = new TutorialLocationStore(this);
+        TutorialManager tutorialManager = new TutorialManager(this, dustManager, tutorialLocations);
+
+        TutorialTasksHandler tutorialTasksHandler = new TutorialTasksHandler(tutorialManager);
+        getServer().getPluginManager().registerEvents(tutorialTasksHandler, this);
+
+        TutorialRaceService tutorialRaceService = new TutorialRaceService(
+                this, tutorialManager, tutorialLocations, raceManager, trackManager, raceEngine, raceWatchManager, headPool
+        );
+
+        getServer().getPluginManager().registerEvents(
+                new TutorialListener(tutorialManager, tutorialTasksHandler, tutorialRaceService),
+                this
+        );
+
+        getServer().getPluginManager().registerEvents(
+                new TutorialRecyclerHook(this, tutorialManager, recyclerManager),
+                this
+        );
+
+        getServer().getPluginManager().registerEvents(
+                new TutorialInteractionGuard(tutorialManager, tableManager, upgradeStations, recyclerManager),
+                this
+        );
+
+        getServer().getPluginManager().registerEvents(
+                new TutorialUpgradeHook(tutorialManager),
+                this
+        );
+
+        TutorialProgressPoller poller = new TutorialProgressPoller(this, tutorialManager);
+        poller.start();
+        this.tutorialPoller = poller;
+
+        TutorialCommand tutorialCommand = new TutorialCommand(tutorialManager);
+
         // -------------------- Core listeners --------------------
         getServer().getPluginManager().registerEvents(new ListenEvents(), this);
         getServer().getPluginManager().registerEvents(new TasksMenuListener(this, taskManager), this);
 
-        // -------------------- Command executors --------------------
+        // -------------------- Commands --------------------
         DustCommand dustCommand = new DustCommand(dustManager, infusionService);
         TasksCommand tasksCommand = new TasksCommand(this, taskManager);
         TasksAdminCommand tasksAdminCommand = new TasksAdminCommand(taskManager);
-        me.pattrick.marbledrop.progression.DustAdminCommand dustAdminCommand =
-                new me.pattrick.marbledrop.progression.DustAdminCommand(dustManager);
+        DustAdminCommand dustAdminCommand = new DustAdminCommand(dustManager);
 
         // -------------------- Register ONLY /md (router) --------------------
         CommandKit md = new CommandKit(
@@ -161,7 +257,11 @@ public class Main extends JavaPlugin {
                 marbleRecyclerCommand,
                 tasksCommand,
                 tasksAdminCommand,
-                upgradeStationCommand
+                upgradeStationCommand,
+                trackCommand,
+                raceCommand,
+                teamCommand,
+                tutorialCommand
         );
 
         if (getCommand("md") != null) {
@@ -171,6 +271,24 @@ public class Main extends JavaPlugin {
             getLogger().severe("Command 'md' is not defined in plugin.yml!");
         }
 
+        // -------------------- Feedback --------------------
+        // Shares a backend with the marblebase.net website's feedback
+        // form (a Cloudflare Pages Function + D1), tagged source=minecraft.
+        // See website-side setup notes for the corresponding endpoint.
+        getConfig().addDefault("feedback.endpoint-url", "https://marblebase.net/api/feedback");
+        getConfig().addDefault("feedback.secret", "CHANGE_ME");
+        getConfig().options().copyDefaults(true);
+        saveConfig();
+
+        String feedbackUrl = getConfig().getString("feedback.endpoint-url");
+        String feedbackSecret = getConfig().getString("feedback.secret");
+
+        if (getCommand("feedback") != null) {
+            getCommand("feedback").setExecutor(new FeedbackCommand(this, feedbackUrl, feedbackSecret));
+        } else {
+            getLogger().severe("Command 'feedback' is not defined in plugin.yml!");
+        }
+
         // -------------------- Action bar tracker --------------------
         ActionBarTaskTracker tracker = new ActionBarTaskTracker(this, taskManager);
         tracker.start();
@@ -178,6 +296,12 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onDisable() {
+
+        if (tutorialPoller != null) {
+            tutorialPoller.stop();
+            tutorialPoller = null;
+        }
+
         if (infusionAmbient != null) {
             infusionAmbient.stop();
             infusionAmbient = null;
@@ -188,6 +312,36 @@ public class Main extends JavaPlugin {
             recyclerAmbient = null;
         }
 
+        if (trackVisualizer != null) {
+            trackVisualizer.shutdown();
+            trackVisualizer = null;
+        }
+
+        if (raceEngine != null) {
+            raceEngine.stop();
+            raceEngine = null;
+        }
+
+        raceSignManager = null;
+
+        if (raceWatchManager != null) {
+            raceWatchManager.shutdown();
+            raceWatchManager = null;
+        }
+
         mdConfig = null;
+    }
+
+    private void ensureFile(String name) {
+        File f = new File(getDataFolder(), name);
+        if (!f.exists()) {
+            try {
+                getDataFolder().mkdirs();
+                f.createNewFile();
+            } catch (IOException e) {
+                getLogger().severe("Failed to create " + name + ": " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
     }
 }

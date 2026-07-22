@@ -1,5 +1,7 @@
 package me.pattrick.marbledrop;
 
+import me.pattrick.marbledrop.marble.MarbleStats;
+
 import java.util.concurrent.ThreadLocalRandom;
 
 public class MarbleRoller {
