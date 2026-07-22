@@ -62,19 +62,20 @@ public final class MarbleRunner {
     private static final double OVERTAKE_FORCE = 0.030; // slightly reduced
 
     // wall collision response
-    private static final double WALL_BOUNCE = 0.55;      // 0=dead stop sideways, 1=perfect bounce
-    private static final double WALL_FRICTION = 0.80;    // slows overall velocity when scraping walls
+    private static final double WALL_BOUNCE = 0.70;      // 0=dead stop sideways, 1=perfect bounce
+    private static final double WALL_FRICTION = 0.88;    // slows overall velocity when scraping walls
     private static final double MIN_FORWARD_AFTER_HIT = 0.02;
 
     // finish threshold
     private static final double SEG_ADVANCE_EPS = 0.10;
 
     // stuck handling
-    private static final int STUCK_TICKS = 12;
+    private static final int STUCK_TICKS = 8;
     private static final double STUCK_MOVE_EPS = 0.0025;
-    private static final double STUCK_FORWARD_TELEPORT = 0.18;
+    private static final double STUCK_FORWARD_TELEPORT = 0.35;
 
     private final MarbleTrack track;
+    private final List<Location> path; // resolved once from track.getRacePoints() -- see MarbleTrack/TrackSmoother
     private final ArmorStand stand;
 
     private int segment = 0;
@@ -113,6 +114,7 @@ public final class MarbleRunner {
     public MarbleRunner(MarbleTrack track, Location start, ItemStack helmet, double speedPerTick,
                         double chaos, double aggression, FinishListener finishListener) {
         this.track = track;
+        this.path = (track != null) ? track.getRacePoints() : java.util.Collections.emptyList();
         this.speedPerTick = speedPerTick;
         this.finishListener = finishListener;
         this.chaos = clamp01(chaos);
@@ -153,19 +155,19 @@ public final class MarbleRunner {
 
     public boolean tick(List<MarbleRunner> allRunners) {
 
-        if (track == null || track.size() < 2) {
+        if (path == null || path.size() < 2) {
             stand.remove();
             return false;
         }
 
-        if (segment >= track.size() - 1) {
+        if (segment >= path.size() - 1) {
             if (finishListener != null) finishListener.onFinish();
             stand.remove();
             return false;
         }
 
-        Location aLoc = track.getPoint(segment);
-        Location bLoc = track.getPoint(segment + 1);
+        Location aLoc = path.get(segment);
+        Location bLoc = path.get(segment + 1);
 
         Vector a = aLoc.toVector();
         Vector b = bLoc.toVector();
@@ -180,6 +182,10 @@ public final class MarbleRunner {
         Vector forward = seg.clone().multiply(1.0 / segLen);
         Vector right = new Vector(-forward.getZ(), 0, forward.getX());
 
+        // XZ-only length used for segment advance detection and Y interpolation
+        double segLenXZ = Math.sqrt(seg.getX() * seg.getX() + seg.getZ() * seg.getZ());
+        if (segLenXZ < 0.0001) segLenXZ = segLen; // vertical-only segment fallback
+
         // convert your base stat speed into world speed scale (this is the “old feel” anchor)
         double baseWorld = speedPerTick * segLen;
 
@@ -188,8 +194,36 @@ public final class MarbleRunner {
         // --------------------
         Vector pos = stand.getLocation().toVector();
 
+        // How far through this segment we already are (0 = just started,
+        // 1 = at the end). Used below to start anticipating a sharp turn
+        // before actually reaching it, instead of driving straight at the
+        // wall and relying on wall-bounce physics to survive the corner.
+        double segProgress = clamp(projAlong(pos, a, forward) / segLenXZ, 0.0, 1.0);
+
         double look = clamp(STEER_LOOKAHEAD, 0.10, 0.95);
-        Vector aim = a.clone().add(forward.clone().multiply(segLen * look));
+        Vector aim;
+
+        if (segProgress > 0.55 && segment + 2 < path.size()) {
+            Vector nextDir = path.get(segment + 2).toVector().subtract(b);
+            nextDir.setY(0);
+
+            if (nextDir.lengthSquared() > 1e-6) {
+                nextDir.normalize();
+                double blend = clamp((segProgress - 0.55) / 0.45, 0.0, 1.0);
+                Vector blendedDir = forward.clone().multiply(1.0 - blend).add(nextDir.multiply(blend));
+                if (blendedDir.lengthSquared() > 1e-6) {
+                    blendedDir.normalize();
+                } else {
+                    blendedDir = forward.clone();
+                }
+                aim = pos.clone().add(blendedDir.multiply(Math.max(0.4, segLen * look)));
+            } else {
+                aim = a.clone().add(forward.clone().multiply(segLen * look));
+            }
+        } else {
+            aim = a.clone().add(forward.clone().multiply(segLen * look));
+        }
+
         Vector toAim = aim.clone().subtract(pos);
         toAim.setY(0);
 
@@ -241,14 +275,47 @@ public final class MarbleRunner {
         // air drag
         vel.multiply(AIR_DRAG);
 
+        // Prevent backward motion: always maintain at least 20% of base forward speed.
+        // Repulsion from a marble directly ahead is the main cause of backward velocity.
+        // Boosted up to 35% in the last ~45% of a segment (the same corner-approach
+        // window used for steering above) so marbles don't lose all their momentum
+        // right as they need it most to punch through a turn.
+        double fwdFloorRatio = 0.20;
+        if (segProgress > 0.55) {
+            double boost = clamp((segProgress - 0.55) / 0.45, 0.0, 1.0);
+            fwdFloorRatio = 0.20 + 0.15 * boost;
+        }
+        double fwdFloor = baseWorld * fwdFloorRatio;
+        double fwdDot = vel.dot(forward);
+        if (fwdDot < fwdFloor) {
+            vel.add(forward.clone().multiply(fwdFloor - fwdDot));
+        }
+
         // --------------------
         // Move with swept collision and REAL wall response
         // --------------------
         Location cur = stand.getLocation();
+        // Pre-snap cur's Y to track height so collision detection doesn't falsely
+        // hit the ledge block above when the marble has descended partway down a slope.
+        double sCur = projAlong(cur.toVector(), a, forward);
+        double tCur = clamp(sCur / segLenXZ, 0.0, 1.0);
+        cur.setY(aLoc.getY() + tCur * (bLoc.getY() - aLoc.getY()));
+
         MoveResult mr = moveSweptWithWallPhysics(cur, vel, forward);
 
         Location next = mr.loc;
         vel = mr.newVel;
+
+        // Re-enforce forward floor after wall bounces can reflect velocity backward.
+        fwdDot = vel.dot(forward);
+        if (fwdDot < fwdFloor) {
+            vel.add(forward.clone().multiply(fwdFloor - fwdDot));
+        }
+
+        // Snap Y to track slope so marbles follow inclines/declines without flying off.
+        double sAlong = projAlong(next.toVector(), a, forward);
+        double tSeg = clamp(sAlong / segLenXZ, 0.0, 1.0);
+        next.setY(aLoc.getY() + tSeg * (bLoc.getY() - aLoc.getY()));
 
         // yaw from motion
         Vector actual = next.toVector().subtract(cur.toVector());
@@ -260,28 +327,35 @@ public final class MarbleRunner {
         // --------------------
         // Stuck detection + escape
         // --------------------
-        if (cur.distance(next) < STUCK_MOVE_EPS) {
+        // Measure XZ-only movement so Y-snapping a slope step doesn't reset the stuck counter.
+        double dxz = Math.sqrt(Math.pow(next.getX() - cur.getX(), 2) + Math.pow(next.getZ() - cur.getZ(), 2));
+        if (dxz < STUCK_MOVE_EPS) {
             stuckTicks++;
         } else {
             stuckTicks = 0;
         }
 
         if (stuckTicks >= STUCK_TICKS) {
-            // tiny forward teleport to clear concave corners / micro-traps
-            Location esc = next.clone().add(forward.clone().multiply(STUCK_FORWARD_TELEPORT));
-
-            // only apply if it’s not inside a wall
-            if (!collides(next.getWorld(), esc)) {
-                stand.teleport(esc);
+            // Fan through angles around forward to find a clear escape direction.
+            // Previous code only tried straight forward; if that block was solid the
+            // marble was silently not moved and immediately stuck again next cycle.
+            double[] escAngles = {0, Math.PI / 4, -Math.PI / 4, Math.PI / 2, -Math.PI / 2};
+            for (double angle : escAngles) {
+                double cos = Math.cos(angle), sin = Math.sin(angle);
+                Vector dir = new Vector(
+                        forward.getX() * cos - forward.getZ() * sin,
+                        0,
+                        forward.getX() * sin + forward.getZ() * cos
+                ).multiply(STUCK_FORWARD_TELEPORT);
+                Location esc = next.clone().add(dir);
+                if (!collides(next.getWorld(), esc)) {
+                    stand.teleport(esc);
+                    break;
+                }
             }
 
-            // reset velocity to be forward-biased so it doesn’t re-stick instantly
-            Vector forwardVel = forward.clone().multiply(Math.max(0.04, baseWorld * 0.90));
-            vel = forwardVel;
-
-            // reset wander direction occasionally
+            vel = forward.clone().multiply(Math.max(0.04, baseWorld * 0.90));
             if (rng.nextDouble() < 0.45) wander = -wander;
-
             stuckTicks = 0;
         }
 
@@ -289,11 +363,11 @@ public final class MarbleRunner {
         // Segment progression by projection
         // --------------------
         double s = projAlong(stand.getLocation().toVector(), a, forward);
-        if (s >= segLen - SEG_ADVANCE_EPS) {
+        if (s >= segLenXZ - SEG_ADVANCE_EPS) {
             segment++;
         }
 
-        if (segment >= track.size() - 1) {
+        if (segment >= path.size() - 1) {
             if (finishListener != null) finishListener.onFinish();
             stand.remove();
             return false;
@@ -431,14 +505,12 @@ public final class MarbleRunner {
         double y1 = y + SAMPLE_Y1;
         double y2 = y + SAMPLE_Y2;
 
+        // Cardinal-only sampling: diagonal sample points fire on block corners that the
+        // marble should slide past cleanly, causing false "corner trap" stalls.
         return isSolid(world, x + MARBLE_RADIUS, y1, z) ||
                 isSolid(world, x - MARBLE_RADIUS, y1, z) ||
                 isSolid(world, x, y1, z + MARBLE_RADIUS) ||
                 isSolid(world, x, y1, z - MARBLE_RADIUS) ||
-                isSolid(world, x + MARBLE_RADIUS, y1, z + MARBLE_RADIUS) ||
-                isSolid(world, x + MARBLE_RADIUS, y1, z - MARBLE_RADIUS) ||
-                isSolid(world, x - MARBLE_RADIUS, y1, z + MARBLE_RADIUS) ||
-                isSolid(world, x - MARBLE_RADIUS, y1, z - MARBLE_RADIUS) ||
 
                 isSolid(world, x + MARBLE_RADIUS, y2, z) ||
                 isSolid(world, x - MARBLE_RADIUS, y2, z) ||
@@ -528,11 +600,19 @@ public final class MarbleRunner {
     private double projAlong(Vector pos, Vector a, Vector forward) {
         Vector d = pos.clone().subtract(a);
         d.setY(0);
-        return d.dot(forward);
+        // Use XZ-only forward so slope Y doesn't distort the progress measurement.
+        Vector fXZ = new Vector(forward.getX(), 0, forward.getZ());
+        double fXZLen = fXZ.length();
+        if (fXZLen < 1e-6) return 0;
+        return d.dot(fXZ) / fXZLen;
     }
 
     private float yawFromVector(Vector v) {
         return (float) Math.toDegrees(Math.atan2(-v.getX(), v.getZ()));
+    }
+
+    public Location getLocation() {
+        return stand != null && stand.isValid() ? stand.getLocation() : null;
     }
 
     private double clamp01(double v) {
