@@ -101,6 +101,28 @@ public final class TrackManager {
         return true;
     }
 
+    public boolean setAutoRaceEligible(String id, boolean eligible) {
+        if (id == null || id.isBlank()) return false;
+
+        id = id.toLowerCase();
+        MarbleTrack track = tracks.get(id);
+        if (track == null) return false;
+
+        track.setAutoRaceEligible(eligible);
+        saveNow();
+        return true;
+    }
+
+    /** Track IDs currently opted into the scheduled server race's random pick. */
+    public List<String> autoRaceEligibleIds() {
+        List<String> out = new ArrayList<>();
+        for (MarbleTrack t : tracks.values()) {
+            if (t.isAutoRaceEligible()) out.add(t.getId());
+        }
+        Collections.sort(out);
+        return out;
+    }
+
     public Set<String> ids() {
         return Collections.unmodifiableSet(tracks.keySet());
     }

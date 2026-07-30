@@ -138,6 +138,15 @@ public final class TrackGuiListener implements Listener {
                     TrackGui.openEditor(p, tracks, id, visualizer);
                 }
 
+                case 17 -> {
+                    boolean next = !tracks.getTrack(id).isAutoRaceEligible();
+                    tracks.setAutoRaceEligible(id, next);
+                    p.sendMessage(next
+                            ? ChatColor.GREEN + "Track '" + id + "' is now eligible for the scheduled server race."
+                            : ChatColor.YELLOW + "Track '" + id + "' is now excluded from the scheduled server race.");
+                    TrackGui.openEditor(p, tracks, id, visualizer);
+                }
+
                 case 20 -> {
                     visualizer.show(p, id);
                     p.sendMessage(ChatColor.AQUA + "Showing track '" + id + "'.");

@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.races;
 
+import me.pattrick.marbledrop.MdConfig;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -13,15 +14,18 @@ public final class TrackCommand implements CommandExecutor {
     private final TrackManager tracks;
     private final MarbleRaceEngine raceEngine;
     private final TrackVisualizer visualizer;
+    private final MdConfig config;
 
     public TrackCommand(
             TrackManager tracks,
             TrackVisualizer visualizer,
-            MarbleRaceEngine raceEngine
+            MarbleRaceEngine raceEngine,
+            MdConfig config
     ) {
         this.tracks = tracks;
         this.visualizer = visualizer;
         this.raceEngine = raceEngine;
+        this.config = config;
     }
 
     @Override
@@ -107,6 +111,24 @@ public final class TrackCommand implements CommandExecutor {
                 player.sendMessage(ChatColor.YELLOW + "Cleared watch spot for '" + id + "'.");
             }
 
+            case "autorace" -> {
+                if (args.length < 3 || (!args[2].equalsIgnoreCase("on") && !args[2].equalsIgnoreCase("off"))) {
+                    player.sendMessage(ChatColor.RED + "Usage: /md track autorace <id> <on|off>");
+                    return true;
+                }
+
+                String id = args[1].toLowerCase();
+                boolean on = args[2].equalsIgnoreCase("on");
+
+                if (!tracks.setAutoRaceEligible(id, on)) {
+                    player.sendMessage(ChatColor.RED + "Track not found.");
+                    return true;
+                }
+
+                player.sendMessage(ChatColor.GREEN + "Track '" + id + "' is now " +
+                        (on ? "eligible for" : "excluded from") + " the scheduled server race.");
+            }
+
             case "info" -> {
                 if (args.length < 2) {
                     player.sendMessage(ChatColor.RED + "Usage: /md track info <id>");
@@ -125,6 +147,7 @@ public final class TrackCommand implements CommandExecutor {
                 player.sendMessage(ChatColor.GRAY + "World: " + track.getWorld().getName());
                 player.sendMessage(ChatColor.GRAY + "Points: " + track.size());
                 player.sendMessage(ChatColor.GRAY + "Watch: " + (track.getWatchLocation() != null ? ChatColor.GREEN + "set" : ChatColor.RED + "not set"));
+                player.sendMessage(ChatColor.GRAY + "Scheduled race eligible: " + (track.isAutoRaceEligible() ? ChatColor.GREEN + "yes" : ChatColor.RED + "no"));
             }
 
             case "delete" -> {
@@ -167,7 +190,8 @@ public final class TrackCommand implements CommandExecutor {
                     return true;
                 }
 
-                MarbleRunner runner = new MarbleRunner(track, track.getPoint(0));
+                TrackPhysics physics = new TrackPhysics(track.getSpline(), config.raceWallSearchRadius());
+                MarbleRunner runner = new MarbleRunner(physics, track.getPoint(0), null, 0.02, 0.35, 0.50, null);
                 raceEngine.addRunner(runner);
 
                 player.sendMessage("§aMarble started on track §e" + id);
@@ -175,7 +199,7 @@ public final class TrackCommand implements CommandExecutor {
 
             default -> {
                 player.sendMessage(ChatColor.YELLOW + "Use /md track to open the admin track GUI.");
-                player.sendMessage(ChatColor.GRAY + "Or: create/addpoint/info/delete/show/hide/run/setwatch/clearwatch");
+                player.sendMessage(ChatColor.GRAY + "Or: create/addpoint/info/delete/show/hide/run/setwatch/clearwatch/autorace");
             }
         }
 

@@ -28,6 +28,12 @@
 			<id>minecraft-repo</id>
 			<url>https://libraries.minecraft.net/</url>
 		</repository>
+
+		<!-- EngineHub (WorldEdit); FAWE is API-compatible with worldedit-bukkit -->
+		<repository>
+			<id>enginehub-maven</id>
+			<url>https://maven.enginehub.org/repo/</url>
+		</repository>
 	</repositories>
 
 	<dependencies>
@@ -37,6 +43,25 @@
 			<artifactId>paper-api</artifactId>
 			<version>${paper.api.version}</version>
 			<scope>provided</scope>
+		</dependency>
+
+		<!-- Optional: only used by TutorialCraftFrameManager.setupFromSelection
+		     to read an admin's WorldEdit/FAWE selection. provided scope;
+		     supplied at runtime by WorldEdit or FAWE, not bundled in our jar.
+		     Nothing else in the plugin references these classes, so the
+		     plugin loads and runs fine even if neither is installed. -->
+		<dependency>
+			<groupId>com.sk89q.worldedit</groupId>
+			<artifactId>worldedit-bukkit</artifactId>
+			<version>7.4.0</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<!-- 2D physics for marble/track collision (races/). Zero transitive deps, shaded below. -->
+		<dependency>
+			<groupId>org.dyn4j</groupId>
+			<artifactId>dyn4j</artifactId>
+			<version>5.0.2</version>
 		</dependency>
 
 	</dependencies>
@@ -55,6 +80,30 @@
 					<source>${java.version}</source>
 					<target>${java.version}</target>
 				</configuration>
+			</plugin>
+
+			<!-- Bundle dyn4j into the plugin jar (Paper doesn't provide it) and relocate
+			     it so it can't collide with another plugin shading a different version. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-shade-plugin</artifactId>
+				<version>3.6.2</version>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>shade</goal>
+						</goals>
+						<configuration>
+							<relocations>
+								<relocation>
+									<pattern>org.dyn4j</pattern>
+									<shadedPattern>me.pattrick.marbledrop.libs.dyn4j</shadedPattern>
+								</relocation>
+							</relocations>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 
 		</plugins>

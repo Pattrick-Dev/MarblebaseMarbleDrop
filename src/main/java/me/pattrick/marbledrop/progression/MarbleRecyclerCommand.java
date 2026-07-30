@@ -1,19 +1,22 @@
 package me.pattrick.marbledrop.progression;
 
+import me.pattrick.marbledrop.SilentGive;
 import org.bukkit.ChatColor;
-import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 
 public final class MarbleRecyclerCommand implements CommandExecutor {
 
+    private final Plugin plugin;
     private final MarbleRecyclerManager recyclers;
     private final RecyclerAmbient ambient;
 
-    public MarbleRecyclerCommand(MarbleRecyclerManager recyclers, RecyclerAmbient ambient) {
+    public MarbleRecyclerCommand(Plugin plugin, MarbleRecyclerManager recyclers, RecyclerAmbient ambient) {
+        this.plugin = plugin;
         this.recyclers = recyclers;
         this.ambient = ambient;
     }
@@ -32,7 +35,7 @@ public final class MarbleRecyclerCommand implements CommandExecutor {
         }
 
         if (args.length == 0) {
-            player.sendMessage(ChatColor.YELLOW + "Use: /marblerecycler add|remove|count");
+            player.sendMessage(ChatColor.YELLOW + "Use: /md recycler give|remove|count");
             return true;
         }
 
@@ -41,35 +44,31 @@ public final class MarbleRecyclerCommand implements CommandExecutor {
             return true;
         }
 
-        Block target = player.getTargetBlockExact(6);
-        if (target == null || target.getType() != Material.GRINDSTONE) {
-            player.sendMessage(ChatColor.RED + "Look at a GRINDSTONE (within 6 blocks).");
-            return true;
-        }
-
-        if (args[0].equalsIgnoreCase("add")) {
-            boolean ok = recyclers.addRecycler(target.getLocation());
-            player.sendMessage(ok
-                    ? (ChatColor.GREEN + "Marked this grindstone as a Marble Recycler.")
-                    : (ChatColor.YELLOW + "This grindstone is already a Marble Recycler."));
+        if (args[0].equalsIgnoreCase("give")) {
+            SilentGive.give(plugin, player, StationItems.create(plugin, StationType.RECYCLER));
+            player.sendMessage(ChatColor.GREEN + "Gave you a Marble Recycler -- place it to create a station.");
             return true;
         }
 
         if (args[0].equalsIgnoreCase("remove")) {
-            boolean ok = recyclers.removeRecycler(target.getLocation());
+            Block target = player.getTargetBlockExact(6);
+            if (target == null) {
+                player.sendMessage(ChatColor.RED + "Look at the recycler (within 6 blocks).");
+                return true;
+            }
 
-            // Remove hologram immediately (no ghost stands)
+            boolean ok = recyclers.removeRecycler(target.getLocation());
             if (ok && ambient != null) {
                 ambient.removeRecycler(target.getLocation());
             }
 
             player.sendMessage(ok
-                    ? (ChatColor.GREEN + "Removed Marble Recycler mark from this grindstone.")
-                    : (ChatColor.YELLOW + "This grindstone is not marked as a Marble Recycler."));
+                    ? (ChatColor.GREEN + "Removed Marble Recycler registration.")
+                    : (ChatColor.YELLOW + "This is not a registered Marble Recycler."));
             return true;
         }
 
-        player.sendMessage(ChatColor.YELLOW + "Use: /marblerecycler add|remove|count");
+        player.sendMessage(ChatColor.YELLOW + "Use: /md recycler give|remove|count");
         return true;
     }
 }

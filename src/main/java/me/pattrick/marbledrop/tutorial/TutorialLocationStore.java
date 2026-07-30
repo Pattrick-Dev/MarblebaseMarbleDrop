@@ -12,8 +12,9 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * Stores one teleport checkpoint Location per TutorialStep, persisted to
- * tutorial-locations.yml. Set in-game via /md tutorial setlocation <step>.
+ * Stores one teleport checkpoint Location per TutorialStep, plus a single
+ * tutorial race track id, persisted to tutorial-locations.yml. Set in-game
+ * via /md tutorial setlocation <step> / clearlocation / setrace <trackId>.
  */
 public final class TutorialLocationStore {
 

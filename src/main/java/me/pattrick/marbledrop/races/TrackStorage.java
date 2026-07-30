@@ -46,6 +46,7 @@ public final class TrackStorage {
                 }
 
                 MarbleTrack track = new MarbleTrack(id, world);
+                track.setAutoRaceEligible(sec.getBoolean("auto-race-eligible", false));
 
                 // ✅ Optional watch location
                 ConfigurationSection watch = sec.getConfigurationSection("watch");
@@ -93,6 +94,7 @@ public final class TrackStorage {
 
                 ConfigurationSection sec = root.createSection(t.getId().toLowerCase());
                 sec.set("world", t.getWorld().getName());
+                sec.set("auto-race-eligible", t.isAutoRaceEligible());
 
                 List<Map<String, Object>> pts = new ArrayList<>();
                 for (Location loc : t.getPoints()) {

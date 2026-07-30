@@ -25,7 +25,10 @@ public final class RaceGui {
                 List.of(
                         ChatColor.GRAY + "1) Hold a marble in your main hand",
                         ChatColor.GRAY + "2) Click an OPEN track to join",
-                        ChatColor.GRAY + "Right-click to leave",
+                        ChatColor.GRAY + "Right-click here, or type " + ChatColor.AQUA + "/md leave" + ChatColor.GRAY + ", to leave",
+                        "",
+                        ChatColor.DARK_GRAY + "Your marble is held until the race",
+                        ChatColor.DARK_GRAY + "ends (or you leave), then returned.",
                         "",
                         ChatColor.DARK_GRAY + "Tracks must be opened by admins."
                 )));

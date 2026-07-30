@@ -136,6 +136,13 @@ public final class RaceWatchManager implements Listener {
             if (view != null) {
                 anchor.put(p.getUniqueId(), view.clone());
                 p.teleport(view);
+                // Reassert rather than trust it's still set -- a relog,
+                // death/respawn, or another plugin can quietly reset flight
+                // between watch sessions, and this is the only place that
+                // would ever notice if it's already marked "watching".
+                p.setGameMode(GameMode.ADVENTURE);
+                p.setAllowFlight(true);
+                p.setFlying(true);
                 p.sendMessage(ChatColor.YELLOW + "Switched watch view to '" + trackId + "'.");
             }
             return;

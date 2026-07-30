@@ -12,6 +12,7 @@ import me.pattrick.marbledrop.races.MarbleTrack;
 import me.pattrick.marbledrop.races.RaceManager;
 import me.pattrick.marbledrop.races.RaceWatchManager;
 import me.pattrick.marbledrop.races.TrackManager;
+import me.pattrick.marbledrop.races.TrackPhysics;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -24,6 +25,9 @@ import org.bukkit.plugin.Plugin;
 
 import com.destroystokyo.paper.profile.PlayerProfile;
 import com.destroystokyo.paper.profile.ProfileProperty;
+
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,17 +42,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * bypasses RaceManager's shared per-track lobby/open/active bookkeeping
  * entirely (that system allows only one running race per track ID at a
  * time) and instead constructs MarbleRunner instances directly via
- * RaceManager.buildStatsRunner. This means multiple players can each
- * run their own tutorial race on the same configured track
- * simultaneously without colliding on track-level locks.
+ * RaceManager.createPhysics/buildStatsRunner. This means multiple
+ * players can each run their own tutorial race on the same configured
+ * track simultaneously without colliding on track-level locks.
  * <p>
- * Known limitation: MarbleRaceEngine ticks ALL runners (real races and
- * tutorial races alike) in one shared list for repulsion/collision
- * physics. If two players run the tutorial race at the same moment on
- * the same track, their marbles can visually nudge each other since
- * they occupy the same space -- each race is still scored correctly
- * per player, but it won't look fully isolated. Fine for a beta; worth
- * a dedicated tutorial-only track later if it becomes annoying.
+ * Each call to launchRunners() builds its own TrackPhysics (one dyn4j
+ * World per race), so a player's practice race collides only with its
+ * own AI opponents -- it's fully isolated from real races and from any
+ * other player running the tutorial on the same track at the same time.
+ * Concurrent tutorial racers on the same configured track never interact
+ * physics-wise; their marbles can visually overlap at the shared spawn
+ * point, but that's cosmetic only, not a correctness issue.
  */
 public final class TutorialRaceService {
 
@@ -91,8 +95,14 @@ public final class TutorialRaceService {
         }
 
         MarbleTrack track = trackManager.getTrack(trackId);
-        if (track == null || track.size() < 2) {
-            player.sendMessage(ChatColor.RED + "The configured tutorial track (" + trackId + ") isn't valid right now.");
+        if (track == null) {
+            player.sendMessage(ChatColor.RED + "The configured tutorial track (" + trackId + ") no longer exists.");
+            player.sendMessage(ChatColor.GRAY + "An admin needs to run /md tutorial setrace <trackId> with a valid track.");
+            return;
+        }
+        if (track.size() < 2) {
+            player.sendMessage(ChatColor.RED + "The configured tutorial track (" + trackId + ") only has " + track.size() + " point(s).");
+            player.sendMessage(ChatColor.GRAY + "An admin needs to add at least 2 points to it with /md track addpoint " + trackId + ".");
             return;
         }
 
@@ -115,8 +125,6 @@ public final class TutorialRaceService {
         // Teleport them in first so the countdown plays out at the track.
         watchManager.start(player, trackId);
 
-        Location start = track.getPoint(0).clone();
-
         player.sendMessage(ChatColor.YELLOW + "Get ready...");
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (player.isOnline()) player.sendMessage(ChatColor.YELLOW + "3...");
@@ -133,19 +141,22 @@ public final class TutorialRaceService {
                 return;
             }
             player.sendMessage(ChatColor.GREEN + "" + ChatColor.BOLD + "GO!");
-            launchRunners(player, track, start, marble, data);
+            launchRunners(player, track, marble, data);
         }, 80L);
     }
 
-    private void launchRunners(Player player, MarbleTrack track, Location start, ItemStack marble, MarbleData data) {
+    private void launchRunners(Player player, MarbleTrack track, ItemStack marble, MarbleData data) {
         AtomicBoolean playerFinished = new AtomicBoolean(false);
         RaceResultTracker tracker = new RaceResultTracker(3);
 
-        Location playerSpawn = start.clone().add(0.3, 0, 0);
-        MarbleRunner playerRunner = raceManager.buildStatsRunner(track, playerSpawn, marble, data, () -> {
+        TrackPhysics physics = raceManager.createPhysics(track);
+        List<Location> grid = raceManager.startingGrid(track, 3);
+
+        Location playerSpawn = grid.get(0);
+        MarbleRunner playerRunner = raceManager.buildStatsRunner(physics, playerSpawn, marble, data, () -> {
             if (!playerFinished.compareAndSet(false, true)) return; // FinishListener can only ever fire once per runner in practice, but stay safe
             player.sendMessage(ChatColor.GREEN + "You finished the race!");
-            tracker.recordFinish(player.getName());
+            tracker.recordFinish(player.getName(), data);
             racing.remove(player.getUniqueId());
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (!player.isOnline()) return;
@@ -170,7 +181,7 @@ public final class TutorialRaceService {
                 maybeSendResults(player, tracker);
                 tutorialManager.completeStep(player, TutorialStep.RACE);
             }, 40L);
-        });
+        }, player);
         engine.addRunner(playerRunner);
 
         // Two AI opponents, mid-tier stats, each given a distinct random
@@ -188,51 +199,49 @@ public final class TutorialRaceService {
                     aiStats, null, System.currentTimeMillis(), 0, 0
             );
 
-            double angle = (Math.PI * 2.0) * ((i + 1) / 3.0);
-            Location aiSpawn = start.clone().add(Math.cos(angle) * 0.35, 0, Math.sin(angle) * 0.35);
+            Location aiSpawn = grid.get(i + 1);
 
             int racerNumber = i + 1;
             ItemStack aiHelmet = buildAiHelmet(racerNumber, aiHeads[i]);
 
-            MarbleRunner aiRunner = raceManager.buildStatsRunner(track, aiSpawn, aiHelmet, aiData, () -> {
+            MarbleRunner aiRunner = raceManager.buildStatsRunner(physics, aiSpawn, aiHelmet, aiData, () -> {
                 // AI finishing is purely cosmetic -- it doesn't affect the player's tutorial progress.
-                tracker.recordFinish("AI Racer " + racerNumber);
+                tracker.recordFinish("AI Racer " + racerNumber, aiData);
                 if (player.isOnline()) maybeSendResults(player, tracker);
-            });
+            }, player);
             engine.addRunner(aiRunner);
         }
     }
 
-    /** Sends the results table once, whenever the third (last) racer crosses the line. */
+    /**
+     * Sends the timing tower once, whenever the third (last) racer crosses
+     * the line -- same hoverable-name format as a real race's results (see
+     * RaceManager.broadcastResults), so hovering a name shows that marble's
+     * team/rarity/level/stats here too.
+     */
     private void maybeSendResults(Player player, RaceResultTracker tracker) {
         if (tracker.resultsSent || !tracker.isComplete()) return;
         tracker.resultsSent = true;
 
-        player.sendMessage(ChatColor.GOLD + "=== Race Results ===");
+        player.sendMessage(Component.text("=== Race Results ===", NamedTextColor.GOLD));
+
         List<FinishEntry> finishes = tracker.finishes;
         for (int i = 0; i < finishes.size(); i++) {
             FinishEntry entry = finishes.get(i);
-            ChatColor medal = switch (i) {
-                case 0 -> ChatColor.GOLD;
-                case 1 -> ChatColor.GRAY;
-                case 2 -> ChatColor.DARK_RED;
-                default -> ChatColor.WHITE;
+            NamedTextColor medal = switch (i) {
+                case 0 -> NamedTextColor.GOLD;
+                case 1 -> NamedTextColor.GRAY;
+                case 2 -> NamedTextColor.DARK_RED;
+                default -> NamedTextColor.WHITE;
             };
-            player.sendMessage(medal + "" + (i + 1) + ". " + ChatColor.YELLOW + entry.name() +
-                    ChatColor.DARK_GRAY + " — " + ChatColor.GREEN + formatTime(entry.elapsedMs()));
-        }
-    }
 
-    private static String formatTime(long ms) {
-        long totalTenths = ms / 100;
-        long tenths = totalTenths % 10;
-        long totalSeconds = ms / 1000;
-        long seconds = totalSeconds % 60;
-        long minutes = totalSeconds / 60;
-        if (minutes > 0) {
-            return minutes + ":" + String.format("%02d", seconds) + "." + tenths;
+            Component line = Component.text((i + 1) + ". ", medal)
+                    .append(raceManager.buildMarbleNameComponent(entry.name(), entry.data()))
+                    .append(Component.text(" — ", NamedTextColor.DARK_GRAY))
+                    .append(Component.text(RaceManager.formatTime(entry.elapsedMs()), NamedTextColor.GREEN));
+
+            player.sendMessage(line);
         }
-        return seconds + "." + tenths + "s";
     }
 
     /** Picks two AI head textures that differ from each other when the pool has more than one entry. */
@@ -262,8 +271,8 @@ public final class TutorialRaceService {
             this.totalRacers = totalRacers;
         }
 
-        void recordFinish(String name) {
-            finishes.add(new FinishEntry(name, System.currentTimeMillis() - startMs));
+        void recordFinish(String name, MarbleData data) {
+            finishes.add(new FinishEntry(name, System.currentTimeMillis() - startMs, data));
         }
 
         boolean isComplete() {
@@ -271,7 +280,7 @@ public final class TutorialRaceService {
         }
     }
 
-    private record FinishEntry(String name, long elapsedMs) {}
+    private record FinishEntry(String name, long elapsedMs, MarbleData data) {}
 
     /**
      * Builds an AI opponent's helmet. Kept as PLAYER_HEAD (same item type

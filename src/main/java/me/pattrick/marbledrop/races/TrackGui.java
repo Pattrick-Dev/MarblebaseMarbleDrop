@@ -49,6 +49,7 @@ public final class TrackGui {
                     List.of(ChatColor.GRAY + "World: " + t.getWorld().getName(),
                             ChatColor.GRAY + "Points: " + t.size(),
                             ChatColor.GRAY + "Watch: " + (t.getWatchLocation() != null ? ChatColor.GREEN + "set" : ChatColor.RED + "not set"),
+                            ChatColor.GRAY + "Auto-Race: " + (t.isAutoRaceEligible() ? ChatColor.GREEN + "yes" : ChatColor.RED + "no"),
                             "",
                             ChatColor.AQUA + "Click to edit")));
         }
@@ -80,7 +81,8 @@ public final class TrackGui {
                 List.of(ChatColor.GRAY + "ID: " + id,
                         ChatColor.GRAY + "World: " + t.getWorld().getName(),
                         ChatColor.GRAY + "Points: " + t.size(),
-                        ChatColor.GRAY + "Watch: " + (t.getWatchLocation() != null ? ChatColor.GREEN + "set" : ChatColor.RED + "not set"))));
+                        ChatColor.GRAY + "Watch: " + (t.getWatchLocation() != null ? ChatColor.GREEN + "set" : ChatColor.RED + "not set"),
+                        ChatColor.GRAY + "Auto-Race: " + (t.isAutoRaceEligible() ? ChatColor.GREEN + "yes" : ChatColor.RED + "no"))));
 
         // Point management
         inv.setItem(10, item(Material.LIME_WOOL, ChatColor.GREEN + "Add Point (Here)",
@@ -103,6 +105,14 @@ public final class TrackGui {
 
         inv.setItem(16, item(Material.BARRIER, ChatColor.RED + "Clear Watch Spot",
                 List.of(ChatColor.GRAY + "Removes the stored watch location")));
+
+        // Scheduled server race eligibility
+        boolean autoRace = t.isAutoRaceEligible();
+        inv.setItem(17, item(Material.CLOCK, ChatColor.GOLD + "Auto-Race: " + (autoRace ? ChatColor.GREEN + "ON" : ChatColor.RED + "OFF"),
+                List.of(ChatColor.GRAY + "Whether this track can be randomly",
+                        ChatColor.GRAY + "picked for the scheduled server race.",
+                        "",
+                        ChatColor.AQUA + "Click to toggle")));
 
         // Visualizer
         inv.setItem(20, item(Material.FIREWORK_ROCKET, ChatColor.AQUA + "Show Track",

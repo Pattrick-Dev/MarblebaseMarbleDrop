@@ -54,7 +54,7 @@ public final class InfusionTableListener implements Listener {
         Player player = e.getPlayer();
         if (DEBUG) player.sendMessage(ChatColor.GRAY + "[InfusionTable] Opening menu");
 
-        InfusionTableMenu menu = new InfusionTableMenu(dust, infusion, b);
+        InfusionTableMenu menu = new InfusionTableMenu(dust, infusion, b, tables.isPrivate(b.getLocation()));
         openMenus.put(player.getUniqueId(), menu);
         menu.open(player);
     }
@@ -64,7 +64,7 @@ public final class InfusionTableListener implements Listener {
         if (!(e.getWhoClicked() instanceof Player player)) return;
 
         String titleStripped = ChatColor.stripColor(e.getView().getTitle());
-        if (!"Infusion Table".equalsIgnoreCase(titleStripped)) return;
+        if (!"Infusion Cauldron".equalsIgnoreCase(titleStripped)) return;
 
         Inventory top = e.getView().getTopInventory();
         int topSize = top.getSize();
@@ -134,7 +134,7 @@ public final class InfusionTableListener implements Listener {
         if (!(e.getWhoClicked() instanceof Player player)) return;
 
         String titleStripped = ChatColor.stripColor(e.getView().getTitle());
-        if (!"Infusion Table".equalsIgnoreCase(titleStripped)) return;
+        if (!"Infusion Cauldron".equalsIgnoreCase(titleStripped)) return;
 
         // If the drag touches the catalyst slot, redraw next tick
         if (!e.getRawSlots().contains(InfusionTableMenu.SLOT_CATALYST)) return;
@@ -154,7 +154,7 @@ public final class InfusionTableListener implements Listener {
         if (!(e.getPlayer() instanceof Player player)) return;
 
         String titleStripped = ChatColor.stripColor(e.getView().getTitle());
-        if (!"Infusion Table".equalsIgnoreCase(titleStripped)) return;
+        if (!"Infusion Cauldron".equalsIgnoreCase(titleStripped)) return;
 
         Inventory top = e.getView().getTopInventory();
 

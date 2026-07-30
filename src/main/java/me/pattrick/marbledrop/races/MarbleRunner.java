@@ -2,36 +2,29 @@ package me.pattrick.marbledrop.races;
 
 import org.bukkit.Location;
 import org.bukkit.World;
-import org.bukkit.block.Block;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
+import org.dyn4j.dynamics.Body;
+import org.dyn4j.geometry.Vector2;
 
-import java.util.List;
 import java.util.Random;
 
 /**
- * Path-progress marble movement.
+ * A single marble racing on a track's TrackPhysics world.
  * <p>
- * A marble's forward position is purely a function of how far it's
- * traveled along the track's (corner-smoothed) arc length -- a single
- * monotonically-increasing `progress` value. Forward progress NEVER
- * depends on colliding with or clearing anything in the world, so it
- * is mathematically impossible for a marble to get stuck on a corner.
- * <p>
- * Sideways (lateral) position is layered on top of that guaranteed
- * forward motion, and IS aware of the physical world -- but only to
- * answer "how much room is there to spread out here," never to block
- * or redirect forward movement. Each tick, a runner samples how much
- * clear space exists to its left and right (a handful of block checks,
- * not real collision), then places itself somewhere across that width
- * based on a persistent per-runner "lane" preference, with real
- * marble-vs-marble separation layered on top so two marbles can never
- * render inside each other. If sampling ever finds zero clearance for
- * some reason, the marble simply hugs the centerline -- still a fully
- * valid, un-stuck position.
+ * Forward drive, marble-vs-marble collision, and marble-vs-wall collision
+ * are all handled by the shared dyn4j World (see TrackPhysics) -- this
+ * class only ever pushes a drive force into its own body before the world
+ * steps, and reads its own body's position back out after. Progress along
+ * the track is derived by projecting that position onto the track's
+ * TrackSpline, so leader/finish detection stays well-defined even though
+ * the body itself is free to move anywhere within the walls (including
+ * sideways, to overtake).
  */
 public final class MarbleRunner {
 
@@ -43,108 +36,146 @@ public final class MarbleRunner {
     // Tunables
     // --------------------
 
-    // Lateral clearance sampling: how far out (and how finely) each
-    // runner checks for solid blocks to either side, to know how much
-    // of the track's actual physical width it's safe to use this tick.
-    private static final double CLEARANCE_STEP = 0.20;
-    private static final double CLEARANCE_MAX_SEARCH = 1.5;
-    private static final double CLEARANCE_MARGIN = 0.18; // roughly a marble's own radius
-    private static final double CLEARANCE_SAFETY_FACTOR = 0.85; // stay a bit inside sampled clearance, not right at the edge
-    private static final double CLEARANCE_SAMPLE_HEIGHT_LOW = 0.30;
-    private static final double CLEARANCE_SAMPLE_HEIGHT_HIGH = 0.90;
+    private static final double TICKS_PER_SECOND = 20.0;
 
-    // Small organic wobble layered on top of the lane position, purely cosmetic.
-    private static final double WANDER_ACCEL = 0.004;
+    // RaceManager.computeSpeedPerTick() was tuned for the old system, where
+    // "speed" advanced progress directly with zero drag of any kind. Real
+    // physics now has wall/marble friction and linear damping eating into
+    // that, so the same stat-driven speedPerTick nets out visibly slower
+    // than it used to. This multiplier compensates; it's a first-pass guess
+    // (untested against a live server) -- raise/lower it directly to taste
+    // rather than touching the underlying stat balance in RaceManager.
+    private static final double SPEED_MULTIPLIER = 9.0;
+
+    // Hard ceiling on total speed (forward + lateral combined), as a multiple
+    // of this runner's own target cruise speed. Collision impulses from a
+    // pileup are otherwise uncapped -- energy can compound tick over tick
+    // faster than the drive/damping bleeds it off, especially at higher
+    // SPEED_MULTIPLIER values, which is what actually drives bodies deep
+    // enough into a wall in one step for the solver to visibly lag behind.
+    private static final double MAX_SPEED_MULTIPLE = 3.0;
+
+    // Drive blends the body's forward speed toward the target by this fraction
+    // of the remaining gap each tick -- e.g. 0.5 closes ~95% of the gap in
+    // about 5 ticks (~0.25s). This is deliberately not a force/gain-based P
+    // controller: these bodies are light enough (radius 0.18, default density)
+    // that a force of gain * error way overshot the target speed every single
+    // tick, flipped sign, and overshot back -- a stable-looking number on
+    // paper but a visibly jittery, stuttering marble that also nets out far
+    // slower than the target speed because it's fighting itself constantly.
+    // Blending velocity directly is stable regardless of mass.
+    private static final double DRIVE_BLEND = 0.5;
+
+    // Small organic wobble on the drive direction, purely cosmetic.
+    private static final double WANDER_ACCEL = 0.05;
     private static final double WANDER_DECAY = 0.90;
-    private static final double WANDER_MAX = 0.10;
+    private static final double WANDER_MAX_RAD = Math.toRadians(12.0);
 
-    // Real marble-vs-marble separation -- this is what actually prevents
-    // two marbles from ever rendering on top of / inside each other.
-    private static final double MIN_SEPARATION = 0.36; // roughly a marble's diameter plus a small buffer
-
-    // Per-tick speed variance (chaos stat) and occasional burst (aggression
-    // stat) -- kept purely for personality/flavor, same intent as before.
+    // Per-tick speed variance (chaos stat) and occasional burst (aggression stat) -- flavor only.
     private static final double SPEED_WOBBLE_ACCEL = 0.008;
     private static final double SPEED_WOBBLE_DECAY = 0.90;
     private static final double SPEED_WOBBLE_MAX = 0.35;
     private static final double AGGRESSION_BURST_CHANCE = 0.01; // per tick, scaled by aggression
     private static final double AGGRESSION_BURST_MULT = 1.5;
 
-    private final MarbleTrack track; // kept for reference/future use; not read for movement
-    private final List<Location> path; // resolved once from track.getRacePoints() -- see MarbleTrack/TrackSmoother
+    private static final double FINISH_EPSILON = 0.05; // blocks of remaining arc-length that still counts as "finished"
+
+    // A small armor stand's helmet slot sits well above its feet (the actual
+    // teleport position) -- without this the marble visibly floats above the
+    // track surface instead of resting on it.
+    private static final double DISPLAY_Y_OFFSET = 0.75;
+
+    // Steer using the tangent a bit further up the track than the marble's
+    // current progress, not the tangent exactly at its own position. Without
+    // this, the drive aims straight at the current point right up until the
+    // marble is basically at a sharp corner, then has to snap the drive
+    // direction almost instantly -- by then it's already driving into the
+    // corner wall instead of starting to turn into it. This doesn't change
+    // where the wall collision itself is (that's real blocks, unavoidably
+    // square on a hard turn) -- it just gives the marble a head start on
+    // aiming around the bend instead of finding out about it at the last
+    // possible moment.
+    private static final double DRIVE_LOOKAHEAD = 1.25;
+
+    // Safeguard against a marble wedging into a harsh corner and stalling
+    // there indefinitely: if progress hasn't advanced meaningfully for this
+    // many ticks, force an escape kick (extra forward push + a lateral shove)
+    // instead of waiting on the normal drive to eventually work it free.
+    private static final double STALL_PROGRESS_EPSILON = 0.05; // blocks
+    private static final int STALL_TICKS_THRESHOLD = 30; // ~1.5s at 20 ticks/sec
+    private static final double STALL_KICK_FORWARD_MULT = 2.5;
+    private static final double STALL_KICK_LATERAL_MULT = 1.5;
+
+    private final TrackPhysics physics;
+    private final Body body;
     private final ArmorStand stand;
 
-    private final double[] cumulativeDist; // arc-length from path[0] to path[i], size == path.size()
     private final double totalLength;
-    private final double baseWorldSpeed; // world units of arc-length covered per tick at "normal" speed
+    private final double baseTargetSpeed; // blocks/second, converted from the legacy blocks/tick speedPerTick tuning
 
-    private double progress = 0.0; // arc-length traveled so far, 0..totalLength -- monotonic, never decreases
-    private int segmentHint = 0;   // search hint into cumulativeDist; only ever advances forward
-
-    private final double speedPerTick;
     private final FinishListener finishListener;
-
     private final double chaos;       // 0..1
     private final double aggression;  // 0..1
 
-    // Persistent per-runner preferred lane across the track's width, in
-    // [-1, 1] (negative = left side, positive = right side). Set once at
-    // construction so each marble has a consistent "racing line" rather
-    // than randomly drifting lane to lane.
-    private final double laneBias;
-
     private final Random rng = new Random();
 
+    private double lastS;
+    private double lastGoodX;
+    private double lastGoodZ;
+    private boolean finished = false;
+
     private double speedWobble = 0.0;
-    private double wander;
-    private double wanderVel = 0.0;
+    private double wobbleAngle;
+    private double wobbleAngleVel = 0.0;
 
-    // Backwards-compatible constructors
-    public MarbleRunner(MarbleTrack track, Location start) {
-        this(track, start, null, 0.02, 0.35, 0.50, null);
+    private double stallCheckpointS = 0.0;
+    private int stallTicks = 0;
+    private int stallKickSign = 1;
+
+    public MarbleRunner(TrackPhysics physics, Location start, ItemStack helmet, double speedPerTick,
+                         double chaos, double aggression, FinishListener finishListener) {
+        this(physics, start, helmet, speedPerTick, chaos, aggression, finishListener, null);
     }
 
-    public MarbleRunner(MarbleTrack track, Location start, ItemStack helmet, double speedPerTick) {
-        this(track, start, helmet, speedPerTick, 0.35, 0.50, null);
-    }
-
-    public MarbleRunner(MarbleTrack track, Location start, ItemStack helmet, double speedPerTick, FinishListener finishListener) {
-        this(track, start, helmet, speedPerTick, 0.35, 0.50, finishListener);
-    }
-
-    public MarbleRunner(MarbleTrack track, Location start, ItemStack helmet, double speedPerTick,
-                        double chaos, double aggression, FinishListener finishListener) {
-        this.track = track;
-        this.path = (track != null) ? track.getRacePoints() : java.util.Collections.emptyList();
-        this.speedPerTick = speedPerTick;
+    /**
+     * @param viewer When non-null, this marble is hidden from every other
+     *               player and shown only to {@code viewer} -- used by the
+     *               tutorial's practice race so a racer only ever sees their
+     *               own marble and their own AI opponents, never another
+     *               concurrent tutorial-taker's. Null means visible to
+     *               everyone, as in a real race.
+     */
+    public MarbleRunner(TrackPhysics physics, Location start, ItemStack helmet, double speedPerTick,
+                         double chaos, double aggression, FinishListener finishListener, Player viewer) {
+        this.physics = physics;
         this.finishListener = finishListener;
         this.chaos = clamp01(chaos);
         this.aggression = clamp01(aggression);
-        this.stand = spawnMarble(start, helmet);
+        this.baseTargetSpeed = speedPerTick * TICKS_PER_SECOND * SPEED_MULTIPLIER;
+        this.totalLength = physics.getSpline().totalLength();
 
-        this.cumulativeDist = computeCumulativeDistances(this.path);
-        this.totalLength = (cumulativeDist.length > 0) ? cumulativeDist[cumulativeDist.length - 1] : 0.0;
-
-        int segCount = Math.max(1, this.path.size() - 1);
-        double avgSegLen = (this.totalLength > 0.0) ? (this.totalLength / segCount) : 1.0;
-        this.baseWorldSpeed = speedPerTick * avgSegLen;
-
-        this.laneBias = (rng.nextDouble() * 2.0) - 1.0;
-        this.wander = ((rng.nextDouble() * 2.0) - 1.0) * (0.55 + 0.45 * this.chaos) * WANDER_MAX;
+        this.stand = spawnMarble(lowerForDisplay(start), helmet, viewer);
+        this.body = physics.registerMarble(start.getX(), start.getZ());
+        // Every caller spawns runners at/near the start of the track, so progress
+        // starts at exactly 0 rather than being *found* via a global nearest-point
+        // search. That search has no way to tell "just started" from "about to
+        // finish" on a track that loops back near its own start (a shared
+        // start/finish line) -- it would happily snap a fresh spawn onto the far
+        // (finish) end of the lap and fire an instant false finish. Once tracking
+        // begins here, every later step's windowed re-projection (see
+        // TrackSpline.project) stays anchored near the previous tick's progress,
+        // so it never has that ambiguity.
+        this.lastS = 0.0;
+        this.lastGoodX = start.getX();
+        this.lastGoodZ = start.getZ();
+        this.wobbleAngle = ((rng.nextDouble() * 2.0) - 1.0) * (0.55 + 0.45 * this.chaos) * WANDER_MAX_RAD;
     }
 
-    private static double[] computeCumulativeDistances(List<Location> pts) {
-        if (pts == null || pts.isEmpty()) return new double[0];
-
-        double[] out = new double[pts.size()];
-        out[0] = 0.0;
-        for (int i = 1; i < pts.size(); i++) {
-            out[i] = out[i - 1] + pts.get(i - 1).distance(pts.get(i));
-        }
-        return out;
+    private static Location lowerForDisplay(Location loc) {
+        return loc.clone().subtract(0, DISPLAY_Y_OFFSET, 0);
     }
 
-    private ArmorStand spawnMarble(Location loc, ItemStack helmet) {
+    private ArmorStand spawnMarble(Location loc, ItemStack helmet, Player viewer) {
         World world = (loc == null) ? null : loc.getWorld();
         if (world == null) throw new IllegalArgumentException("MarbleRunner start location has no world.");
 
@@ -164,166 +195,169 @@ public final class MarbleRunner {
             }
         }
 
+        if (viewer != null) {
+            as.setVisibleByDefault(false);
+            viewer.showEntity(JavaPlugin.getProvidingPlugin(MarbleRunner.class), as);
+        }
+
         return as;
     }
 
-    public boolean tick() {
-        return tick(null);
-    }
+    /** Pushes this tick's drive force into the body. Called once per engine tick, before the shared World steps. */
+    void applyDrive() {
+        if (finished) return;
 
-    public boolean tick(List<MarbleRunner> allRunners) {
+        if (checkAndHandleStall()) return;
 
-        if (path == null || path.size() < 2 || totalLength <= 0.0) {
-            stand.remove();
-            return false;
-        }
+        Vector tangent = physics.getSpline().tangentAt(Math.min(lastS + DRIVE_LOOKAHEAD, totalLength));
 
-        if (progress >= totalLength) {
-            if (finishListener != null) finishListener.onFinish();
-            stand.remove();
-            return false;
-        }
-
-        // --------------------
-        // Advance race progress (this is the ONLY thing that determines
-        // where the marble is along the track -- everything below is
-        // sideways placement layered on top, and never feeds back into
-        // this value).
-        // --------------------
         speedWobble += (rng.nextDouble() - 0.5) * SPEED_WOBBLE_ACCEL * chaos;
         speedWobble *= SPEED_WOBBLE_DECAY;
         speedWobble = clamp(speedWobble, -SPEED_WOBBLE_MAX, SPEED_WOBBLE_MAX);
 
-        double effectiveSpeed = baseWorldSpeed * (1.0 + speedWobble);
+        double targetSpeed = baseTargetSpeed * (1.0 + speedWobble);
         if (rng.nextDouble() < AGGRESSION_BURST_CHANCE * aggression) {
-            effectiveSpeed *= AGGRESSION_BURST_MULT;
-        }
-        if (effectiveSpeed < 0) effectiveSpeed = 0;
-
-        progress += effectiveSpeed;
-        if (progress > totalLength) progress = totalLength;
-
-        // --------------------
-        // Resolve exact on-track centerline position + tangent direction
-        // --------------------
-        while (segmentHint < cumulativeDist.length - 2 && cumulativeDist[segmentHint + 1] <= progress) {
-            segmentHint++;
-        }
-        int i = segmentHint;
-
-        Location aLoc = path.get(i);
-        Location bLoc = path.get(i + 1);
-        World world = aLoc.getWorld();
-        Vector a = aLoc.toVector();
-        Vector b = bLoc.toVector();
-
-        Vector segVec = b.clone().subtract(a);
-        double segLen3D = segVec.length();
-        Vector forward = (segLen3D > 1e-6) ? segVec.clone().multiply(1.0 / segLen3D) : new Vector(0, 0, 1);
-        Vector right = new Vector(-forward.getZ(), 0, forward.getX());
-
-        double segStart = cumulativeDist[i];
-        double segEnd = cumulativeDist[i + 1];
-        double segLen = segEnd - segStart;
-        double t = (segLen > 1e-6) ? clamp((progress - segStart) / segLen, 0.0, 1.0) : 0.0;
-
-        double baseX = a.getX() + (b.getX() - a.getX()) * t;
-        double baseY = a.getY() + (b.getY() - a.getY()) * t;
-        double baseZ = a.getZ() + (b.getZ() - a.getZ()) * t;
-
-        // --------------------
-        // How much room is there to spread out here? Purely informational
-        // -- never used to block or slow forward progress above.
-        // --------------------
-        double rightClear = computeClearance(world, baseX, baseY, baseZ, right) * CLEARANCE_SAFETY_FACTOR;
-        double leftClear = computeClearance(world, baseX, baseY, baseZ, right.clone().multiply(-1)) * CLEARANCE_SAFETY_FACTOR;
-
-        // --------------------
-        // Lane position: spread across the actual available width based
-        // on this marble's persistent lane preference, plus a little
-        // organic wobble on top for liveliness.
-        // --------------------
-        wanderVel += (rng.nextDouble() - 0.5) * WANDER_ACCEL * chaos;
-        wanderVel *= WANDER_DECAY;
-        wander += wanderVel;
-        wander = clamp(wander, -WANDER_MAX, WANDER_MAX);
-
-        double laneOffset = (laneBias >= 0) ? laneBias * rightClear : laneBias * leftClear; // laneBias negative -> leftClear side
-        double lateral = clamp(laneOffset + wander, -leftClear, rightClear);
-
-        // --------------------
-        // Real separation from other marbles -- this is what prevents
-        // phasing through each other. Re-clamped to sampled clearance
-        // after every push, so separation can never shove a marble
-        // through a wall either -- on a track too narrow for two marbles
-        // side by side, they'll simply be as separated as physically
-        // possible, not perfectly the full MIN_SEPARATION apart.
-        // --------------------
-        double candX = baseX + right.getX() * lateral;
-        double candZ = baseZ + right.getZ() * lateral;
-
-        if (allRunners != null) {
-            for (MarbleRunner other : allRunners) {
-                if (other == this) continue;
-                Location otherLoc = other.getLocation();
-                if (otherLoc == null) continue;
-
-                double dx = candX - otherLoc.getX();
-                double dz = candZ - otherLoc.getZ();
-                double dist = Math.sqrt(dx * dx + dz * dz);
-
-                if (dist < MIN_SEPARATION) {
-                    double pushSign = (System.identityHashCode(this) < System.identityHashCode(other)) ? -1.0 : 1.0;
-                    double pushNeeded = (dist > 1e-6) ? (MIN_SEPARATION - dist) : MIN_SEPARATION;
-
-                    lateral += pushSign * pushNeeded;
-                    lateral = clamp(lateral, -leftClear, rightClear);
-
-                    candX = baseX + right.getX() * lateral;
-                    candZ = baseZ + right.getZ() * lateral;
-                }
-            }
+            targetSpeed *= AGGRESSION_BURST_MULT;
         }
 
-        float yaw = yawFromVector(forward);
-        Location newLoc = new Location(world, candX, baseY, candZ, yaw, 0f);
-        stand.teleport(newLoc);
+        wobbleAngleVel += (rng.nextDouble() - 0.5) * WANDER_ACCEL * chaos;
+        wobbleAngleVel *= WANDER_DECAY;
+        wobbleAngle += wobbleAngleVel;
+        wobbleAngle = clamp(wobbleAngle, -WANDER_MAX_RAD, WANDER_MAX_RAD);
 
+        double cos = Math.cos(wobbleAngle), sin = Math.sin(wobbleAngle);
+        double dirX = tangent.getX() * cos - tangent.getZ() * sin;
+        double dirZ = tangent.getX() * sin + tangent.getZ() * cos;
+
+        Vector2 velocity = body.getLinearVelocity(); // dyn4j (x, y) == world (x, z)
+        double forwardSpeed = velocity.x * dirX + velocity.y * dirZ;
+        double lateralX = velocity.x - dirX * forwardSpeed; // collision/momentum component perpendicular to drive direction
+        double lateralZ = velocity.y - dirZ * forwardSpeed;
+
+        double newForwardSpeed = forwardSpeed + (targetSpeed - forwardSpeed) * DRIVE_BLEND;
+
+        // Only the forward component is steered toward the target; the lateral
+        // component is passed through untouched so marble-vs-marble jostling
+        // and overtaking still come entirely from real collision, not the motor.
+        double vx = dirX * newForwardSpeed + lateralX;
+        double vz = dirZ * newForwardSpeed + lateralZ;
+
+        double maxSpeed = baseTargetSpeed * MAX_SPEED_MULTIPLE;
+        double speedSq = vx * vx + vz * vz;
+        if (speedSq > maxSpeed * maxSpeed) {
+            double scale = maxSpeed / Math.sqrt(speedSq);
+            vx *= scale;
+            vz *= scale;
+        }
+
+        body.setLinearVelocity(vx, vz);
+    }
+
+    /**
+     * Detects a marble that hasn't made meaningful progress in a while --
+     * wedged in a harsh corner, jammed against another marble, whatever --
+     * and forces it free with a decisive kick (extra forward push plus a
+     * sideways shove, alternating sides on repeated stalls in case one
+     * direction is the actual wedge) instead of relying on the normal drive
+     * to eventually work it out. Returns true if a kick was applied this
+     * tick, in which case the normal drive is skipped so it doesn't
+     * immediately overwrite the kick.
+     */
+    private boolean checkAndHandleStall() {
+        if (lastS - stallCheckpointS >= STALL_PROGRESS_EPSILON) {
+            stallCheckpointS = lastS;
+            stallTicks = 0;
+            return false;
+        }
+
+        stallTicks++;
+        if (stallTicks < STALL_TICKS_THRESHOLD) return false;
+
+        Vector tangent = physics.getSpline().tangentAt(lastS);
+        double normalX = -tangent.getZ();
+        double normalZ = tangent.getX();
+
+        double forwardKick = baseTargetSpeed * STALL_KICK_FORWARD_MULT;
+        double lateralKick = baseTargetSpeed * STALL_KICK_LATERAL_MULT * stallKickSign;
+
+        body.setLinearVelocity(
+                tangent.getX() * forwardKick + normalX * lateralKick,
+                tangent.getZ() * forwardKick + normalZ * lateralKick
+        );
+
+        stallKickSign = -stallKickSign;
+        stallTicks = 0;
+        stallCheckpointS = lastS;
         return true;
     }
 
     /**
-     * How far (in blocks) it's clear to move in the given direction from
-     * (baseX, baseY, baseZ) before hitting a solid block, capped at
-     * CLEARANCE_MAX_SEARCH and reduced by CLEARANCE_MARGIN. Samples two
-     * heights above the base point to catch typical wall heights without
-     * being tripped up by ankle-high lips in the track.
+     * Reads the body's position back after the shared World has stepped, updates progress and the
+     * display entity, and detects finish. Returns false once this runner should be removed.
      */
-    private double computeClearance(World world, double baseX, double baseY, double baseZ, Vector dir) {
-        for (double d = CLEARANCE_STEP; d <= CLEARANCE_MAX_SEARCH; d += CLEARANCE_STEP) {
-            double x = baseX + dir.getX() * d;
-            double z = baseZ + dir.getZ() * d;
+    boolean syncAfterStep() {
+        if (finished) return false;
 
-            if (isSolidAt(world, x, baseY + CLEARANCE_SAMPLE_HEIGHT_LOW, z)
-                    || isSolidAt(world, x, baseY + CLEARANCE_SAMPLE_HEIGHT_HIGH, z)) {
-                return Math.max(0.0, d - CLEARANCE_MARGIN);
-            }
+        Vector2 pos = body.getWorldCenter(); // dyn4j (x, y) == world (x, z)
+        double x = pos.x, z = pos.y;
+
+        // Safety net on top of dyn4j's own continuous collision detection: if
+        // this tick still somehow left the body inside solid geometry (e.g. a
+        // fast body sweeping exactly through the seam between two abutting
+        // block colliders), revert to the last known-clear spot and kill
+        // velocity so it doesn't immediately retry the same path into the
+        // wall. Checked against the floor height near last tick's progress,
+        // since that's the best estimate of "where the track actually is"
+        // before this tick's new progress is resolved below.
+        double floorY = physics.getSpline().positionAt(lastS).getY();
+        if (TrackPhysics.isWallAt(physics.getBukkitWorld(), x, floorY, z)) {
+            body.translate(lastGoodX - x, lastGoodZ - z);
+            body.setLinearVelocity(0, 0);
+            x = lastGoodX;
+            z = lastGoodZ;
         }
-        return CLEARANCE_MAX_SEARCH - CLEARANCE_MARGIN;
-    }
 
-    private boolean isSolidAt(World world, double x, double y, double z) {
-        Block b = world.getBlockAt((int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z));
-        return b.getType().isSolid();
+        double s = physics.getSpline().project(x, z, lastS);
+        lastS = s;
+        lastGoodX = x;
+        lastGoodZ = z;
+
+        double y = physics.getSpline().positionAt(s).getY() - DISPLAY_Y_OFFSET;
+        Vector tangent = physics.getSpline().tangentAt(s);
+        float yaw = yawFromVector(tangent);
+
+        Location newLoc = new Location(physics.getBukkitWorld(), x, y, z, yaw, 0f);
+        stand.teleport(newLoc);
+
+        if (s >= totalLength - FINISH_EPSILON) {
+            finished = true;
+            physics.unregisterMarble(body);
+            stand.remove();
+            if (finishListener != null) finishListener.onFinish();
+            return false;
+        }
+        return true;
     }
 
     /** How far along the track (arc-length, in blocks) this runner has traveled so far. */
     public double getProgress() {
-        return progress;
+        return lastS;
     }
 
     public double getTotalLength() {
         return totalLength;
+    }
+
+    TrackPhysics getPhysics() {
+        return physics;
+    }
+
+    /** Immediately despawns this runner without firing its FinishListener. For admin cleanup of stray/stuck runners. */
+    void forceRemove() {
+        if (finished) return;
+        finished = true;
+        physics.unregisterMarble(body);
+        stand.remove();
     }
 
     private float yawFromVector(Vector v) {

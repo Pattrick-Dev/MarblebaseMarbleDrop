@@ -9,27 +9,52 @@ import org.bukkit.entity.Player;
 
 /**
  * Usage:
+ *   /md tutorial start
  *   /md tutorial status [player]
  *   /md tutorial reset <player>
  *   /md tutorial skip <player>
+ *   /md tutorial setlocation <step>
+ *   /md tutorial clearlocation <step>
+ *   /md tutorial setrace <trackId>
+ *   /md tutorial setpost
+ *   /md tutorial setcraftframes
  */
 public final class TutorialCommand implements CommandExecutor {
 
     private final TutorialManager tutorialManager;
+    private final TutorialCraftFrameManager craftFrames;
 
-    public TutorialCommand(TutorialManager tutorialManager) {
+    public TutorialCommand(TutorialManager tutorialManager, TutorialCraftFrameManager craftFrames) {
         this.tutorialManager = tutorialManager;
+        this.craftFrames = craftFrames;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 
         if (args.length == 0) {
-            sender.sendMessage(ChatColor.RED + "Usage: /md tutorial <status|reset|skip> [player]");
+            sender.sendMessage(ChatColor.RED + "Usage: /md tutorial <start|status|reset|skip> [player]");
             return true;
         }
 
         String sub = args[0].toLowerCase();
+
+        if (sub.equals("start")) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(ChatColor.RED + "Run this in-game.");
+                return true;
+            }
+            if (tutorialManager.hasCompleted(player)) {
+                player.sendMessage(ChatColor.YELLOW + "You've already completed the tutorial.");
+                return true;
+            }
+            if (tutorialManager.isActive(player)) {
+                tutorialManager.resume(player); // already started (e.g. from a previous session) -- just re-show the current step
+                return true;
+            }
+            tutorialManager.start(player);
+            return true;
+        }
 
         if (sub.equals("status")) {
             Player target = resolveTarget(sender, args, 1);
@@ -53,7 +78,8 @@ public final class TutorialCommand implements CommandExecutor {
             Player target = resolveTarget(sender, args, 1);
             if (target == null) return true;
             tutorialManager.reset(target);
-            sender.sendMessage(ChatColor.GREEN + "Reset the tutorial for " + target.getName() + ".");
+            sender.sendMessage(ChatColor.GREEN + "Reset the tutorial for " + target.getName() +
+                    ". They'll need to run /md tutorial start again.");
             return true;
         }
 
@@ -120,7 +146,16 @@ public final class TutorialCommand implements CommandExecutor {
             return true;
         }
 
-        sender.sendMessage(ChatColor.RED + "Usage: /md tutorial <status|reset|skip|setlocation|clearlocation|setrace|setpost> [player|step|trackId]");
+        if (sub.equals("setcraftframes")) {
+            if (!(sender instanceof Player admin)) {
+                sender.sendMessage(ChatColor.RED + "Run this in-game with a WorldEdit/FAWE selection around the 9 item frames.");
+                return true;
+            }
+            craftFrames.setupFromSelection(admin);
+            return true;
+        }
+
+        sender.sendMessage(ChatColor.RED + "Usage: /md tutorial <start|status|reset|skip|setlocation|clearlocation|setrace|setpost|setcraftframes> [player|step|trackId]");
         return true;
     }
 

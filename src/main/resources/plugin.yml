@@ -2,10 +2,14 @@ name: MarbleBaseMD
 main: me.pattrick.marbledrop.Main
 version: 1.0
 api-version: "26.2"
+softdepend: [WorldEdit, FastAsyncWorldEdit]
 commands:
    md:
       description: Base command for marble drop
       usage: /md
+   tasks:
+      description: View and manage your daily/weekly tasks
+      usage: /tasks
    feedback:
       description: Send feedback about the server
       usage: /feedback <message>

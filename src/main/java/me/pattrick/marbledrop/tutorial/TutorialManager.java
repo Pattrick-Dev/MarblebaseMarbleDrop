@@ -1,21 +1,28 @@
 package me.pattrick.marbledrop.tutorial;
 
+import me.pattrick.marbledrop.MdConfig;
+import me.pattrick.marbledrop.SilentGive;
 import me.pattrick.marbledrop.progression.DustManager;
+import me.pattrick.marbledrop.progression.StationType;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.boss.BarColor;
 import org.bukkit.boss.BarStyle;
 import org.bukkit.boss.BossBar;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -33,7 +40,9 @@ public final class TutorialManager {
 
     private final Plugin plugin;
     private final DustManager dustManager;
+    private final MdConfig config;
     private final TutorialLocationStore locationStore;
+    private final TutorialCraftFrameManager craftFrames;
 
     private final NamespacedKey K_ACTIVE;
     private final NamespacedKey K_STEP;
@@ -47,10 +56,25 @@ public final class TutorialManager {
     private final Map<UUID, Integer> infusionBaselineCount = new ConcurrentHashMap<>();
     private final Map<UUID, Integer> upgradeBaselineTotal = new ConcurrentHashMap<>();
 
-    public TutorialManager(Plugin plugin, DustManager dustManager, TutorialLocationStore locationStore) {
+    // CRAFT step bookkeeping: which of the three recipes a player has
+    // crafted so far this run (its size doubles as "which recipe is next"
+    // into CRAFT_ORDER), and the highest stage index ingredients have
+    // already been given for, so relogging mid-stage doesn't hand out a
+    // second batch of the same recipe's ingredients.
+    private final Map<UUID, Set<StationType>> craftedInStep = new ConcurrentHashMap<>();
+    private final Map<UUID, Integer> craftIngredientsGivenStage = new ConcurrentHashMap<>();
+
+    private static final StationType[] CRAFT_ORDER = {
+            StationType.INFUSION_TABLE, StationType.UPGRADE_STATION, StationType.RECYCLER
+    };
+
+    public TutorialManager(Plugin plugin, DustManager dustManager, MdConfig config, TutorialLocationStore locationStore,
+                            TutorialCraftFrameManager craftFrames) {
         this.plugin = plugin;
         this.dustManager = dustManager;
+        this.config = config;
         this.locationStore = locationStore;
+        this.craftFrames = craftFrames;
         this.K_ACTIVE = new NamespacedKey(plugin, "tutorial_active");
         this.K_STEP = new NamespacedKey(plugin, "tutorial_step");
         this.K_DONE = new NamespacedKey(plugin, "tutorial_done");
@@ -102,6 +126,7 @@ public final class TutorialManager {
     public void start(Player player) {
         setActive(player, true);
         setStep(player, TutorialStep.TASKS);
+        TutorialVisibility.enter(plugin, player);
         enterStep(player, TutorialStep.TASKS);
     }
 
@@ -173,7 +198,11 @@ public final class TutorialManager {
 
         infusionBaselineCount.remove(player.getUniqueId());
         upgradeBaselineTotal.remove(player.getUniqueId());
+        craftedInStep.remove(player.getUniqueId());
+        craftIngredientsGivenStage.remove(player.getUniqueId());
+        craftFrames.clearForPlayer(player);
         removeBossBar(player);
+        TutorialVisibility.exit(plugin, player, this);
 
         dustManager.addDust(player, TutorialStep.COMPLETE.rewardDust());
 
@@ -190,22 +219,32 @@ public final class TutorialManager {
 
     // ---------------- Admin controls ----------------
 
+    /** Wipes tutorial progress back to a fresh, unstarted state. Does NOT re-enter/auto-start it -- the player runs /md tutorial start themselves when ready. */
     public void reset(Player player) {
+        boolean wasActive = isActive(player);
         removeBossBar(player);
         infusionBaselineCount.remove(player.getUniqueId());
         upgradeBaselineTotal.remove(player.getUniqueId());
+        craftedInStep.remove(player.getUniqueId());
+        craftIngredientsGivenStage.remove(player.getUniqueId());
+        craftFrames.clearForPlayer(player);
         player.getPersistentDataContainer().remove(K_DONE);
-        setActive(player, true);
+        setActive(player, false);
         setStep(player, TutorialStep.TASKS);
-        enterStep(player, TutorialStep.TASKS);
+        if (wasActive) TutorialVisibility.exit(plugin, player, this);
     }
 
     public void skip(Player player) {
+        boolean wasActive = isActive(player);
         removeBossBar(player);
         infusionBaselineCount.remove(player.getUniqueId());
         upgradeBaselineTotal.remove(player.getUniqueId());
+        craftedInStep.remove(player.getUniqueId());
+        craftIngredientsGivenStage.remove(player.getUniqueId());
+        craftFrames.clearForPlayer(player);
         setActive(player, false);
         player.getPersistentDataContainer().set(K_DONE, PersistentDataType.BYTE, (byte) 1);
+        if (wasActive) TutorialVisibility.exit(plugin, player, this);
         player.sendMessage(ChatColor.GRAY + "Tutorial skipped by an admin.");
     }
 
@@ -222,6 +261,7 @@ public final class TutorialManager {
         // GUI that might still be open when a step transition teleports
         // the player away.
         player.closeInventory();
+        craftFrames.clearForPlayer(player);
 
         Location checkpoint = locationStore.get(step);
         if (checkpoint != null) {
@@ -241,11 +281,116 @@ public final class TutorialManager {
         player.sendMessage(ChatColor.YELLOW + "" + ChatColor.BOLD + step.title());
         player.sendMessage(ChatColor.GRAY + step.hint());
 
-        if (step == TutorialStep.INFUSION) {
+        if (step == TutorialStep.TASKS) {
+            player.sendMessage(ChatColor.GRAY + "Tasks are your main source of Dust -- the currency spent at " +
+                    "Infusion Tables and Upgrade Stations. Check /tasks anytime for your daily and weekly list.");
+        } else if (step == TutorialStep.CRAFT) {
+            giveNextCraftIngredients(player);
+            // Fresh=true is safe to force-open a GUI here (unlike after each
+            // individual craft, see TutorialCraftHook): this only runs on
+            // fresh entry into the step or a relog resume, both moments
+            // with nothing else open.
+            showCraftPreviewForCurrentTarget(player, true);
+        } else if (step == TutorialStep.INFUSION) {
             infusionBaselineCount.put(player.getUniqueId(), TutorialMarbleUtil.countMarbles(player));
+            int cap = config.infusionDailyCap();
+            player.sendMessage(ChatColor.GRAY + (cap > 0
+                    ? "You can perform up to " + cap + " infusions per day -- the limit resets daily."
+                    : "Infusions have no daily limit on this server."));
         } else if (step == TutorialStep.UPGRADE) {
             upgradeBaselineTotal.put(player.getUniqueId(), TutorialMarbleUtil.highestStatTotal(player));
         }
+    }
+
+    /** Which recipe the player should craft next, or null once all three are done. */
+    public StationType currentCraftTarget(Player player) {
+        int stage = craftedInStep.getOrDefault(player.getUniqueId(), Set.of()).size();
+        return stage < CRAFT_ORDER.length ? CRAFT_ORDER[stage] : null;
+    }
+
+    /**
+     * Shows the current recipe: the physical item-frame display if one is
+     * configured (see TutorialCraftFrameManager), otherwise falls back to
+     * TutorialCraftGui -- a forced GUI popup on fresh entry, or a plain
+     * chat message on later stages so an in-progress crafting table isn't
+     * interrupted.
+     */
+    public void showCraftPreviewForCurrentTarget(Player player, boolean freshEntry) {
+        StationType target = currentCraftTarget(player);
+        if (target == null) return;
+
+        if (craftFrames.isConfigured()) {
+            craftFrames.displayForPlayer(player, target);
+        } else if (freshEntry) {
+            TutorialCraftGui.open(plugin, player, target);
+        } else {
+            TutorialCraftGui.sendChatPreview(plugin, player, target);
+        }
+    }
+
+    /**
+     * Hands over exactly what's needed for the CURRENT recipe only (see
+     * StationRecipes) -- one recipe at a time, not all three at once.
+     * Guarded per-stage so a relog mid-recipe (which re-enters via
+     * resume() -> enterStep()) doesn't hand out a second batch of the same
+     * recipe's ingredients; TutorialCraftHook calls this again itself
+     * after each craft to advance to the next recipe's ingredients.
+     */
+    public void giveNextCraftIngredients(Player player) {
+        StationType target = currentCraftTarget(player);
+        if (target == null) return; // all three already crafted
+
+        UUID id = player.getUniqueId();
+        int stage = craftedInStep.getOrDefault(id, Set.of()).size();
+        Integer lastGivenStage = craftIngredientsGivenStage.get(id);
+        if (lastGivenStage != null && lastGivenStage >= stage) return;
+
+        craftIngredientsGivenStage.put(id, stage);
+        player.sendMessage(ChatColor.GRAY + explanationFor(target));
+        SilentGive.give(plugin, player, ingredientsFor(target));
+    }
+
+    /** What the station the player is about to learn actually does once placed. */
+    private String explanationFor(StationType type) {
+        return switch (type) {
+            case INFUSION_TABLE -> "Infusion Table -- spend Dust (plus an optional catalyst) here to create brand new marbles.";
+            case UPGRADE_STATION -> "Upgrade Station -- spend Dust here to redistribute one of your marble's stats.";
+            case RECYCLER -> "Recycler -- break a marble you don't want back down into Dust.";
+        };
+    }
+
+    private ItemStack[] ingredientsFor(StationType type) {
+        return switch (type) {
+            case INFUSION_TABLE -> new ItemStack[]{
+                    new ItemStack(Material.AMETHYST_SHARD, 4),
+                    new ItemStack(Material.GLOWSTONE, 4),
+                    new ItemStack(Material.CAULDRON, 1)
+            };
+            case UPGRADE_STATION -> new ItemStack[]{
+                    new ItemStack(Material.IRON_INGOT, 4),
+                    new ItemStack(Material.DIAMOND, 4),
+                    new ItemStack(Material.SMITHING_TABLE, 1)
+            };
+            case RECYCLER -> new ItemStack[]{
+                    new ItemStack(Material.IRON_INGOT, 4),
+                    new ItemStack(Material.REDSTONE, 4),
+                    new ItemStack(Material.GRINDSTONE, 1)
+            };
+        };
+    }
+
+    /**
+     * Records that the player has crafted (and had taken back) one of the
+     * three station recipes during the CRAFT step. Returns the set of
+     * types crafted so far this run; the caller completes the step once
+     * every StationType is present, otherwise calls giveNextCraftIngredients
+     * again to hand over the next recipe.
+     */
+    public Set<StationType> recordCraft(Player player, StationType type) {
+        Set<StationType> set = craftedInStep.computeIfAbsent(
+                player.getUniqueId(), k -> EnumSet.noneOf(StationType.class));
+        set.add(type);
+        return set;
     }
 
     private void removeBossBar(Player player) {
@@ -258,8 +403,24 @@ public final class TutorialManager {
     public void handleQuit(Player player) {
         BossBar bar = bossBars.remove(player.getUniqueId());
         if (bar != null) bar.removeAll();
+        craftFrames.clearForPlayer(player);
         // NOTE: baselines are intentionally left in memory keyed by UUID --
         // they're harmless to keep and get overwritten if the player
         // re-enters that step later (e.g. after a relog mid-step).
+    }
+
+    /**
+     * Removes every currently-tracked boss bar from every viewer. Call on
+     * plugin disable -- boss bars aren't tied to the plugin's lifecycle, so
+     * without this a reload orphans one for anyone mid-tutorial: still
+     * visible to them, but no longer reachable by the fresh TutorialManager
+     * the next onEnable() creates, which then hands out a brand new bar next
+     * time their step re-renders. Repeated reloads stack these up.
+     */
+    public void shutdown() {
+        for (BossBar bar : bossBars.values()) {
+            bar.removeAll();
+        }
+        bossBars.clear();
     }
 }

@@ -17,13 +17,19 @@ public enum TutorialStep {
     TASKS(
             Set.of("tasks"),
             "Kill the Sheep",
-            "Type /md tasks, then kill the sheep that spawns.",
+            "Type /tasks, then kill the sheep that spawns.",
             50
+    ),
+    CRAFT(
+            Set.of(), // crafting has no /md command to gate -- see TutorialCraftHook
+            "Learn the Recipes",
+            "Open a crafting table and craft the station shown -- the next recipe's ingredients appear once you're done. Each is taken back once crafted; you'll get real ones later.",
+            0
     ),
     INFUSION(
             Set.of("table", "infusiontable"),
             "Get Your First Marble",
-            "Right-click the Infusion Table in front of you, then click Infuse.",
+            "Right-click the Infusion Cauldron in front of you, then click Infuse.",
             0
     ),
     UPGRADE(

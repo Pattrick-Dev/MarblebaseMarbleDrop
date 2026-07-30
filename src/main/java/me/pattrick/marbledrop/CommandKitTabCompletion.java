@@ -1,5 +1,7 @@
 package me.pattrick.marbledrop;
 
+import me.pattrick.marbledrop.races.TrackManager;
+import me.pattrick.marbledrop.tutorial.TutorialStep;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
@@ -11,6 +13,12 @@ import java.util.Collections;
 import java.util.List;
 
 public class CommandKitTabCompletion implements TabCompleter {
+
+  private final TrackManager tracks;
+
+  public CommandKitTabCompletion(TrackManager tracks) {
+    this.tracks = tracks;
+  }
 
   private static boolean isAdmin(CommandSender sender) {
     return sender.isOp() || sender.hasPermission("marbledrop.admin");
@@ -36,8 +44,57 @@ public class CommandKitTabCompletion implements TabCompleter {
     return names;
   }
 
+  private List<String> trackIds() {
+    return tracks == null ? Collections.emptyList() : new ArrayList<>(tracks.sortedIds());
+  }
+
+  private static List<String> tutorialStepNames() {
+    List<String> names = new ArrayList<>();
+    for (TutorialStep step : TutorialStep.values()) {
+      if (step == TutorialStep.COMPLETE) continue;
+      names.add(step.name());
+    }
+    return names;
+  }
+
+  // ---- /tasks <sub> ----
+  private List<String> tasksTabComplete(CommandSender sender, String[] args) {
+    if (args.length == 1) {
+      List<String> taskSubs = new ArrayList<>();
+
+      // If TasksCommand supports subcommands, add them here.
+      // taskSubs.add("list");
+      // taskSubs.add("claim");
+
+      if (isAdmin(sender)) {
+        taskSubs.add("admin");
+      }
+
+      return filterStartsWith(taskSubs, args[0]);
+    }
+
+    // ---- /tasks admin <sub> ----
+    if (args.length == 2 && args[0].equalsIgnoreCase("admin")) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+
+      List<String> tasksAdminSubs = new ArrayList<>();
+      // Add your TasksAdminCommand subcommands here if you want.
+      // tasksAdminSubs.add("add");
+      // tasksAdminSubs.add("remove");
+      // tasksAdminSubs.add("reload");
+
+      return filterStartsWith(tasksAdminSubs, args[1]);
+    }
+
+    return Collections.emptyList();
+  }
+
   @Override
   public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+
+    if (command.getName().equalsIgnoreCase("tasks")) {
+      return tasksTabComplete(sender, args);
+    }
 
     // Only for /md
     if (!command.getName().equalsIgnoreCase("md")) return Collections.emptyList();
@@ -47,14 +104,17 @@ public class CommandKitTabCompletion implements TabCompleter {
       List<String> base = new ArrayList<>();
 
       // everyone
-      base.add("cd");
-      base.add("cooldown");
+      base.add("help");
       base.add("dust");
-      base.add("tasks");
-
-      // ✅ NEW: upgrades (player-facing)
       base.add("upgrade");
       base.add("upgrades");
+      base.add("track");
+      base.add("race");
+      base.add("races");
+      base.add("join");
+      base.add("leave");
+      base.add("team");
+      base.add("tutorial");
 
       // admin-only router targets
       if (isAdmin(sender)) {
@@ -63,38 +123,23 @@ public class CommandKitTabCompletion implements TabCompleter {
         base.add("recycler");
         base.add("recycle");
 
+        base.add("reload");
         base.add("debug");
-        base.add("rcd");
         base.add("pdc");
       }
 
       return filterStartsWith(base, args[0]);
     }
 
-    // ---- /md upgrade|upgrades <sub> ----
-    // (Adjust these once your UpgradeStationCommand has real subcommands)
+    // ---- /md upgrade|upgrades <sub> ---- (admin-only: UpgradeStationCommand)
     if (args.length == 2 && (args[0].equalsIgnoreCase("upgrade") || args[0].equalsIgnoreCase("upgrades"))) {
-      List<String> upSubs = new ArrayList<>();
-
-      // common: open GUI
-      upSubs.add("open");
-
-      // admin actions (optional; keep if you plan to add them)
-      if (isAdmin(sender)) {
-        upSubs.add("set");
-        upSubs.add("remove");
-        upSubs.add("list");
-      }
-
-      return filterStartsWith(upSubs, args[1]);
-    }
-
-    // ---- /md upgrade|upgrades set <player> ----
-    if (args.length == 3
-            && (args[0].equalsIgnoreCase("upgrade") || args[0].equalsIgnoreCase("upgrades"))
-            && args[1].equalsIgnoreCase("set")) {
       if (!isAdmin(sender)) return Collections.emptyList();
-      return filterStartsWith(onlinePlayerNames(), args[2]);
+
+      List<String> upSubs = new ArrayList<>();
+      upSubs.add("give");
+      upSubs.add("remove");
+      upSubs.add("count");
+      return filterStartsWith(upSubs, args[1]);
     }
 
     // ---- /md dust <sub> ----
@@ -156,43 +201,142 @@ public class CommandKitTabCompletion implements TabCompleter {
       return Collections.emptyList();
     }
 
-    // ---- /md tasks <sub> ----
-    if (args.length == 2 && args[0].equalsIgnoreCase("tasks")) {
-      List<String> taskSubs = new ArrayList<>();
-
-      // If TasksCommand supports subcommands, add them here.
-      // taskSubs.add("list");
-      // taskSubs.add("claim");
-
-      if (isAdmin(sender)) {
-        taskSubs.add("admin");
-      }
-
-      return filterStartsWith(taskSubs, args[1]);
-    }
-
-    // ---- /md tasks admin <sub> ----
-    if (args.length == 3 && args[0].equalsIgnoreCase("tasks") && args[1].equalsIgnoreCase("admin")) {
-      if (!isAdmin(sender)) return Collections.emptyList();
-
-      List<String> tasksAdminSubs = new ArrayList<>();
-      // Add your TasksAdminCommand subcommands here if you want.
-      // tasksAdminSubs.add("add");
-      // tasksAdminSubs.add("remove");
-      // tasksAdminSubs.add("reload");
-
-      return filterStartsWith(tasksAdminSubs, args[2]);
-    }
-
     // ---- /md table|infusiontable <sub> ----
     if (args.length == 2 && (args[0].equalsIgnoreCase("table") || args[0].equalsIgnoreCase("infusiontable"))) {
       if (!isAdmin(sender)) return Collections.emptyList();
 
       List<String> tableSubs = new ArrayList<>();
-      tableSubs.add("add");
+      tableSubs.add("give");
       tableSubs.add("remove");
       tableSubs.add("count");
+      tableSubs.add("private");
       return filterStartsWith(tableSubs, args[1]);
+    }
+
+    // ---- /md recycler|recycle <sub> ----
+    if (args.length == 2 && (args[0].equalsIgnoreCase("recycler") || args[0].equalsIgnoreCase("recycle"))) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+
+      List<String> recyclerSubs = new ArrayList<>();
+      recyclerSubs.add("give");
+      recyclerSubs.add("remove");
+      recyclerSubs.add("count");
+      return filterStartsWith(recyclerSubs, args[1]);
+    }
+
+    // ---- /md track <sub> ----
+    // TrackCommand requires marbledrop.admin for everything under it.
+    if (args.length == 2 && args[0].equalsIgnoreCase("track")) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+
+      List<String> trackSubs = List.of(
+              "gui", "create", "addpoint", "info", "delete",
+              "show", "hide", "run", "setwatch", "clearwatch", "autorace"
+      );
+      return filterStartsWith(trackSubs, args[1]);
+    }
+
+    // ---- /md track <sub> <id> ---- (subcommands that take an existing track id)
+    if (args.length == 3 && args[0].equalsIgnoreCase("track")) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+
+      String sub = args[1].toLowerCase();
+      if (sub.equals("addpoint") || sub.equals("info") || sub.equals("delete")
+              || sub.equals("show") || sub.equals("run") || sub.equals("setwatch") || sub.equals("clearwatch")
+              || sub.equals("autorace")) {
+        return filterStartsWith(trackIds(), args[2]);
+      }
+
+      return Collections.emptyList();
+    }
+
+    // ---- /md track autorace <id> <on|off> ----
+    if (args.length == 4 && args[0].equalsIgnoreCase("track") && args[1].equalsIgnoreCase("autorace")) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+      return filterStartsWith(List.of("on", "off"), args[3]);
+    }
+
+    // ---- /md race|races <sub> ----
+    if (args.length == 2 && (args[0].equalsIgnoreCase("race") || args[0].equalsIgnoreCase("races"))) {
+      List<String> raceSubs = new ArrayList<>();
+      raceSubs.add("gui");
+      raceSubs.add("watch");
+      raceSubs.add("unwatch");
+      raceSubs.add("leavewatch");
+      raceSubs.add("join");
+      raceSubs.add("leave");
+      raceSubs.add("next");
+
+      if (isAdmin(sender)) {
+        raceSubs.add("open");
+        raceSubs.add("close");
+        raceSubs.add("start");
+        raceSubs.add("clear");
+        raceSubs.add("purge");
+        raceSubs.add("forcecycle");
+      }
+
+      return filterStartsWith(raceSubs, args[1]);
+    }
+
+    // ---- /md race|races <sub> <trackId> ----
+    if (args.length == 3 && (args[0].equalsIgnoreCase("race") || args[0].equalsIgnoreCase("races"))) {
+      String sub = args[1].toLowerCase();
+
+      if (sub.equals("open") || sub.equals("close") || sub.equals("start") || sub.equals("clear")) {
+        if (!isAdmin(sender)) return Collections.emptyList();
+        return filterStartsWith(trackIds(), args[2]);
+      }
+      if (sub.equals("watch")) {
+        return filterStartsWith(trackIds(), args[2]);
+      }
+
+      return Collections.emptyList();
+    }
+
+    // ---- /md tutorial <sub> ----
+    if (args.length == 2 && args[0].equalsIgnoreCase("tutorial")) {
+      List<String> tutorialSubs = new ArrayList<>();
+      tutorialSubs.add("start");
+      tutorialSubs.add("status");
+
+      if (isAdmin(sender)) {
+        tutorialSubs.add("reset");
+        tutorialSubs.add("skip");
+        tutorialSubs.add("setlocation");
+        tutorialSubs.add("clearlocation");
+        tutorialSubs.add("listlocations");
+        tutorialSubs.add("setrace");
+        tutorialSubs.add("removerace");
+        tutorialSubs.add("listraces");
+        tutorialSubs.add("setpost");
+        tutorialSubs.add("setcraftframes");
+      }
+
+      return filterStartsWith(tutorialSubs, args[1]);
+    }
+
+    // ---- /md tutorial status|reset|skip <player> ----
+    if (args.length == 3 && args[0].equalsIgnoreCase("tutorial")) {
+      String sub = args[1].toLowerCase();
+
+      if (sub.equals("status")) {
+        return filterStartsWith(onlinePlayerNames(), args[2]);
+      }
+      if (sub.equals("reset") || sub.equals("skip")) {
+        if (!isAdmin(sender)) return Collections.emptyList();
+        return filterStartsWith(onlinePlayerNames(), args[2]);
+      }
+      if (sub.equals("setlocation") || sub.equals("clearlocation") || sub.equals("listlocations")) {
+        if (!isAdmin(sender)) return Collections.emptyList();
+        return filterStartsWith(tutorialStepNames(), args[2]);
+      }
+      if (sub.equals("setrace") || sub.equals("removerace")) {
+        if (!isAdmin(sender)) return Collections.emptyList();
+        return filterStartsWith(trackIds(), args[2]);
+      }
+
+      return Collections.emptyList();
     }
 
     return Collections.emptyList();

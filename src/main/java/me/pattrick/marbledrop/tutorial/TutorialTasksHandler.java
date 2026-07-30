@@ -5,7 +5,6 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Sheep;
 import org.bukkit.event.EventHandler;
@@ -13,6 +12,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
 
 import java.util.Map;
 import java.util.UUID;
@@ -29,19 +29,26 @@ import java.util.concurrent.ConcurrentHashMap;
  * second or re-give a weapon), and only a kill by the owning player
  * counts, so this can't be farmed for repeat rewards. The sheep never
  * drops loot or XP, regardless of who/what kills it.
+ * <p>
+ * The sheep is also only visible to its owner (setVisibleByDefault(false)
+ * + showEntity), so two players doing the tutorial near each other never
+ * see or accidentally hit each other's sheep -- each one's task looks
+ * fully private to them, same as the tutorial's private infusion table.
  */
 public final class TutorialTasksHandler implements Listener {
 
+    private final Plugin plugin;
     private final TutorialManager tutorialManager;
 
     // player UUID -> the specific sheep entity UUID assigned to them
     private final Map<UUID, UUID> activeSheep = new ConcurrentHashMap<>();
 
-    public TutorialTasksHandler(TutorialManager tutorialManager) {
+    public TutorialTasksHandler(Plugin plugin, TutorialManager tutorialManager) {
+        this.plugin = plugin;
         this.tutorialManager = tutorialManager;
     }
 
-    /** Called by TutorialListener when a player runs /md tasks on the TASKS step. */
+    /** Called by TutorialListener when a player runs /tasks on the TASKS step. */
     public void beginTask(Player player) {
         UUID existing = activeSheep.get(player.getUniqueId());
         if (existing != null) {
@@ -52,10 +59,15 @@ public final class TutorialTasksHandler implements Listener {
         }
 
         Location loc = findSafeSheepSpawn(player);
-        Sheep sheep = (Sheep) loc.getWorld().spawnEntity(loc, EntityType.SHEEP);
-        sheep.setCustomName(ChatColor.YELLOW + player.getName() + "'s Task Sheep");
-        sheep.setCustomNameVisible(true);
-        sheep.setRemoveWhenFarAway(false);
+        Sheep sheep = loc.getWorld().spawn(loc, Sheep.class, s -> {
+            s.setCustomName(ChatColor.YELLOW + player.getName() + "'s Task Sheep");
+            s.setCustomNameVisible(true);
+            s.setRemoveWhenFarAway(false);
+            // Hidden from everyone by default; shown only to the owner below,
+            // so concurrent tutorial-takers never see/hit each other's sheep.
+            s.setVisibleByDefault(false);
+        });
+        player.showEntity(plugin, sheep);
 
         activeSheep.put(player.getUniqueId(), sheep.getUniqueId());
 
@@ -121,7 +133,7 @@ public final class TutorialTasksHandler implements Listener {
         Player killer = sheep.getKiller();
         if (killer == null || !killer.getUniqueId().equals(ownerId)) {
             // Someone/something else killed this player's sheep. Clear the
-            // assignment so /md tasks gives them a fresh one instead of
+            // assignment so /tasks gives them a fresh one instead of
             // soft-locking the step.
             activeSheep.remove(ownerId);
             return;

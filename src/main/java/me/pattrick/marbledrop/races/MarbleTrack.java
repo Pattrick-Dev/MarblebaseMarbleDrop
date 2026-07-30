@@ -13,15 +13,19 @@ public final class MarbleTrack {
     private final World world;
     private final List<Location> points = new ArrayList<>();
 
-    // Cached, corner-smoothed version of `points`, used for actual race
-    // physics (see MarbleRunner). Recomputed whenever points change.
+    // Cached Catmull-Rom spline through `points`, used for race physics
+    // (see TrackPhysics/MarbleRunner). Recomputed whenever points change.
     // The raw `points` list above is left untouched -- track editing
     // tools (TrackGuiListener, TrackVisualizer, etc.) still work off it
     // directly, so admins always see/edit exactly what they placed.
-    private List<Location> racePoints = new ArrayList<>();
+    private TrackSpline spline = TrackSpline.build(points);
 
     // ✅ Optional watch spot for spectating
     private Location watchLocation;
+
+    // Opt-in flag: only tracks marked eligible are candidates for the
+    // scheduled server race's random pick (see ScheduledRaceManager).
+    private boolean autoRaceEligible;
 
     public MarbleTrack(String id, World world) {
         this.id = id;
@@ -54,13 +58,13 @@ public final class MarbleTrack {
         return Collections.unmodifiableList(points);
     }
 
-    /** Corner-smoothed path used for race physics. See TrackSmoother. */
-    public List<Location> getRacePoints() {
-        return racePoints;
+    /** Corner-smoothed spline used for race physics. See TrackPhysics. */
+    public TrackSpline getSpline() {
+        return spline;
     }
 
     private void recomputeRacePath() {
-        racePoints = TrackSmoother.smooth(points);
+        spline = TrackSpline.build(points);
     }
 
     public Location getWatchLocation() {
@@ -74,5 +78,13 @@ public final class MarbleTrack {
     void removeLastPoint() {
         if (!points.isEmpty()) points.remove(points.size() - 1);
         recomputeRacePath();
+    }
+
+    public boolean isAutoRaceEligible() {
+        return autoRaceEligible;
+    }
+
+    public void setAutoRaceEligible(boolean eligible) {
+        this.autoRaceEligible = eligible;
     }
 }
