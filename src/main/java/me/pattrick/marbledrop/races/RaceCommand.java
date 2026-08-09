@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.races;
 
+import me.pattrick.marbledrop.command.Commands;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -23,12 +24,10 @@ public final class RaceCommand implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage("Please run this command as a player!");
-            return true;
-        }
+        Player player = Commands.player(sender);
+        if (player == null) return true;
 
-        // ✅ default: open GUI
+        // default: open GUI
         if (args.length == 0 || args[0].equalsIgnoreCase("gui") || args[0].equalsIgnoreCase("menu")) {
             RaceGui.open(player, tracks, races);
             return true;
@@ -39,12 +38,9 @@ public final class RaceCommand implements CommandExecutor {
         switch (sub) {
 
             case "open" -> {
-                if (!player.hasPermission("marbledrop.admin")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission.");
-                    return true;
-                }
+                if (!Commands.requireAdmin(player)) return true;
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md race open <trackId>");
+                    Commands.usage(player, "/md race open <trackId>");
                     return true;
                 }
                 races.open(player, args[1].toLowerCase());
@@ -52,12 +48,9 @@ public final class RaceCommand implements CommandExecutor {
             }
 
             case "close" -> {
-                if (!player.hasPermission("marbledrop.admin")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission.");
-                    return true;
-                }
+                if (!Commands.requireAdmin(player)) return true;
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md race close <trackId>");
+                    Commands.usage(player, "/md race close <trackId>");
                     return true;
                 }
                 races.close(player, args[1].toLowerCase());
@@ -65,12 +58,9 @@ public final class RaceCommand implements CommandExecutor {
             }
 
             case "start" -> {
-                if (!player.hasPermission("marbledrop.admin")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission.");
-                    return true;
-                }
+                if (!Commands.requireAdmin(player)) return true;
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md race start <trackId>");
+                    Commands.usage(player, "/md race start <trackId>");
                     return true;
                 }
                 races.start(player, args[1].toLowerCase());
@@ -78,12 +68,9 @@ public final class RaceCommand implements CommandExecutor {
             }
 
             case "clear" -> {
-                if (!player.hasPermission("marbledrop.admin")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission.");
-                    return true;
-                }
+                if (!Commands.requireAdmin(player)) return true;
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md race clear <trackId>");
+                    Commands.usage(player, "/md race clear <trackId>");
                     return true;
                 }
                 races.clear(args[1].toLowerCase());
@@ -93,7 +80,7 @@ public final class RaceCommand implements CommandExecutor {
 
             case "watch" -> {
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md race watch <trackId>");
+                    Commands.usage(player, "/md race watch <trackId>");
                     return true;
                 }
                 watch.start(player, args[1].toLowerCase());
@@ -106,13 +93,10 @@ public final class RaceCommand implements CommandExecutor {
             }
 
             case "test", "testrace" -> {
-                if (!player.hasPermission("marbledrop.admin")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission.");
-                    return true;
-                }
+                if (!Commands.requireAdmin(player)) return true;
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md race test <trackId> [aiCount] [noself]");
-                    player.sendMessage(ChatColor.RED + "   or: /md race test loadout <trackId>  (pick a loadout to test with)");
+                    Commands.usage(player, "/md race test <trackId> [aiCount] [noself]");
+                    player.sendMessage(ChatColor.YELLOW + "   or: /md race test loadout <trackId>  (pick a loadout to test with)");
                     return true;
                 }
 
@@ -122,7 +106,7 @@ public final class RaceCommand implements CommandExecutor {
                 // reads it automatically, no lobby entry required.
                 if (args[1].equalsIgnoreCase("loadout")) {
                     if (args.length < 3) {
-                        player.sendMessage(ChatColor.RED + "Usage: /md race test loadout <trackId>");
+                        Commands.usage(player, "/md race test loadout <trackId>");
                         return true;
                     }
                     RaceLoadoutGui.open(player, races, args[2].toLowerCase());
@@ -192,20 +176,14 @@ public final class RaceCommand implements CommandExecutor {
             }
 
             case "forcecycle" -> {
-                if (!player.hasPermission("marbledrop.admin")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission.");
-                    return true;
-                }
+                if (!Commands.requireAdmin(player)) return true;
                 scheduledRaces.forceCycleNow();
                 player.sendMessage(ChatColor.YELLOW + "Forced the scheduled race cycle to run now.");
                 return true;
             }
 
             case "purge" -> {
-                if (!player.hasPermission("marbledrop.admin")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission.");
-                    return true;
-                }
+                if (!Commands.requireAdmin(player)) return true;
                 races.purgeAllRunners();
                 scheduledRaces.releaseStuckCycle();
                 player.sendMessage(ChatColor.YELLOW + "Force-removed all active marble runners.");

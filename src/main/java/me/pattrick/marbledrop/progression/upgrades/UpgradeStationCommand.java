@@ -1,61 +1,57 @@
 package me.pattrick.marbledrop.progression.upgrades;
 
-import me.pattrick.marbledrop.progression.StationItems;
+import me.pattrick.marbledrop.command.Commands;
+import me.pattrick.marbledrop.progression.StationCommands;
 import me.pattrick.marbledrop.progression.StationType;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 
-public final class UpgradeStationCommand implements org.bukkit.command.CommandExecutor {
+public final class UpgradeStationCommand implements CommandExecutor {
 
-    private final org.bukkit.plugin.Plugin plugin;
+    private final Plugin plugin;
     private final UpgradeStationManager stations;
+    private final UpgradeStationAmbient ambient;
 
-    public UpgradeStationCommand(org.bukkit.plugin.Plugin plugin, UpgradeStationManager stations) {
+    public UpgradeStationCommand(Plugin plugin, UpgradeStationManager stations, UpgradeStationAmbient ambient) {
         this.plugin = plugin;
         this.stations = stations;
+        this.ambient = ambient;
     }
 
     @Override
-    public boolean onCommand(org.bukkit.command.CommandSender sender, org.bukkit.command.Command command, String label, String[] args) {
-        if (!(sender instanceof org.bukkit.entity.Player player)) {
-            sender.sendMessage(org.bukkit.ChatColor.RED + "Players only.");
-            return true;
-        }
-
-        if (!(player.isOp() || player.hasPermission("marbledrop.admin"))) {
-            player.sendMessage(org.bukkit.ChatColor.RED + "No permission.");
-            return true;
-        }
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        Player player = Commands.player(sender);
+        if (player == null) return true;
+        if (!Commands.requireAdmin(player)) return true;
 
         if (args.length == 0) {
-            player.sendMessage(org.bukkit.ChatColor.YELLOW + "Use: /md upgrades give|remove|count");
+            Commands.usage(player, "/md upgrades give|remove|count");
             return true;
         }
 
-        if (args[0].equalsIgnoreCase("count")) {
-            player.sendMessage(org.bukkit.ChatColor.GRAY + "Upgrade stations: " + org.bukkit.ChatColor.WHITE + stations.getStations().size());
-            return true;
-        }
-
-        if (args[0].equalsIgnoreCase("give")) {
-            me.pattrick.marbledrop.SilentGive.give(plugin, player, StationItems.create(plugin, StationType.UPGRADE_STATION));
-            player.sendMessage(org.bukkit.ChatColor.GREEN + "Gave you an Upgrade Station -- place it to create a station.");
-            return true;
-        }
-
-        if (args[0].equalsIgnoreCase("remove")) {
-            org.bukkit.block.Block target = player.getTargetBlockExact(6);
-            if (target == null) {
-                player.sendMessage(org.bukkit.ChatColor.RED + "Look at the station (within 6 blocks).");
-                return true;
+        String sub = args[0].toLowerCase();
+        switch (sub) {
+            case "count" -> {
+                return StationCommands.count(player, "Upgrade stations", stations.count());
             }
 
-            boolean ok = stations.removeStation(target.getLocation());
-            player.sendMessage(ok
-                    ? (org.bukkit.ChatColor.GREEN + "Removed Upgrade Station registration.")
-                    : (org.bukkit.ChatColor.YELLOW + "This is not a registered Upgrade Station."));
-            return true;
-        }
+            case "give" -> {
+                return StationCommands.give(plugin, player, StationType.UPGRADE_STATION);
+            }
 
-        player.sendMessage(org.bukkit.ChatColor.YELLOW + "Use: /md upgrades give|remove|count");
-        return true;
+            case "remove" -> {
+                return StationCommands.remove(player, StationType.UPGRADE_STATION,
+                        stations::removeStation,
+                        ambient != null ? ambient::removeStation : null);
+            }
+
+            default -> {
+                Commands.usage(player, "/md upgrades give|remove|count");
+                return true;
+            }
+        }
     }
 }

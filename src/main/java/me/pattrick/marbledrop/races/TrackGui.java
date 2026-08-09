@@ -86,9 +86,9 @@ public final class TrackGui {
         inv.setItem(10, item(Material.LIME_WOOL, ChatColor.GREEN + "Add Point (Here)",
                 List.of(ChatColor.GRAY + "Adds your current location as the next waypoint")));
 
-        inv.setItem(11, item(Material.BLAZE_ROD, ChatColor.GOLD + "Get Point Tool",
-                List.of(ChatColor.GRAY + "Right-click anywhere to add points",
-                        ChatColor.DARK_GRAY + "(Tool is bound to this track)")));
+        inv.setItem(11, item(Material.BLAZE_ROD, ChatColor.GOLD + "Get Build Kit",
+                List.of(ChatColor.GRAY + "Point Tool, Undo, Preview, Watch, Finish",
+                        ChatColor.DARK_GRAY + "(Tools are bound to this track)")));
 
         inv.setItem(12, item(Material.YELLOW_WOOL, ChatColor.YELLOW + "Undo Last Point",
                 List.of(ChatColor.GRAY + "Removes the last waypoint")));

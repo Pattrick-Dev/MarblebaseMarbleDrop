@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.tutorial;
 
+import me.pattrick.marbledrop.command.Commands;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -18,6 +19,10 @@ import org.bukkit.entity.Player;
  *   /md tutorial setrace <trackId>
  *   /md tutorial setpost
  *   /md tutorial setcraftframes
+ * <p>
+ * start/status are open to everyone; every other subcommand requires
+ * marbledrop.admin, checked individually in each case below rather than
+ * once up front, since start/status need to stay reachable without it.
  */
 public final class TutorialCommand implements CommandExecutor {
 
@@ -33,130 +38,142 @@ public final class TutorialCommand implements CommandExecutor {
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 
         if (args.length == 0) {
-            sender.sendMessage(ChatColor.RED + "Usage: /md tutorial <start|status|reset|skip> [player]");
+            Commands.usage(sender, "/md tutorial <start|status|reset|skip|setlocation|clearlocation|setrace|setpost|setcraftframes> [player|step|trackId]");
             return true;
         }
 
         String sub = args[0].toLowerCase();
 
-        if (sub.equals("start")) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage(ChatColor.RED + "Run this in-game.");
+        switch (sub) {
+
+            case "start" -> {
+                Player player = Commands.player(sender);
+                if (player == null) return true;
+
+                if (tutorialManager.hasCompleted(player)) {
+                    player.sendMessage(ChatColor.YELLOW + "You've already completed the tutorial.");
+                    return true;
+                }
+                if (tutorialManager.isActive(player)) {
+                    tutorialManager.resume(player); // already started (e.g. from a previous session) -- just re-show the current step
+                    return true;
+                }
+                tutorialManager.start(player);
                 return true;
             }
-            if (tutorialManager.hasCompleted(player)) {
-                player.sendMessage(ChatColor.YELLOW + "You've already completed the tutorial.");
+
+            case "status" -> {
+                Player target = resolveTarget(sender, args, 1);
+                if (target == null) return true;
+
+                boolean done = tutorialManager.hasCompleted(target);
+                boolean active = tutorialManager.isActive(target);
+                sender.sendMessage(ChatColor.GOLD + target.getName() + "'s tutorial: " +
+                        (done ? ChatColor.GREEN + "complete"
+                                : active ? ChatColor.YELLOW + "in progress (" + tutorialManager.getStep(target).title() + ")"
+                                : ChatColor.GRAY + "not started"));
                 return true;
             }
-            if (tutorialManager.isActive(player)) {
-                tutorialManager.resume(player); // already started (e.g. from a previous session) -- just re-show the current step
+
+            case "reset" -> {
+                if (!Commands.requireAdmin(sender)) return true;
+                Player target = resolveTarget(sender, args, 1);
+                if (target == null) return true;
+                tutorialManager.reset(target);
+                sender.sendMessage(ChatColor.GREEN + "Reset the tutorial for " + target.getName() +
+                        ". They'll need to run /md tutorial start again.");
                 return true;
             }
-            tutorialManager.start(player);
-            return true;
+
+            case "skip" -> {
+                if (!Commands.requireAdmin(sender)) return true;
+                Player target = resolveTarget(sender, args, 1);
+                if (target == null) return true;
+                tutorialManager.skip(target);
+                sender.sendMessage(ChatColor.GREEN + "Skipped the tutorial for " + target.getName() + ".");
+                return true;
+            }
+
+            case "setlocation" -> {
+                if (!Commands.requireAdmin(sender)) return true;
+                Player admin = Commands.player(sender);
+                if (admin == null) {
+                    sender.sendMessage(ChatColor.GRAY + "Run this in-game, standing where you want the checkpoint.");
+                    return true;
+                }
+
+                if (args.length < 2) {
+                    Commands.usage(admin, "/md tutorial setlocation <step>");
+                    admin.sendMessage(ChatColor.GRAY + "Steps: " + stepNameList());
+                    return true;
+                }
+                TutorialStep step = parseStep(args[1]);
+                if (step == null) {
+                    admin.sendMessage(ChatColor.RED + "Unknown step. Valid steps: " + stepNameList());
+                    return true;
+                }
+                tutorialManager.locations().set(step, admin.getLocation());
+                admin.sendMessage(ChatColor.GREEN + "Checkpoint for " + step.title() + " set to your current location.");
+                return true;
+            }
+
+            case "clearlocation" -> {
+                if (!Commands.requireAdmin(sender)) return true;
+                if (args.length < 2) {
+                    Commands.usage(sender, "/md tutorial clearlocation <step>");
+                    return true;
+                }
+                TutorialStep step = parseStep(args[1]);
+                if (step == null) {
+                    sender.sendMessage(ChatColor.RED + "Unknown step. Valid steps: " + stepNameList());
+                    return true;
+                }
+                tutorialManager.locations().clear(step);
+                sender.sendMessage(ChatColor.GREEN + "Cleared checkpoint for " + step.title() + ".");
+                return true;
+            }
+
+            case "setrace" -> {
+                if (!Commands.requireAdmin(sender)) return true;
+                if (args.length < 2) {
+                    Commands.usage(sender, "/md tutorial setrace <trackId>");
+                    return true;
+                }
+                tutorialManager.locations().setRaceTrackId(args[1].toLowerCase());
+                sender.sendMessage(ChatColor.GREEN + "Tutorial race track set to '" + args[1].toLowerCase() + "'.");
+                return true;
+            }
+
+            case "setpost" -> {
+                if (!Commands.requireAdmin(sender)) return true;
+                Player admin = Commands.player(sender);
+                if (admin == null) {
+                    sender.sendMessage(ChatColor.GRAY + "Run this in-game, standing where you want players sent after finishing.");
+                    return true;
+                }
+
+                tutorialManager.locations().setPostTutorialLocation(admin.getLocation());
+                admin.sendMessage(ChatColor.GREEN + "Post-tutorial area set to your current location.");
+                return true;
+            }
+
+            case "setcraftframes" -> {
+                if (!Commands.requireAdmin(sender)) return true;
+                Player admin = Commands.player(sender);
+                if (admin == null) {
+                    sender.sendMessage(ChatColor.GRAY + "Run this in-game with a WorldEdit/FAWE selection around the 9 item frames.");
+                    return true;
+                }
+
+                craftFrames.setupFromSelection(admin);
+                return true;
+            }
+
+            default -> {
+                Commands.usage(sender, "/md tutorial <start|status|reset|skip|setlocation|clearlocation|setrace|setpost|setcraftframes> [player|step|trackId]");
+                return true;
+            }
         }
-
-        if (sub.equals("status")) {
-            Player target = resolveTarget(sender, args, 1);
-            if (target == null) return true;
-
-            boolean done = tutorialManager.hasCompleted(target);
-            boolean active = tutorialManager.isActive(target);
-            sender.sendMessage(ChatColor.GOLD + target.getName() + "'s tutorial: " +
-                    (done ? ChatColor.GREEN + "complete"
-                            : active ? ChatColor.YELLOW + "in progress (" + tutorialManager.getStep(target).title() + ")"
-                            : ChatColor.GRAY + "not started"));
-            return true;
-        }
-
-        if (!sender.hasPermission("marbledrop.admin")) {
-            sender.sendMessage(ChatColor.RED + "You don't have permission.");
-            return true;
-        }
-
-        if (sub.equals("reset")) {
-            Player target = resolveTarget(sender, args, 1);
-            if (target == null) return true;
-            tutorialManager.reset(target);
-            sender.sendMessage(ChatColor.GREEN + "Reset the tutorial for " + target.getName() +
-                    ". They'll need to run /md tutorial start again.");
-            return true;
-        }
-
-        if (sub.equals("skip")) {
-            Player target = resolveTarget(sender, args, 1);
-            if (target == null) return true;
-            tutorialManager.skip(target);
-            sender.sendMessage(ChatColor.GREEN + "Skipped the tutorial for " + target.getName() + ".");
-            return true;
-        }
-
-        if (sub.equals("setlocation")) {
-            if (!(sender instanceof Player admin)) {
-                sender.sendMessage(ChatColor.RED + "Run this in-game, standing where you want the checkpoint.");
-                return true;
-            }
-            if (args.length < 2) {
-                sender.sendMessage(ChatColor.RED + "Usage: /md tutorial setlocation <step>");
-                sender.sendMessage(ChatColor.GRAY + "Steps: " + stepNameList());
-                return true;
-            }
-            TutorialStep step = parseStep(args[1]);
-            if (step == null) {
-                sender.sendMessage(ChatColor.RED + "Unknown step. Valid steps: " + stepNameList());
-                return true;
-            }
-            tutorialManager.locations().set(step, admin.getLocation());
-            sender.sendMessage(ChatColor.GREEN + "Checkpoint for " + step.title() + " set to your current location.");
-            return true;
-        }
-
-        if (sub.equals("clearlocation")) {
-            if (args.length < 2) {
-                sender.sendMessage(ChatColor.RED + "Usage: /md tutorial clearlocation <step>");
-                return true;
-            }
-            TutorialStep step = parseStep(args[1]);
-            if (step == null) {
-                sender.sendMessage(ChatColor.RED + "Unknown step. Valid steps: " + stepNameList());
-                return true;
-            }
-            tutorialManager.locations().clear(step);
-            sender.sendMessage(ChatColor.GREEN + "Cleared checkpoint for " + step.title() + ".");
-            return true;
-        }
-
-        if (sub.equals("setrace")) {
-            if (args.length < 2) {
-                sender.sendMessage(ChatColor.RED + "Usage: /md tutorial setrace <trackId>");
-                return true;
-            }
-            tutorialManager.locations().setRaceTrackId(args[1].toLowerCase());
-            sender.sendMessage(ChatColor.GREEN + "Tutorial race track set to '" + args[1].toLowerCase() + "'.");
-            return true;
-        }
-
-        if (sub.equals("setpost")) {
-            if (!(sender instanceof Player admin)) {
-                sender.sendMessage(ChatColor.RED + "Run this in-game, standing where you want players sent after finishing.");
-                return true;
-            }
-            tutorialManager.locations().setPostTutorialLocation(admin.getLocation());
-            sender.sendMessage(ChatColor.GREEN + "Post-tutorial area set to your current location.");
-            return true;
-        }
-
-        if (sub.equals("setcraftframes")) {
-            if (!(sender instanceof Player admin)) {
-                sender.sendMessage(ChatColor.RED + "Run this in-game with a WorldEdit/FAWE selection around the 9 item frames.");
-                return true;
-            }
-            craftFrames.setupFromSelection(admin);
-            return true;
-        }
-
-        sender.sendMessage(ChatColor.RED + "Usage: /md tutorial <start|status|reset|skip|setlocation|clearlocation|setrace|setpost|setcraftframes> [player|step|trackId]");
-        return true;
     }
 
     private TutorialStep parseStep(String raw) {

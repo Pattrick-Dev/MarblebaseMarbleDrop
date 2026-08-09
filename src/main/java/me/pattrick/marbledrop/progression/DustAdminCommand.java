@@ -1,7 +1,6 @@
 package me.pattrick.marbledrop.progression;
 
-import me.pattrick.marbledrop.progression.DustManager;
-import org.bukkit.Bukkit;
+import me.pattrick.marbledrop.command.Commands;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -18,38 +17,25 @@ public final class DustAdminCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-
-        if (!sender.hasPermission("marbledrop.admin")) {
-            sender.sendMessage(ChatColor.RED + "No permission.");
-            return true;
-        }
+        if (!Commands.requireAdmin(sender)) return true;
 
         if (args.length != 3) {
-            sender.sendMessage(ChatColor.YELLOW + "Use: /dustadmin <give|remove|set> <player> <amount>");
+            Commands.usage(sender, "/md dust admin <give|remove|set> <player> <amount>");
             return true;
         }
 
         String action = args[0].toLowerCase();
-        String targetName = args[1];
 
-        int amount;
-        try {
-            amount = Integer.parseInt(args[2]);
-        } catch (NumberFormatException ex) {
-            sender.sendMessage(ChatColor.RED + "Amount must be a whole number.");
-            return true;
-        }
+        Integer amount = Commands.intArg(sender, args[2], "Amount");
+        if (amount == null) return true;
 
         if (amount < 0) {
             sender.sendMessage(ChatColor.RED + "Amount must be 0 or more.");
             return true;
         }
 
-        Player target = Bukkit.getPlayerExact(targetName);
-        if (target == null) {
-            sender.sendMessage(ChatColor.RED + "Player not found (must be online): " + ChatColor.YELLOW + targetName);
-            return true;
-        }
+        Player target = Commands.online(sender, args[1]);
+        if (target == null) return true;
 
         int before = dust.getDust(target);
 
@@ -70,7 +56,8 @@ public final class DustAdminCommand implements CommandExecutor {
                 return true;
             }
 
-            case "remove" -> {
+            // "take" is an alias for "remove" -- DustManager's own method is takeDust().
+            case "remove", "take" -> {
                 if (amount == 0) {
                     sender.sendMessage(ChatColor.GRAY + "No change (amount was 0).");
                     return true;
@@ -94,7 +81,7 @@ public final class DustAdminCommand implements CommandExecutor {
             }
 
             case "set" -> {
-                // We don’t assume a setDust() method exists.
+                // We don't assume a setDust() method exists.
                 // Implement set by adding/removing the difference.
                 int desired = amount;
 
@@ -107,7 +94,7 @@ public final class DustAdminCommand implements CommandExecutor {
                     dust.addDust(target, desired - before);
                 } else {
                     int toRemove = before - desired;
-                    dust.takeDust(target, toRemove); // should succeed because we’re removing exactly the difference
+                    dust.takeDust(target, toRemove); // should succeed because we're removing exactly the difference
                 }
 
                 int after = dust.getDust(target);
@@ -119,7 +106,7 @@ public final class DustAdminCommand implements CommandExecutor {
             }
 
             default -> {
-                sender.sendMessage(ChatColor.YELLOW + "Use: /dustadmin <give|remove|set> <player> <amount>");
+                Commands.usage(sender, "/md dust admin <give|remove|set> <player> <amount>");
                 return true;
             }
         }

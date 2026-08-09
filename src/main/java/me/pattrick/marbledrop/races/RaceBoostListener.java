@@ -7,6 +7,8 @@ import com.comphenix.protocol.events.ListenerPriority;
 import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.wrappers.EnumWrappers;
+import me.pattrick.marbledrop.progression.TaskManager;
+import me.pattrick.marbledrop.progression.TaskTrigger;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -57,11 +59,13 @@ public final class RaceBoostListener implements Listener {
     private final Plugin plugin;
     private final RaceManager raceManager;
     private final RaceInventoryOverlay overlay;
+    private final TaskManager taskManager;
 
-    public RaceBoostListener(Plugin plugin, RaceManager raceManager, RaceInventoryOverlay overlay) {
+    public RaceBoostListener(Plugin plugin, RaceManager raceManager, RaceInventoryOverlay overlay, TaskManager taskManager) {
         this.plugin = plugin;
         this.raceManager = raceManager;
         this.overlay = overlay;
+        this.taskManager = taskManager;
 
         if (Bukkit.getPluginManager().isPluginEnabled("ProtocolLib")) {
             registerPacketListener();
@@ -121,6 +125,7 @@ public final class RaceBoostListener implements Listener {
         runner.triggerBoost();
         remaining--;
         raceManager.setBoostCharges(player.getUniqueId(), remaining);
+        if (taskManager != null) taskManager.increment(player, TaskTrigger.USE_BOOST, 1);
 
         int heldSlot = player.getInventory().getHeldItemSlot();
         if (overlay != null) {

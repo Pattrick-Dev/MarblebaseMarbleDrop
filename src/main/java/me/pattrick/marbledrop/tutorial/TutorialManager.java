@@ -43,6 +43,7 @@ public final class TutorialManager {
     private final MdConfig config;
     private final TutorialLocationStore locationStore;
     private final TutorialCraftFrameManager craftFrames;
+    private final TutorialTabListPrivacy tabPrivacy;
 
     private final NamespacedKey K_ACTIVE;
     private final NamespacedKey K_STEP;
@@ -69,12 +70,13 @@ public final class TutorialManager {
     };
 
     public TutorialManager(Plugin plugin, DustManager dustManager, MdConfig config, TutorialLocationStore locationStore,
-                            TutorialCraftFrameManager craftFrames) {
+                            TutorialCraftFrameManager craftFrames, TutorialTabListPrivacy tabPrivacy) {
         this.plugin = plugin;
         this.dustManager = dustManager;
         this.config = config;
         this.locationStore = locationStore;
         this.craftFrames = craftFrames;
+        this.tabPrivacy = tabPrivacy;
         this.K_ACTIVE = new NamespacedKey(plugin, "tutorial_active");
         this.K_STEP = new NamespacedKey(plugin, "tutorial_step");
         this.K_DONE = new NamespacedKey(plugin, "tutorial_done");
@@ -82,6 +84,11 @@ public final class TutorialManager {
 
     public TutorialLocationStore locations() {
         return locationStore;
+    }
+
+    /** Nullable -- see TutorialTabListPrivacy#createIfAvailable. Used by TutorialListener's own join-time visibility sync. */
+    TutorialTabListPrivacy tabPrivacy() {
+        return tabPrivacy;
     }
 
     // ---------------- State queries ----------------
@@ -126,7 +133,7 @@ public final class TutorialManager {
     public void start(Player player) {
         setActive(player, true);
         setStep(player, TutorialStep.TASKS);
-        TutorialVisibility.enter(plugin, player);
+        TutorialVisibility.enter(plugin, player, tabPrivacy);
         enterStep(player, TutorialStep.TASKS);
     }
 
@@ -202,7 +209,7 @@ public final class TutorialManager {
         craftIngredientsGivenStage.remove(player.getUniqueId());
         craftFrames.clearForPlayer(player);
         removeBossBar(player);
-        TutorialVisibility.exit(plugin, player, this);
+        TutorialVisibility.exit(plugin, player, this, tabPrivacy);
 
         dustManager.addDust(player, TutorialStep.COMPLETE.rewardDust());
 
@@ -231,7 +238,7 @@ public final class TutorialManager {
         player.getPersistentDataContainer().remove(K_DONE);
         setActive(player, false);
         setStep(player, TutorialStep.TASKS);
-        if (wasActive) TutorialVisibility.exit(plugin, player, this);
+        if (wasActive) TutorialVisibility.exit(plugin, player, this, tabPrivacy);
     }
 
     public void skip(Player player) {
@@ -244,7 +251,7 @@ public final class TutorialManager {
         craftFrames.clearForPlayer(player);
         setActive(player, false);
         player.getPersistentDataContainer().set(K_DONE, PersistentDataType.BYTE, (byte) 1);
-        if (wasActive) TutorialVisibility.exit(plugin, player, this);
+        if (wasActive) TutorialVisibility.exit(plugin, player, this, tabPrivacy);
         player.sendMessage(ChatColor.GRAY + "Tutorial skipped by an admin.");
     }
 
@@ -404,6 +411,7 @@ public final class TutorialManager {
         BossBar bar = bossBars.remove(player.getUniqueId());
         if (bar != null) bar.removeAll();
         craftFrames.clearForPlayer(player);
+        if (tabPrivacy != null) tabPrivacy.clear(player);
         // NOTE: baselines are intentionally left in memory keyed by UUID --
         // they're harmless to keep and get overwritten if the player
         // re-enters that step later (e.g. after a relog mid-step).

@@ -8,6 +8,8 @@ import me.pattrick.marbledrop.progression.infusion.table.InfusionTableAmbient;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableCommand;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableListener;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableManager;
+import me.pattrick.marbledrop.progression.RecipesCommand;
+import me.pattrick.marbledrop.progression.RecipesMenuListener;
 import me.pattrick.marbledrop.feedback.FeedbackCommand;
 import me.pattrick.marbledrop.progression.taskmenu.TasksMenuListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeMenuListener;
@@ -30,6 +32,7 @@ import me.pattrick.marbledrop.tutorial.TutorialManager;
 import me.pattrick.marbledrop.tutorial.TutorialProgressPoller;
 import me.pattrick.marbledrop.tutorial.TutorialRaceService;
 import me.pattrick.marbledrop.tutorial.TutorialRecyclerHook;
+import me.pattrick.marbledrop.tutorial.TutorialTabListPrivacy;
 import me.pattrick.marbledrop.tutorial.TutorialTasksHandler;
 import me.pattrick.marbledrop.tutorial.TutorialUpgradeHook;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -107,6 +110,28 @@ public class Main extends JavaPlugin {
         ensureFile("race-watch.yml");
         ensureFile("race-pending-marbles.yml");
 
+        // -------------------- Progression system --------------------
+        // Moved ahead of Racing (below) so taskManager already exists by
+        // the time RaceManager/RaceBoostListener are constructed and can
+        // be wired in directly instead of needing a later setter pass.
+        DustManager dustManager = new DustManager(this);
+
+        TaskManager taskManager = new TaskManager(this, dustManager);
+
+        ProgressionListener progressionListener = new ProgressionListener(taskManager);
+        getServer().getPluginManager().registerEvents(progressionListener, this);
+
+        // -------------------- ProtocolLib-backed inventory overlay --------------------
+        // Checked once, early, since both track-building's kit tools below
+        // and the race Boost/Glow features further down key off the same
+        // RaceInventoryOverlay instance. Softdepend in plugin.yml, not a
+        // hard depend -- without it, track-building tools fall back to
+        // real inventory items and race Boost/Glow fall back to real
+        // inventory items too (with RaceWatchManager's own real
+        // clear-and-restore protecting those).
+        boolean protocolLibEnabled = getServer().getPluginManager().isPluginEnabled("ProtocolLib");
+        RaceInventoryOverlay inventoryOverlay = protocolLibEnabled ? new RaceInventoryOverlay(this) : null;
+
         // -------------------- Racing --------------------
         TrackManager trackManager = new TrackManager(this);
         trackVisualizer = new TrackVisualizer(this, trackManager);
@@ -114,17 +139,25 @@ public class Main extends JavaPlugin {
         raceEngine = new MarbleRaceEngine(this);
         raceEngine.start();
 
-        TrackCommand trackCommand = new TrackCommand(trackManager, trackVisualizer, raceEngine);
+        // Tracks who's building which track and, via inventoryOverlay,
+        // hides their real inventory behind fake kit-tool items for the
+        // duration -- see TrackCreationKit.giveKit()/TrackBuildToolsListener.
+        // The real inventory is never touched, so there's nothing to save
+        // or restore, on disk or otherwise.
+        TrackBuildInventoryManager trackBuildInventory = new TrackBuildInventoryManager(inventoryOverlay);
+        getServer().getPluginManager().registerEvents(trackBuildInventory, this);
+
+        TrackCommand trackCommand = new TrackCommand(trackManager, trackVisualizer, raceEngine, trackBuildInventory);
 
         // Track GUI listener
         getServer().getPluginManager().registerEvents(
-                new TrackGuiListener(this, trackManager, trackVisualizer),
+                new TrackGuiListener(this, trackManager, trackVisualizer, trackBuildInventory),
                 this
         );
 
-        // Point tool listener
+        // Build kit tools listener (point/undo/preview/watch/finish -- see TrackCreationKit)
         getServer().getPluginManager().registerEvents(
-                new TrackPointToolListener(this, trackManager),
+                new TrackBuildToolsListener(this, trackManager, trackVisualizer, trackBuildInventory),
                 this
         );
 
@@ -137,18 +170,14 @@ public class Main extends JavaPlugin {
 
         // Wire watch into race manager (auto-watch on start)
         raceManager.setWatchManager(raceWatchManager);
+        raceManager.setTaskManager(taskManager);
 
-        // ProtocolLib-backed features (see RaceGlowPrivacy/RaceInventoryOverlay)
-        // -- softdepend in plugin.yml, not a hard depend, so only build these
-        // if ProtocolLib actually loaded. Without it: glow is visible to
-        // everyone instead of just the toggler, and Boost/Glow fall back to
-        // real inventory items (with RaceWatchManager's original real
-        // clear-and-restore protecting them), same as before either existed.
+        // ProtocolLib-backed features (see RaceGlowPrivacy) -- glowPrivacy
+        // itself doesn't need to exist without ProtocolLib; inventoryOverlay
+        // was already constructed (or left null) above.
         RaceGlowPrivacy glowPrivacy = null;
-        RaceInventoryOverlay inventoryOverlay = null;
-        if (getServer().getPluginManager().isPluginEnabled("ProtocolLib")) {
+        if (protocolLibEnabled) {
             glowPrivacy = new RaceGlowPrivacy(this);
-            inventoryOverlay = new RaceInventoryOverlay(this);
             raceWatchManager.setInventoryOverlay(inventoryOverlay);
             raceManager.setInventoryOverlay(inventoryOverlay);
         } else {
@@ -158,7 +187,7 @@ public class Main extends JavaPlugin {
 
         // Boost/Glow item click handlers -- must run before RaceWatchManager's
         // own interact handler cancels everything while watching (see RaceBoostListener/RaceGlowListener).
-        getServer().getPluginManager().registerEvents(new RaceBoostListener(this, raceManager, inventoryOverlay), this);
+        getServer().getPluginManager().registerEvents(new RaceBoostListener(this, raceManager, inventoryOverlay, taskManager), this);
         getServer().getPluginManager().registerEvents(new RaceGlowListener(this, raceManager, glowPrivacy, inventoryOverlay), this);
 
         // Race GUI listener (click-to-join menu)
@@ -185,15 +214,6 @@ public class Main extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new TeamMenuListener(this, teamManager), this);
         TeamCommand teamCommand = new TeamCommand(teamManager);
 
-        // -------------------- Progression system --------------------
-        DustManager dustManager = new DustManager(this);
-        TaskManager taskManager = new TaskManager(this, dustManager);
-
-        getServer().getPluginManager().registerEvents(
-                new ProgressionListener(taskManager),
-                this
-        );
-
         // -------------------- Load heads pool --------------------
         HeadPool headPool = new HeadPool(this);
         headPool.load();
@@ -213,6 +233,7 @@ public class Main extends JavaPlugin {
 
         // -------------------- Infusion service --------------------
         InfusionService infusionService = new InfusionService(this, dustManager, headPool);
+        infusionService.setTaskManager(taskManager);
 
         // -------------------- Infusion tables --------------------
         InfusionTableManager tableManager = new InfusionTableManager(this);
@@ -236,16 +257,21 @@ public class Main extends JavaPlugin {
         MarbleRecyclerCommand marbleRecyclerCommand = new MarbleRecyclerCommand(this, recyclerManager, recyclerAmbient);
 
         getServer().getPluginManager().registerEvents(
-                new MarbleRecyclerListener(this, recyclerManager, dustManager),
+                new MarbleRecyclerListener(this, recyclerManager, dustManager, taskManager),
                 this
         );
 
         // -------------------- Upgrades --------------------
         UpgradeStationManager upgradeStations = new UpgradeStationManager(this);
-        UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(this, upgradeStations);
 
         upgradeAmbient = new UpgradeStationAmbient(this, upgradeStations);
         upgradeAmbient.start();
+
+        // Constructed after upgradeAmbient (not before, like it used to
+        // be) so /md upgrades remove can hand it the ambient cleanup
+        // callback -- same as MarbleRecyclerCommand/InfusionTableCommand
+        // already do for their own station types.
+        UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(this, upgradeStations, upgradeAmbient);
 
         getServer().getPluginManager().registerEvents(
                 new UpgradeStationListener(this, upgradeStations, dustManager),
@@ -279,7 +305,12 @@ public class Main extends JavaPlugin {
         craftFrameManager = new TutorialCraftFrameManager(this, craftFrameStore);
         craftFrameManager.start();
 
-        tutorialManager = new TutorialManager(this, dustManager, mdConfig, tutorialLocations, craftFrameManager);
+        // Nullable -- see TutorialTabListPrivacy#createIfAvailable. Without
+        // ProtocolLib, hiding a tutorial-taker from others just falls back
+        // to hideEntity's default behavior (their tab entry disappears too).
+        TutorialTabListPrivacy tabListPrivacy = TutorialTabListPrivacy.createIfAvailable(this);
+
+        tutorialManager = new TutorialManager(this, dustManager, mdConfig, tutorialLocations, craftFrameManager, tabListPrivacy);
 
         TutorialTasksHandler tutorialTasksHandler = new TutorialTasksHandler(this, tutorialManager);
         getServer().getPluginManager().registerEvents(tutorialTasksHandler, this);
@@ -322,12 +353,14 @@ public class Main extends JavaPlugin {
         // -------------------- Core listeners --------------------
         getServer().getPluginManager().registerEvents(new ListenEvents(), this);
         getServer().getPluginManager().registerEvents(new TasksMenuListener(this, taskManager), this);
+        getServer().getPluginManager().registerEvents(new RecipesMenuListener(this), this);
 
         // -------------------- Commands --------------------
-        DustCommand dustCommand = new DustCommand(dustManager, infusionService);
+        DustCommand dustCommand = new DustCommand(dustManager);
         TasksCommand tasksCommand = new TasksCommand(this, taskManager);
         TasksAdminCommand tasksAdminCommand = new TasksAdminCommand(taskManager);
         DustAdminCommand dustAdminCommand = new DustAdminCommand(dustManager);
+        RecipesCommand recipesCommand = new RecipesCommand(this);
 
         // -------------------- Register ONLY /md (router) --------------------
         CommandKit md = new CommandKit(
@@ -343,7 +376,8 @@ public class Main extends JavaPlugin {
                 trackCommand,
                 raceCommand,
                 teamCommand,
-                tutorialCommand
+                tutorialCommand,
+                recipesCommand
         );
 
         CommandKitTabCompletion mdTabCompletion = new CommandKitTabCompletion(trackManager);
@@ -360,6 +394,13 @@ public class Main extends JavaPlugin {
             getCommand("tasks").setTabCompleter(mdTabCompletion);
         } else {
             getLogger().severe("Command 'tasks' is not defined in plugin.yml!");
+        }
+
+        if (getCommand("recipes") != null) {
+            getCommand("recipes").setExecutor(md);
+            getCommand("recipes").setTabCompleter(mdTabCompletion);
+        } else {
+            getLogger().severe("Command 'recipes' is not defined in plugin.yml!");
         }
 
         // -------------------- Feedback --------------------

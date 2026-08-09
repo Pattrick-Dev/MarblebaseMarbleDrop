@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.races;
 
+import me.pattrick.marbledrop.command.Commands;
 import me.pattrick.marbledrop.marble.MarbleStats;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -9,36 +10,31 @@ import org.bukkit.entity.Player;
 
 public final class TrackCommand implements CommandExecutor {
 
-    private static final String PERM = "marbledrop.admin";
-
     private final TrackManager tracks;
     private final MarbleRaceEngine raceEngine;
     private final TrackVisualizer visualizer;
+    private final TrackBuildInventoryManager buildInventory;
 
     public TrackCommand(
             TrackManager tracks,
             TrackVisualizer visualizer,
-            MarbleRaceEngine raceEngine
+            MarbleRaceEngine raceEngine,
+            TrackBuildInventoryManager buildInventory
     ) {
         this.tracks = tracks;
         this.visualizer = visualizer;
         this.raceEngine = raceEngine;
+        this.buildInventory = buildInventory;
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage("Please run this command as a player!");
-            return true;
-        }
+        Player player = Commands.player(sender);
+        if (player == null) return true;
+        if (!Commands.requireAdmin(player)) return true;
 
-        if (!player.hasPermission(PERM)) {
-            player.sendMessage(ChatColor.RED + "You don't have permission.");
-            return true;
-        }
-
-        // ✅ GUI-first
+        // GUI-first
         if (args.length == 0 || args[0].equalsIgnoreCase("gui") || args[0].equalsIgnoreCase("menu")) {
             TrackGui.openList(player, tracks, 0);
             return true;
@@ -51,7 +47,7 @@ public final class TrackCommand implements CommandExecutor {
 
             case "create" -> {
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md track create <id>");
+                    Commands.usage(player, "/md track create <id>");
                     return true;
                 }
 
@@ -63,11 +59,15 @@ public final class TrackCommand implements CommandExecutor {
                 }
 
                 player.sendMessage(ChatColor.GREEN + "Created track '" + id + "'.");
+                TrackCreationKit.giveKit(buildInventory, visualizer, player, id);
+                player.sendMessage(ChatColor.GRAY + "Build kit given -- right-click to place points, undo, "
+                        + "preview, set the watch spot, or finish.");
+                return true;
             }
 
             case "addpoint" -> {
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md track addpoint <id>");
+                    Commands.usage(player, "/md track addpoint <id>");
                     return true;
                 }
 
@@ -80,11 +80,12 @@ public final class TrackCommand implements CommandExecutor {
 
                 int count = tracks.getTrack(id).size();
                 player.sendMessage(ChatColor.GREEN + "Added point #" + count + " to '" + id + "'.");
+                return true;
             }
 
             case "setwatch" -> {
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md track setwatch <id>");
+                    Commands.usage(player, "/md track setwatch <id>");
                     return true;
                 }
                 String id = args[1].toLowerCase();
@@ -93,11 +94,12 @@ public final class TrackCommand implements CommandExecutor {
                     return true;
                 }
                 player.sendMessage(ChatColor.LIGHT_PURPLE + "Set watch spot for '" + id + "'.");
+                return true;
             }
 
             case "clearwatch" -> {
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md track clearwatch <id>");
+                    Commands.usage(player, "/md track clearwatch <id>");
                     return true;
                 }
                 String id = args[1].toLowerCase();
@@ -106,11 +108,12 @@ public final class TrackCommand implements CommandExecutor {
                     return true;
                 }
                 player.sendMessage(ChatColor.YELLOW + "Cleared watch spot for '" + id + "'.");
+                return true;
             }
 
             case "info" -> {
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md track info <id>");
+                    Commands.usage(player, "/md track info <id>");
                     return true;
                 }
 
@@ -128,11 +131,12 @@ public final class TrackCommand implements CommandExecutor {
                 player.sendMessage(ChatColor.GRAY + "Laps: " + track.getLaps());
                 player.sendMessage(ChatColor.GRAY + "Auto-race queue: " + (track.isAutoRaceEligible() ? ChatColor.GREEN + "yes" : ChatColor.RED + "no"));
                 player.sendMessage(ChatColor.GRAY + "Watch: " + (track.getWatchLocation() != null ? ChatColor.GREEN + "set" : ChatColor.RED + "not set"));
+                return true;
             }
 
             case "laps" -> {
                 if (args.length < 3) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md track laps <id> <count>");
+                    Commands.usage(player, "/md track laps <id> <count>");
                     return true;
                 }
                 String id = args[1].toLowerCase();
@@ -141,21 +145,18 @@ public final class TrackCommand implements CommandExecutor {
                     player.sendMessage(ChatColor.RED + "Track not found.");
                     return true;
                 }
-                int laps;
-                try {
-                    laps = Integer.parseInt(args[2]);
-                } catch (NumberFormatException ex) {
-                    player.sendMessage(ChatColor.RED + "Laps must be a number.");
-                    return true;
-                }
+                Integer laps = Commands.intArg(player, args[2], "Laps");
+                if (laps == null) return true;
+
                 track.setLaps(laps);
                 tracks.saveNow();
                 player.sendMessage(ChatColor.GREEN + "Set '" + id + "' to " + track.getLaps() + " lap(s).");
+                return true;
             }
 
             case "autorace" -> {
                 if (args.length < 3) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md track autorace <id> on|off");
+                    Commands.usage(player, "/md track autorace <id> on|off");
                     return true;
                 }
                 String id = args[1].toLowerCase();
@@ -167,7 +168,7 @@ public final class TrackCommand implements CommandExecutor {
                 boolean on = args[2].equalsIgnoreCase("on");
                 boolean off = args[2].equalsIgnoreCase("off");
                 if (!on && !off) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md track autorace <id> on|off");
+                    Commands.usage(player, "/md track autorace <id> on|off");
                     return true;
                 }
                 track.setAutoRaceEligible(on);
@@ -175,11 +176,12 @@ public final class TrackCommand implements CommandExecutor {
                 player.sendMessage(on
                         ? ChatColor.GREEN + "'" + id + "' added to the scheduled race queue."
                         : ChatColor.YELLOW + "'" + id + "' removed from the scheduled race queue.");
+                return true;
             }
 
             case "delete" -> {
                 if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /md track delete <id>");
+                    Commands.usage(player, "/md track delete <id>");
                     return true;
                 }
 
@@ -191,21 +193,26 @@ public final class TrackCommand implements CommandExecutor {
                 }
 
                 player.sendMessage(ChatColor.GREEN + "Deleted track '" + id + "'.");
+                return true;
             }
 
             case "show" -> {
                 if (args.length < 2) {
-                    player.sendMessage("§cUsage: /md track show <id>");
+                    Commands.usage(player, "/md track show <id>");
                     return true;
                 }
                 visualizer.show(player, args[1].toLowerCase());
+                return true;
             }
 
-            case "hide" -> visualizer.hide(player);
+            case "hide" -> {
+                visualizer.hide(player);
+                return true;
+            }
 
             case "run" -> {
                 if (args.length < 2) {
-                    player.sendMessage("§cUsage: /md track run <id>");
+                    Commands.usage(player, "/md track run <id>");
                     return true;
                 }
 
@@ -213,7 +220,7 @@ public final class TrackCommand implements CommandExecutor {
                 MarbleTrack track = tracks.getTrack(id);
 
                 if (track == null || track.size() < 2) {
-                    player.sendMessage("§cTrack not found or not enough points.");
+                    player.sendMessage(ChatColor.RED + "Track not found or not enough points.");
                     return true;
                 }
 
@@ -221,15 +228,15 @@ public final class TrackCommand implements CommandExecutor {
                         new MarbleStats(50, 50, 50, 50, 50), track.getLaps(), null);
                 raceEngine.addRunner(runner);
 
-                player.sendMessage("§aMarble started on track §e" + id);
+                player.sendMessage(ChatColor.GREEN + "Marble started on track " + ChatColor.YELLOW + id);
+                return true;
             }
 
             default -> {
                 player.sendMessage(ChatColor.YELLOW + "Use /md track to open the admin track GUI.");
                 player.sendMessage(ChatColor.GRAY + "Or: create/addpoint/info/delete/show/hide/run/setwatch/clearwatch/laps/autorace");
+                return true;
             }
         }
-
-        return true;
     }
 }

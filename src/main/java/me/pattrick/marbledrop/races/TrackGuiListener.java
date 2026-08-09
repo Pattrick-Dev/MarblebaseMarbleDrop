@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.races;
 
+import me.pattrick.marbledrop.command.Commands;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -17,20 +18,34 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Every GUI here (list/editor/points) is entirely admin-only track
+ * editing (create/delete tracks, add/remove points, set watch spots).
+ * TrackCommand already requires marbledrop.admin before ever opening the
+ * list in the first place, so today this can only be reached by an
+ * admin -- but onClick() re-checks it anyway, the same defense-in-depth
+ * RaceSignListener already uses for its own admin-only sign actions.
+ * Without it, ANY other code path that ever opened an inventory sharing
+ * one of these title prefixes would hand a non-admin full track-editing
+ * power with no further gate in between.
+ */
 public final class TrackGuiListener implements Listener {
 
     private final Plugin plugin;
     private final TrackManager tracks;
     private final TrackVisualizer visualizer;
+    private final TrackBuildInventoryManager buildInventory;
 
     private final Map<UUID, Boolean> awaitingNewId = new HashMap<>();
 
     private static final Pattern PAGE_PATTERN = Pattern.compile("Page\\s+(\\d+)\\s*/\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
 
-    public TrackGuiListener(Plugin plugin, TrackManager tracks, TrackVisualizer visualizer) {
+    public TrackGuiListener(Plugin plugin, TrackManager tracks, TrackVisualizer visualizer,
+                             TrackBuildInventoryManager buildInventory) {
         this.plugin = plugin;
         this.tracks = tracks;
         this.visualizer = visualizer;
+        this.buildInventory = buildInventory;
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -39,6 +54,16 @@ public final class TrackGuiListener implements Listener {
 
         InventoryView view = e.getView();
         String title = view.getTitle();
+
+        boolean isTrackGui = title.startsWith(TrackGui.LIST_TITLE_PREFIX)
+                || title.startsWith(TrackGui.EDIT_TITLE_PREFIX)
+                || title.startsWith(TrackGui.POINTS_TITLE_PREFIX);
+
+        if (isTrackGui && !Commands.requireAdmin(p)) {
+            e.setCancelled(true);
+            p.closeInventory();
+            return;
+        }
 
         // Track list
         if (title.startsWith(TrackGui.LIST_TITLE_PREFIX)) {
@@ -112,9 +137,9 @@ public final class TrackGuiListener implements Listener {
                     TrackGui.openEditor(p, tracks, id, visualizer);
                 }
                 case 11 -> {
-                    // Give the point tool bound to this track
-                    TrackPointToolListener.giveTool(plugin, p, id);
-                    p.sendMessage(ChatColor.GOLD + "Point Tool given for track '" + id + "'.");
+                    // Give the full build kit bound to this track (point tool + undo/preview/watch/finish)
+                    TrackCreationKit.giveKit(buildInventory, visualizer, p, id);
+                    p.sendMessage(ChatColor.GOLD + "Build kit given for track '" + id + "'.");
                 }
                 case 12 -> {
                     if (!tracks.undoLast(id)) p.sendMessage(ChatColor.RED + "No points to undo.");
@@ -262,7 +287,9 @@ public final class TrackGuiListener implements Listener {
             }
 
             p.sendMessage(ChatColor.GREEN + "Created track '" + trackId + "'.");
-            TrackGui.openEditor(p, tracks, trackId, visualizer);
+            TrackCreationKit.giveKit(buildInventory, visualizer, p, trackId);
+            p.sendMessage(ChatColor.GRAY + "Build kit given -- right-click to place points, undo, "
+                    + "preview, set the watch spot, or finish.");
         });
     }
 

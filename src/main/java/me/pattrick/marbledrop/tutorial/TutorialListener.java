@@ -51,7 +51,7 @@ public final class TutorialListener implements Listener {
         // never-started player still needs to be hidden from/to anyone
         // ELSE who's currently active, and a fresh connection doesn't
         // inherit any prior hidden/shown state either way.
-        TutorialVisibility.syncOnJoin(plugin, player, tutorialManager);
+        TutorialVisibility.syncOnJoin(plugin, player, tutorialManager, tutorialManager.tabPrivacy());
 
         if (tutorialManager.hasCompleted(player)) return;
 

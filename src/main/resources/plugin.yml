@@ -10,12 +10,18 @@ commands:
    tasks:
       description: View and manage your daily/weekly tasks
       usage: /tasks
+   recipes:
+      description: View every station's crafting recipe
+      usage: /recipes
    feedback:
       description: Send feedback about the server
       usage: /feedback <message>
 
 permissions:
    marbledrop.admin:
+      default: op
+   marbledrop.debug:
+      description: Toggle debug mode and use debug-only tools (e.g. /md race test)
       default: op
    marbledrop.infusion.bypass:
       description: Bypass daily infusion limits

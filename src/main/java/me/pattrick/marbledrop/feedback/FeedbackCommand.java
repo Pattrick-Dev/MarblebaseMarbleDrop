@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.feedback;
 
+import me.pattrick.marbledrop.command.Commands;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -46,19 +47,17 @@ public final class FeedbackCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "Only players can submit feedback in-game.");
-            return true;
-        }
+        Player player = Commands.player(sender);
+        if (player == null) return true;
 
         if (args.length == 0) {
-            sender.sendMessage(ChatColor.RED + "Usage: /feedback <your message>");
+            Commands.usage(player, "/feedback <your message>");
             return true;
         }
 
         String message = String.join(" ", args).trim();
         if (message.isEmpty()) {
-            sender.sendMessage(ChatColor.RED + "Usage: /feedback <your message>");
+            Commands.usage(player, "/feedback <your message>");
             return true;
         }
         if (message.length() > 1000) {
