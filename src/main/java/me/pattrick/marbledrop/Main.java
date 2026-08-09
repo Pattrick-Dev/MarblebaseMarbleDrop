@@ -1,6 +1,10 @@
 package me.pattrick.marbledrop;
 
 import me.pattrick.marbledrop.marble.MarbleKeys;
+import me.pattrick.marbledrop.marble.MarblePlacementListener;
+import me.pattrick.marbledrop.marble.PlacedMarbleManager;
+import me.pattrick.marbledrop.marble.MarbleDisplayAmbient;
+import me.pattrick.marbledrop.marble.MarbleDisplayMenuListener;
 import me.pattrick.marbledrop.progression.*;
 import me.pattrick.marbledrop.progression.infusion.InfusionService;
 import me.pattrick.marbledrop.progression.infusion.heads.HeadPool;
@@ -61,6 +65,7 @@ public class Main extends JavaPlugin {
     private InfusionTableAmbient infusionAmbient;
     private RecyclerAmbient recyclerAmbient;
     private UpgradeStationAmbient upgradeAmbient;
+    private MarbleDisplayAmbient marbleDisplayAmbient;
 
     // tutorial
     private TutorialProgressPoller tutorialPoller;
@@ -77,6 +82,10 @@ public class Main extends JavaPlugin {
 
     public RecyclerAmbient getRecyclerAmbient() {
         return recyclerAmbient;
+    }
+
+    public MarbleDisplayAmbient getMarbleDisplayAmbient() {
+        return marbleDisplayAmbient;
     }
 
     public UpgradeStationAmbient getUpgradeAmbient() {
@@ -350,8 +359,16 @@ public class Main extends JavaPlugin {
 
         TutorialCommand tutorialCommand = new TutorialCommand(tutorialManager, craftFrameManager);
 
+        // -------------------- Placed marble displays --------------------
+        PlacedMarbleManager placedMarbleManager = new PlacedMarbleManager(this);
+        marbleDisplayAmbient = new MarbleDisplayAmbient(this, placedMarbleManager);
+        marbleDisplayAmbient.start();
+
         // -------------------- Core listeners --------------------
         getServer().getPluginManager().registerEvents(new ListenEvents(), this);
+        getServer().getPluginManager().registerEvents(
+                new MarblePlacementListener(placedMarbleManager, marbleDisplayAmbient), this);
+        getServer().getPluginManager().registerEvents(new MarbleDisplayMenuListener(), this);
         getServer().getPluginManager().registerEvents(new TasksMenuListener(this, taskManager), this);
         getServer().getPluginManager().registerEvents(new RecipesMenuListener(this), this);
 
@@ -452,6 +469,11 @@ public class Main extends JavaPlugin {
         if (recyclerAmbient != null) {
             recyclerAmbient.stop();
             recyclerAmbient = null;
+        }
+
+        if (marbleDisplayAmbient != null) {
+            marbleDisplayAmbient.stop();
+            marbleDisplayAmbient = null;
         }
 
         if (craftFrameManager != null) {

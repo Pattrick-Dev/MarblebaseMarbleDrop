@@ -18,7 +18,12 @@ public final class MarbleItem {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return false;
 
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        return isMarbleContainer(meta.getPersistentDataContainer());
+    }
+
+    /** Same check as {@link #isMarble(ItemStack)}, but against a raw container -- e.g. a placed skull block's own PDC (see MarblePlacementListener). */
+    public static boolean isMarbleContainer(PersistentDataContainer pdc) {
+        if (pdc == null) return false;
         return pdc.has(MarbleKeys.MARBLE_ID, PersistentDataType.STRING)
                 && pdc.has(MarbleKeys.MARBLE_KEY, PersistentDataType.STRING)
                 && pdc.has(MarbleKeys.RARITY, PersistentDataType.STRING);
@@ -30,7 +35,12 @@ public final class MarbleItem {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return null;
 
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        return readFromContainer(meta.getPersistentDataContainer());
+    }
+
+    /** Same read as {@link #read(ItemStack)}, but off a raw container -- e.g. a placed skull block's own PDC (see MarblePlacementListener). */
+    public static MarbleData readFromContainer(PersistentDataContainer pdc) {
+        if (!isMarbleContainer(pdc)) return null;
 
         int schema = getInt(pdc, MarbleKeys.SCHEMA, MarbleData.SCHEMA_VERSION);
 
@@ -74,7 +84,22 @@ public final class MarbleItem {
         ItemMeta meta = item.getItemMeta();
         if (meta == null) return;
 
-        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+        writeToContainer(meta.getPersistentDataContainer(), data);
+
+        // ✅ Keep lore synced to the real stats
+        syncLore(meta, data);
+
+        item.setItemMeta(meta);
+    }
+
+    /**
+     * Same PDC fields {@link #write(ItemStack, MarbleData)} writes, but
+     * onto a raw container with no lore/ItemMeta involved -- e.g. a
+     * placed skull block's own PDC (see MarblePlacementListener), which
+     * has no lore of its own to keep in sync.
+     */
+    public static void writeToContainer(PersistentDataContainer pdc, MarbleData data) {
+        if (pdc == null || data == null) return;
 
         pdc.set(MarbleKeys.SCHEMA, PersistentDataType.INTEGER, MarbleData.SCHEMA_VERSION);
 
@@ -96,11 +121,6 @@ public final class MarbleItem {
         pdc.set(MarbleKeys.CREATED_AT, PersistentDataType.LONG, data.getCreatedAt());
         pdc.set(MarbleKeys.XP, PersistentDataType.INTEGER, data.getXp());
         pdc.set(MarbleKeys.LEVEL, PersistentDataType.INTEGER, data.getLevel());
-
-        // ✅ Keep lore synced to the real stats
-        syncLore(meta, data);
-
-        item.setItemMeta(meta);
     }
 
     private static void syncLore(ItemMeta meta, MarbleData data) {
@@ -131,7 +151,8 @@ public final class MarbleItem {
         meta.setLore(lore);
     }
 
-    private static String rarityColor(MarbleRarity r) {
+    /** Package-visible so other marble/-adjacent UI (e.g. MarbleDisplayMenu) can match this same rarity-to-color scheme instead of re-deriving it. */
+    static String rarityColor(MarbleRarity r) {
         if (r == null) return ChatColor.WHITE.toString();
         return switch (r) {
             case COMMON -> ChatColor.WHITE.toString();
