@@ -44,6 +44,11 @@ public final class MarbleKeys {
     public static NamespacedKey SHOW_HOLOGRAM;
     public static NamespacedKey SHOW_PARTICLES;
 
+    // Block-state only -- whether the hologram's " (RARITY)" suffix is
+    // shown, independent of SHOW_HOLOGRAM itself. See MarbleDisplayMenu/
+    // MarbleDisplayAmbient#holoName.
+    public static NamespacedKey SHOW_RARITY;
+
     // Block-state only -- which MarbleParticleStyle (by enum name) a
     // placed marble shows when SHOW_PARTICLES is on. Absent/unrecognized
     // falls back to MarbleParticleStyle.RARITY_DUST.
@@ -77,6 +82,7 @@ public final class MarbleKeys {
 
         SHOW_HOLOGRAM = new NamespacedKey(plugin, "placed_show_hologram");
         SHOW_PARTICLES = new NamespacedKey(plugin, "placed_show_particles");
+        SHOW_RARITY = new NamespacedKey(plugin, "placed_show_rarity");
         PARTICLE_STYLE = new NamespacedKey(plugin, "placed_particle_style");
     }
 }

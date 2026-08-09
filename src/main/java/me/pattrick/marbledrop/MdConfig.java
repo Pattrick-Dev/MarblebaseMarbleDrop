@@ -1,13 +1,18 @@
 package me.pattrick.marbledrop;
 
 import me.pattrick.marbledrop.marble.MarbleRarity;
+import me.pattrick.marbledrop.marble.MarbleStat;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -20,6 +25,9 @@ public final class MdConfig {
 
     // ---- cached values ----
     private boolean debugEnabled;
+
+    private String discordWebhookUrl;
+    private int discordUpdateIntervalSeconds;
 
     private double holoNameRadius;
     private String infusionHoloName;
@@ -41,19 +49,20 @@ public final class MdConfig {
     private double raceWallSearchRadius;
 
     private boolean scheduledRaceEnabled;
-    private int scheduledRaceIntervalMinutes;
     private List<Integer> scheduledRaceAnnounceMinutesBefore;
     private int scheduledRaceWinnerDust;
     private int scheduledRaceWinnerDustVsAi;
     private List<Integer> scheduledRacePlacePercentages;
     private int scheduledRaceAiFillCount;
     private int scheduledRaceAiShowCount;
-    private int scheduledRaceRetryDelaySeconds;
+    private List<LocalTime> scheduledRaceDailyTimes = List.of();
 
     private boolean catalystMarbleStatBased;
     private int catalystDefaultPerItem;
+    private double catalystTeamBiasChance;
     private final EnumMap<Material, Integer> catalystMaterialValues = new EnumMap<>(Material.class);
     private final EnumMap<MarbleRarity, Range> marbleValueRange = new EnumMap<>(MarbleRarity.class);
+    private final EnumMap<Material, EnumSet<MarbleStat>> catalystStatAffinity = new EnumMap<>(Material.class);
 
     public MdConfig(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -65,6 +74,9 @@ public final class MdConfig {
         FileConfiguration c = plugin.getConfig();
 
         debugEnabled = c.getBoolean("debug.enabled", false);
+
+        discordWebhookUrl = c.getString("discord.webhook-url", "");
+        discordUpdateIntervalSeconds = c.getInt("discord.update-interval-seconds", 20);
 
         holoNameRadius = c.getDouble("holograms.name-visible-radius", 8.0);
 
@@ -80,7 +92,6 @@ public final class MdConfig {
         raceWallSearchRadius = c.getDouble("races.wall-search-radius", 2.5);
 
         scheduledRaceEnabled = c.getBoolean("races.scheduled.enabled", true);
-        scheduledRaceIntervalMinutes = c.getInt("races.scheduled.interval-minutes", 20);
         scheduledRaceAnnounceMinutesBefore = c.getIntegerList("races.scheduled.announce-minutes-before");
         if (scheduledRaceAnnounceMinutesBefore.isEmpty()) {
             scheduledRaceAnnounceMinutesBefore = List.of(10, 5, 1);
@@ -93,7 +104,16 @@ public final class MdConfig {
         }
         scheduledRaceAiFillCount = c.getInt("races.scheduled.ai-fill-count", 3);
         scheduledRaceAiShowCount = c.getInt("races.scheduled.ai-show-count", 4);
-        scheduledRaceRetryDelaySeconds = c.getInt("races.scheduled.retry-delay-seconds", 60);
+
+        List<LocalTime> dailyTimes = new ArrayList<>();
+        for (String raw : c.getStringList("races.scheduled.daily-times")) {
+            try {
+                dailyTimes.add(LocalTime.parse(raw.trim()));
+            } catch (DateTimeParseException ex) {
+                plugin.getLogger().warning("[Config] Unparsable time in races.scheduled.daily-times: '" + raw + "' (expected HH:mm)");
+            }
+        }
+        scheduledRaceDailyTimes = dailyTimes;
 
         infusionDailyCap = c.getInt("infusion.daily-cap", 5);
 
@@ -107,6 +127,7 @@ public final class MdConfig {
 
         catalystMarbleStatBased = c.getBoolean("infusion.catalyst.marble-stat-based", true);
         catalystDefaultPerItem = c.getInt("infusion.catalyst.default-per-item", 10);
+        catalystTeamBiasChance = c.getDouble("infusion.catalyst.team-bias-chance", 0.5);
 
         // material values
         catalystMaterialValues.clear();
@@ -151,15 +172,43 @@ public final class MdConfig {
         for (MarbleRarity r : MarbleRarity.values()) {
             marbleValueRange.putIfAbsent(r, new Range(defaultMin(r), defaultMax(r)));
         }
+
+        // stat affinity (which stats a material catalyst biases upward)
+        catalystStatAffinity.clear();
+        ConfigurationSection affinitySec = c.getConfigurationSection("infusion.catalyst.stat-affinity");
+        if (affinitySec != null) {
+            for (String key : affinitySec.getKeys(false)) {
+                String matName = key.toUpperCase(Locale.ROOT);
+                Material mat = Material.matchMaterial(matName);
+                if (mat == null) {
+                    plugin.getLogger().warning("[Config] Unknown material in infusion.catalyst.stat-affinity: " + key);
+                    continue;
+                }
+
+                EnumSet<MarbleStat> stats = EnumSet.noneOf(MarbleStat.class);
+                for (String statName : affinitySec.getStringList(key)) {
+                    try {
+                        stats.add(MarbleStat.valueOf(statName.trim().toUpperCase(Locale.ROOT)));
+                    } catch (Exception ignored) {
+                        plugin.getLogger().warning("[Config] Unknown stat '" + statName + "' in infusion.catalyst.stat-affinity." + key);
+                    }
+                }
+                if (!stats.isEmpty()) {
+                    catalystStatAffinity.put(mat, stats);
+                }
+            }
+        }
     }
 
     // ---- getters ----
     public boolean debugEnabled() { return debugEnabled; }
 
+    public String discordWebhookUrl() { return discordWebhookUrl; }
+    public int discordUpdateIntervalSeconds() { return discordUpdateIntervalSeconds; }
+
     public double raceWallSearchRadius() { return raceWallSearchRadius; }
 
     public boolean scheduledRaceEnabled() { return scheduledRaceEnabled; }
-    public int scheduledRaceIntervalMinutes() { return scheduledRaceIntervalMinutes; }
     public List<Integer> scheduledRaceAnnounceMinutesBefore() { return scheduledRaceAnnounceMinutesBefore; }
     public int scheduledRaceWinnerDust() { return scheduledRaceWinnerDust; }
     public int scheduledRaceWinnerDustVsAi() { return scheduledRaceWinnerDustVsAi; }
@@ -178,7 +227,7 @@ public final class MdConfig {
     }
     public int scheduledRaceAiFillCount() { return scheduledRaceAiFillCount; }
     public int scheduledRaceAiShowCount() { return scheduledRaceAiShowCount; }
-    public int scheduledRaceRetryDelaySeconds() { return scheduledRaceRetryDelaySeconds; }
+    public List<LocalTime> scheduledRaceDailyTimes() { return scheduledRaceDailyTimes; }
 
     public double hologramNameRadius() { return holoNameRadius; }
     public String infusionHologramName() { return infusionHoloName; }
@@ -208,6 +257,15 @@ public int infusionAnimRevealEarlyTicks() { return animRevealEarlyTicks; }
     public Range marbleCatalystRange(MarbleRarity rarity) {
         if (rarity == null) rarity = MarbleRarity.COMMON;
         return marbleValueRange.getOrDefault(rarity, new Range(defaultMin(rarity), defaultMax(rarity)));
+    }
+
+    public double catalystTeamBiasChance() { return catalystTeamBiasChance; }
+
+    /** Which stats a material catalyst biases upward. Empty (never null) if the material has no configured affinity. */
+    public EnumSet<MarbleStat> catalystStatAffinity(Material mat) {
+        if (mat == null) return EnumSet.noneOf(MarbleStat.class);
+        EnumSet<MarbleStat> stats = catalystStatAffinity.get(mat);
+        return stats == null ? EnumSet.noneOf(MarbleStat.class) : EnumSet.copyOf(stats);
     }
 
     // ---- helpers ----

@@ -112,14 +112,19 @@ public final class MarbleDisplayMenuListener implements Listener {
             return;
         }
 
-        if (slot != MarbleDisplayMenu.SLOT_HOLOGRAM && slot != MarbleDisplayMenu.SLOT_PARTICLES) return;
+        if (slot != MarbleDisplayMenu.SLOT_HOLOGRAM
+                && slot != MarbleDisplayMenu.SLOT_PARTICLES
+                && slot != MarbleDisplayMenu.SLOT_RARITY) return;
 
         if (slot == MarbleDisplayMenu.SLOT_HOLOGRAM) {
             boolean next = !MarbleDisplayMenu.isHologramEnabled(pdc);
             pdc.set(MarbleKeys.SHOW_HOLOGRAM, PersistentDataType.BYTE, (byte) (next ? 1 : 0));
-        } else {
+        } else if (slot == MarbleDisplayMenu.SLOT_PARTICLES) {
             boolean next = !MarbleDisplayMenu.isParticlesEnabled(pdc);
             pdc.set(MarbleKeys.SHOW_PARTICLES, PersistentDataType.BYTE, (byte) (next ? 1 : 0));
+        } else {
+            boolean next = !MarbleDisplayMenu.isRarityEnabled(pdc);
+            pdc.set(MarbleKeys.SHOW_RARITY, PersistentDataType.BYTE, (byte) (next ? 1 : 0));
         }
         skull.update();
 

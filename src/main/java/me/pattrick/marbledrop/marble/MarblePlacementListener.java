@@ -15,7 +15,11 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -43,6 +47,14 @@ import java.util.UUID;
  * Only the placer (or a marbledrop.admin) can break a placed marble back
  * -- otherwise it's cancelled. Without this, anyone could walk up and
  * break-and-pocket someone else's displayed marble.
+ * <p>
+ * Also protected from anything that would destroy or move it without
+ * going through the owner-checked onBreak path above: explosions
+ * (TNT/creepers via EntityExplodeEvent, beds/respawn anchors via
+ * BlockExplodeEvent -- filtered out of the event's block list so the rest
+ * of the explosion still happens normally) and piston push/pull
+ * (cancelled outright, since a piston can't selectively skip one block
+ * out of the row it's moving).
  */
 public final class MarblePlacementListener implements Listener {
 
@@ -145,6 +157,47 @@ public final class MarblePlacementListener implements Listener {
 
         marbles.removeMarble(block.getLocation());
         ambient.removeMarker(block.getLocation());
+    }
+
+    /** TNT, creepers, etc. -- pulls placed marbles out of the destroyed-block list so the rest of the explosion still happens, they just survive. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onEntityExplode(EntityExplodeEvent event) {
+        event.blockList().removeIf(this::isPlacedMarble);
+    }
+
+    /** Beds/respawn anchors exploding out of season, etc. -- same treatment as onEntityExplode. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBlockExplode(BlockExplodeEvent event) {
+        event.blockList().removeIf(this::isPlacedMarble);
+    }
+
+    /** A piston can't selectively skip one block out of the row it's pushing, so if any block in the move is a placed marble, the whole extension is cancelled. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPistonExtend(BlockPistonExtendEvent event) {
+        for (Block b : event.getBlocks()) {
+            if (isPlacedMarble(b)) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+    }
+
+    /** Same as onPistonExtend, for sticky pistons pulling a block back. getBlocks() is empty for non-sticky retracts, so this is a no-op for those. */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPistonRetract(BlockPistonRetractEvent event) {
+        for (Block b : event.getBlocks()) {
+            if (isPlacedMarble(b)) {
+                event.setCancelled(true);
+                return;
+            }
+        }
+    }
+
+    private boolean isPlacedMarble(Block block) {
+        Material t = block.getType();
+        if (t != Material.PLAYER_HEAD && t != Material.PLAYER_WALL_HEAD) return false;
+        if (!(block.getState() instanceof Skull skull)) return false;
+        return MarbleItem.readFromContainer(skull.getPersistentDataContainer()) != null;
     }
 
     /** Reconstructs the exact marble item a placed skull represents: the skull's own texture, its marble PDC/lore reapplied via MarbleItem, and its snapshotted display name. */

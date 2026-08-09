@@ -415,10 +415,10 @@ public final class InfusionTableProcess {
                 if (rarity == null || rarity.isEmpty()) rarity = "COMMON";
 
                 String speed = findLoreValue(lore, "Speed");
-                String control = findLoreValue(lore, "Control");
-                String momentum = findLoreValue(lore, "Momentum");
+                String accel = findLoreValue(lore, "Accel");
+                String handling = findLoreValue(lore, "Handling");
                 String stability = findLoreValue(lore, "Stability");
-                String luck = findLoreValue(lore, "Luck");
+                String boost = findLoreValue(lore, "Boost");
 
                 return Component.text("")
                         .append(Component.text("Team: ", NamedTextColor.GRAY))
@@ -431,17 +431,17 @@ public final class InfusionTableProcess {
                         .append(Component.text("Speed: ", NamedTextColor.GRAY))
                         .append(Component.text(speed != null ? speed : "?", NamedTextColor.WHITE))
                         .append(Component.newline())
-                        .append(Component.text("Control: ", NamedTextColor.GRAY))
-                        .append(Component.text(control != null ? control : "?", NamedTextColor.WHITE))
+                        .append(Component.text("Accel: ", NamedTextColor.GRAY))
+                        .append(Component.text(accel != null ? accel : "?", NamedTextColor.WHITE))
                         .append(Component.newline())
-                        .append(Component.text("Momentum: ", NamedTextColor.GRAY))
-                        .append(Component.text(momentum != null ? momentum : "?", NamedTextColor.WHITE))
+                        .append(Component.text("Handling: ", NamedTextColor.GRAY))
+                        .append(Component.text(handling != null ? handling : "?", NamedTextColor.WHITE))
                         .append(Component.newline())
                         .append(Component.text("Stability: ", NamedTextColor.GRAY))
                         .append(Component.text(stability != null ? stability : "?", NamedTextColor.WHITE))
                         .append(Component.newline())
-                        .append(Component.text("Luck: ", NamedTextColor.GRAY))
-                        .append(Component.text(luck != null ? luck : "?", NamedTextColor.WHITE));
+                        .append(Component.text("Boost: ", NamedTextColor.GRAY))
+                        .append(Component.text(boost != null ? boost : "?", NamedTextColor.WHITE));
             }
 
             private void broadcastIfNeededAfterAward(ItemStack itemJustGiven) {

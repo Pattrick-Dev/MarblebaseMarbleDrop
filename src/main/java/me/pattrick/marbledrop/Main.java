@@ -238,7 +238,10 @@ public class Main extends JavaPlugin {
         getServer().getPluginManager().registerEvents(scheduledRaceManager, this);
         scheduledRaceManager.start();
 
-        RaceCommand raceCommand = new RaceCommand(raceManager, trackManager, raceWatchManager, scheduledRaceManager);
+        getServer().getPluginManager().registerEvents(new RaceMotdListener(scheduledRaceManager), this);
+        getServer().getPluginManager().registerEvents(new RaceScheduleMenuListener(this, mdConfig), this);
+
+        RaceCommand raceCommand = new RaceCommand(raceManager, trackManager, raceWatchManager, scheduledRaceManager, mdConfig);
 
         // -------------------- Infusion service --------------------
         InfusionService infusionService = new InfusionService(this, dustManager, headPool);

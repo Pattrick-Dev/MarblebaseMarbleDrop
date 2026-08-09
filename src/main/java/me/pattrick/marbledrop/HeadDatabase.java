@@ -31,13 +31,18 @@ public class HeadDatabase {
      * InfusionService / MarbleItem.write(...) handles the full schema.
      */
     public static ItemStack getMarbleHead(String user) throws IOException {
+        return getMarbleHead(user, null);
+    }
+
+    /** Same as {@link #getMarbleHead(String)}, but threads a catalyst's preferred team through to Sampler for a soft team-bias chance. */
+    public static ItemStack getMarbleHead(String user, String preferredTeam) throws IOException {
         final ItemStack head = new ItemStack(Material.PLAYER_HEAD, 1);
 
         final ItemMeta meta = head.getItemMeta();
         if (meta == null) return head;
 
         // Sampler returns [base64, name, team]
-        final ArrayList<String> sample = Sampler.main();
+        final ArrayList<String> sample = Sampler.main(preferredTeam);
         final String textureBase64 = safeGet(sample, 0);
         final String displayName  = safeGet(sample, 1);
         final String team         = safeGet(sample, 2);

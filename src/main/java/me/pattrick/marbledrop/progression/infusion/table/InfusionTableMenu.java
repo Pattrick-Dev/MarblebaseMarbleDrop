@@ -1,6 +1,8 @@
 package me.pattrick.marbledrop.progression.infusion.table;
 
+import me.pattrick.marbledrop.marble.MarbleStat;
 import me.pattrick.marbledrop.progression.DustManager;
+import me.pattrick.marbledrop.progression.infusion.CatalystProfile;
 import me.pattrick.marbledrop.progression.infusion.InfusionService;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -12,7 +14,10 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public final class InfusionTableMenu {
 
@@ -73,7 +78,7 @@ public final class InfusionTableMenu {
 
         int balance = dust.getDust(player);
         ItemStack cat = inv.getItem(SLOT_CATALYST);
-        int catalystValue = CatalystValue.valueOf(cat);
+        CatalystProfile profile = CatalystProfile.of(cat);
 
         String catName = (cat == null || cat.getType().isAir())
                 ? (ChatColor.DARK_GRAY + "None")
@@ -83,21 +88,42 @@ public final class InfusionTableMenu {
                 ? (ChatColor.DARK_GRAY + "Nothing")
                 : (ChatColor.YELLOW + "" + cat.getAmount() + " " + prettyName(cat));
 
-        inv.setItem(SLOT_INFO, button(Material.BOOK, ChatColor.LIGHT_PURPLE + "Infusion Details",
-                List.of(
-                        ChatColor.GRAY + "Dust Balance: " + ChatColor.YELLOW + balance,
-                        ChatColor.GRAY + "Dust Amount: " + ChatColor.YELLOW + dustAmount,
-                        "",
-                        ChatColor.GRAY + "Catalyst: " + catName,
-                        ChatColor.GRAY + "Catalyst Value: " + ChatColor.YELLOW + catalystValue,
-                        ChatColor.GRAY + "Will Consume: " + willConsume,
-                        "",
-                        ChatColor.GRAY + "Total Value: " + ChatColor.GOLD + (dustAmount + catalystValue),
-                        "",
-                        ChatColor.DARK_GRAY + "Put any item in the center slot",
-                        ChatColor.DARK_GRAY + "to boost the infusion outcome.",
-                        ChatColor.DARK_GRAY + "Close menu to get items back."
-                )));
+        List<String> infoLore = new ArrayList<>(List.of(
+                ChatColor.GRAY + "Dust Balance: " + ChatColor.YELLOW + balance,
+                ChatColor.GRAY + "Dust Amount: " + ChatColor.YELLOW + dustAmount,
+                "",
+                ChatColor.GRAY + "Catalyst: " + catName,
+                ChatColor.GRAY + "Catalyst Value: " + ChatColor.YELLOW + profile.rarityValue(),
+                ChatColor.GRAY + "Will Consume: " + willConsume
+        ));
+
+        // Marble catalysts now carry an entry for all 5 stats (a ranked
+        // highest-to-lowest ladder, see CatalystProfile#rankedAffinity) --
+        // its weakest stat sits at weight 0 (no bias) rather than being
+        // absent, so this has to filter zero-weight entries out and sort
+        // by weight to show the catalyst's actual best-to-worst priority,
+        // not just "every stat it happens to have."
+        String stats = profile.statAffinity().entrySet().stream()
+                .filter(e -> e.getValue() > 0)
+                .sorted(Map.Entry.<MarbleStat, Double>comparingByValue().reversed())
+                .map(e -> capitalize(e.getKey()))
+                .collect(Collectors.joining(", "));
+        if (!stats.isEmpty()) {
+            infoLore.add(ChatColor.GRAY + "Higher chance to boost (best first):");
+            infoLore.add(ChatColor.AQUA + "  " + stats);
+        }
+        if (profile.teamBias() != null && !profile.teamBias().isBlank()) {
+            infoLore.add(ChatColor.GRAY + "Higher chance of team: " + ChatColor.LIGHT_PURPLE + profile.teamBias());
+        }
+
+        infoLore.add("");
+        infoLore.add(ChatColor.GRAY + "Total Value: " + ChatColor.GOLD + (dustAmount + profile.rarityValue()));
+        infoLore.add("");
+        infoLore.add(ChatColor.DARK_GRAY + "Put any item in the center slot");
+        infoLore.add(ChatColor.DARK_GRAY + "to boost the infusion outcome.");
+        infoLore.add(ChatColor.DARK_GRAY + "Close menu to get items back.");
+
+        inv.setItem(SLOT_INFO, button(Material.BOOK, ChatColor.LIGHT_PURPLE + "Infusion Details", infoLore));
 
         inv.setItem(SLOT_CONFIRM, button(Material.AMETHYST_SHARD, ChatColor.GOLD + "Infuse",
                 List.of(
@@ -137,10 +163,10 @@ public final class InfusionTableMenu {
         }
 
         ItemStack catalyst = inv.getItem(SLOT_CATALYST);
-        int catalystValue = CatalystValue.valueOf(catalyst);
+        CatalystProfile profile = CatalystProfile.of(catalyst);
 
         // Try infusion (dust is deducted inside infuseToItem)
-        ItemStack marble = infusion.infuseToItem(player, dustAmount, catalystValue);
+        ItemStack marble = infusion.infuseToItem(player, dustAmount, profile);
         if (marble == null) {
             // If infusion fails, unlock immediately
             if (!isPrivate) InfusionTableProcess.unlock(cauldron, player);
@@ -169,6 +195,11 @@ public final class InfusionTableMenu {
 
     public Block getCauldron() {
         return cauldron;
+    }
+
+    private String capitalize(MarbleStat stat) {
+        String s = stat.name().toLowerCase();
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
     private String prettyName(ItemStack item) {

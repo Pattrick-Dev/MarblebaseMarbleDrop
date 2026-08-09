@@ -29,9 +29,15 @@ public final class MarbleDisplayMenu {
     public static final String TITLE = ChatColor.DARK_GRAY + "Marble Display Settings";
 
     public static final int SLOT_INFO = 4;
-    public static final int SLOT_HOLOGRAM = 11;
-    public static final int SLOT_PARTICLES = 13;
-    public static final int SLOT_STYLE = 15;
+
+    // Left side: hologram-related toggles.
+    public static final int SLOT_HOLOGRAM = 10;
+    public static final int SLOT_RARITY = 11;
+
+    // Right side: particle-related toggles.
+    public static final int SLOT_PARTICLES = 15;
+    public static final int SLOT_STYLE = 16;
+
     public static final int SLOT_CLOSE = 22;
 
     private MarbleDisplayMenu() {}
@@ -46,6 +52,11 @@ public final class MarbleDisplayMenu {
         return v == null || v != 0;
     }
 
+    public static boolean isRarityEnabled(PersistentDataContainer pdc) {
+        Byte v = pdc.get(MarbleKeys.SHOW_RARITY, PersistentDataType.BYTE);
+        return v == null || v != 0;
+    }
+
     public static MarbleParticleStyle styleOf(PersistentDataContainer pdc) {
         return MarbleParticleStyle.byId(pdc.get(MarbleKeys.PARTICLE_STYLE, PersistentDataType.STRING));
     }
@@ -53,6 +64,7 @@ public final class MarbleDisplayMenu {
     public static void open(Player player, MarbleData data, PersistentDataContainer pdc, PlayerProfile texture) {
         boolean hologramOn = isHologramEnabled(pdc);
         boolean particlesOn = isParticlesEnabled(pdc);
+        boolean rarityOn = isRarityEnabled(pdc);
         MarbleParticleStyle style = styleOf(pdc);
 
         Inventory inv = Bukkit.createInventory(null, 27, TITLE);
@@ -61,6 +73,7 @@ public final class MarbleDisplayMenu {
         inv.setItem(SLOT_HOLOGRAM, toggleItem("Hologram", hologramOn));
         inv.setItem(SLOT_PARTICLES, toggleItem("Particles", particlesOn));
         inv.setItem(SLOT_STYLE, styleItem(style));
+        inv.setItem(SLOT_RARITY, toggleItem("Show Rarity", rarityOn));
         inv.setItem(SLOT_CLOSE, item(Material.BARRIER, ChatColor.RED + "Close", List.of()));
 
         player.openInventory(inv);
