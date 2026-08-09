@@ -114,7 +114,7 @@ public class Main extends JavaPlugin {
         raceEngine = new MarbleRaceEngine(this);
         raceEngine.start();
 
-        TrackCommand trackCommand = new TrackCommand(trackManager, trackVisualizer, raceEngine, mdConfig);
+        TrackCommand trackCommand = new TrackCommand(trackManager, trackVisualizer, raceEngine);
 
         // Track GUI listener
         getServer().getPluginManager().registerEvents(
@@ -130,10 +130,6 @@ public class Main extends JavaPlugin {
 
         // Race entry flow
         RaceManager raceManager = new RaceManager(trackManager, raceEngine, mdConfig);
-        // Listens for PlayerJoinEvent to hand back any marble that was taken
-        // for a race but couldn't be returned because the owner was offline
-        // (see RaceManager's queuePendingReturn/onJoin).
-        getServer().getPluginManager().registerEvents(raceManager, this);
 
         // Watch manager (inventory safe)
         raceWatchManager = new RaceWatchManager(this, trackManager, raceEngine);
@@ -142,9 +138,38 @@ public class Main extends JavaPlugin {
         // Wire watch into race manager (auto-watch on start)
         raceManager.setWatchManager(raceWatchManager);
 
+        // ProtocolLib-backed features (see RaceGlowPrivacy/RaceInventoryOverlay)
+        // -- softdepend in plugin.yml, not a hard depend, so only build these
+        // if ProtocolLib actually loaded. Without it: glow is visible to
+        // everyone instead of just the toggler, and Boost/Glow fall back to
+        // real inventory items (with RaceWatchManager's original real
+        // clear-and-restore protecting them), same as before either existed.
+        RaceGlowPrivacy glowPrivacy = null;
+        RaceInventoryOverlay inventoryOverlay = null;
+        if (getServer().getPluginManager().isPluginEnabled("ProtocolLib")) {
+            glowPrivacy = new RaceGlowPrivacy(this);
+            inventoryOverlay = new RaceInventoryOverlay(this);
+            raceWatchManager.setInventoryOverlay(inventoryOverlay);
+            raceManager.setInventoryOverlay(inventoryOverlay);
+        } else {
+            getLogger().info("ProtocolLib not found -- marble glow will be visible to everyone instead of just the racer who toggled it, "
+                    + "and race items (Boost/Glow) will be real inventory items instead of packet overlays.");
+        }
+
+        // Boost/Glow item click handlers -- must run before RaceWatchManager's
+        // own interact handler cancels everything while watching (see RaceBoostListener/RaceGlowListener).
+        getServer().getPluginManager().registerEvents(new RaceBoostListener(this, raceManager, inventoryOverlay), this);
+        getServer().getPluginManager().registerEvents(new RaceGlowListener(this, raceManager, glowPrivacy, inventoryOverlay), this);
+
         // Race GUI listener (click-to-join menu)
         getServer().getPluginManager().registerEvents(
                 new RaceGuiListener(trackManager, raceManager),
+                this
+        );
+
+        // Loadout picker (pre-race strategy -- click an already-joined track to open it)
+        getServer().getPluginManager().registerEvents(
+                new RaceLoadoutGuiListener(trackManager, raceManager),
                 this
         );
 
@@ -255,7 +280,6 @@ public class Main extends JavaPlugin {
         craftFrameManager.start();
 
         tutorialManager = new TutorialManager(this, dustManager, mdConfig, tutorialLocations, craftFrameManager);
-        raceManager.setTutorialManager(tutorialManager);
 
         TutorialTasksHandler tutorialTasksHandler = new TutorialTasksHandler(this, tutorialManager);
         getServer().getPluginManager().registerEvents(tutorialTasksHandler, this);

@@ -105,6 +105,49 @@ public final class RaceCommand implements CommandExecutor {
                 return true;
             }
 
+            case "test", "testrace" -> {
+                if (!player.hasPermission("marbledrop.admin")) {
+                    player.sendMessage(ChatColor.RED + "You don't have permission.");
+                    return true;
+                }
+                if (args.length < 2) {
+                    player.sendMessage(ChatColor.RED + "Usage: /md race test <trackId> [aiCount] [noself]");
+                    player.sendMessage(ChatColor.RED + "   or: /md race test loadout <trackId>  (pick a loadout to test with)");
+                    return true;
+                }
+
+                // "test loadout <trackId>" -- opens the same loadout GUI a
+                // real lobby entry uses (see RaceLoadoutGui); the pick is
+                // remembered as this admin's preference and runTestRace()
+                // reads it automatically, no lobby entry required.
+                if (args[1].equalsIgnoreCase("loadout")) {
+                    if (args.length < 3) {
+                        player.sendMessage(ChatColor.RED + "Usage: /md race test loadout <trackId>");
+                        return true;
+                    }
+                    RaceLoadoutGui.open(player, races, args[2].toLowerCase());
+                    return true;
+                }
+
+                String testTrackId = args[1].toLowerCase();
+                int aiCount = 3;
+                boolean includeSelf = true;
+                for (int i = 2; i < args.length; i++) {
+                    String arg = args[i].toLowerCase();
+                    if (arg.equals("noself") || arg.equals("nomarble")) {
+                        includeSelf = false;
+                    } else {
+                        try {
+                            aiCount = Integer.parseInt(arg);
+                        } catch (NumberFormatException ignored) {
+                            player.sendMessage(ChatColor.RED + "Ignoring unrecognized argument '" + arg + "'.");
+                        }
+                    }
+                }
+                races.runTestRace(player, testTrackId, aiCount, includeSelf);
+                return true;
+            }
+
             case "next" -> {
                 String openId = scheduledRaces.openTrackId();
                 String activeId = scheduledRaces.activeCycleTrackId();
@@ -185,6 +228,8 @@ public final class RaceCommand implements CommandExecutor {
         player.sendMessage(ChatColor.GRAY + "/md race close <trackId> " + ChatColor.DARK_GRAY + "(admin)");
         player.sendMessage(ChatColor.GRAY + "/md race start <trackId> " + ChatColor.DARK_GRAY + "(admin)");
         player.sendMessage(ChatColor.GRAY + "/md race clear <trackId> " + ChatColor.DARK_GRAY + "(admin)");
+        player.sendMessage(ChatColor.GRAY + "/md race test <trackId> [aiCount] [noself] " + ChatColor.DARK_GRAY + "(admin, debug mode only)");
+        player.sendMessage(ChatColor.GRAY + "/md race test loadout <trackId> " + ChatColor.DARK_GRAY + "(admin, pick a loadout to test with)");
         player.sendMessage(ChatColor.GRAY + "/md race purge " + ChatColor.DARK_GRAY + "(admin, removes all active runners)");
         player.sendMessage(ChatColor.GRAY + "/md join " + ChatColor.DARK_GRAY + "(join the current scheduled race)");
         player.sendMessage(ChatColor.GRAY + "/md leave " + ChatColor.DARK_GRAY + "(leave whatever race you're entered in)");

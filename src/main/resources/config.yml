@@ -74,7 +74,7 @@ upgrade-station:
   daily-cap: 0  # 0 = unlimited
 
 races:
-  wall-search-radius: 2.5  # blocks from the track's centerline to scan for solid blocks when building race walls
+  wall-search-radius: 2.5  # blocks from the track's centerline to scan for solid blocks when measuring the starting grid's width
 
   scheduled:
     enabled: true

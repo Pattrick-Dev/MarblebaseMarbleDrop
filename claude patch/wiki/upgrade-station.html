@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MarbleBaseMC Wiki | The Upgrade Station</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">The Upgrade Station</div>
+      <p class="subtitle">Spend Dust to improve an existing marble.</p>
+      <nav aria-label="Wiki navigation">
+        <a href="index.html">Wiki Home</a>
+        <a href="recycler.html">Next: Recycler</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>The Upgrade Station</h1>
+      <p>
+        The Upgrade Station is a station based on a smithing table. You can craft your own
+        (see the <a href="new-player-tutorial.html">new player tutorial</a> for the recipe) and
+        place it anywhere, or use one already placed. Run <strong>/md upgrade</strong> or
+        right-click the station to open it.
+      </p>
+
+      <h2>What It Does</h2>
+      <p>
+        You spend Dust to directly increase one stat of a marble you already own.
+        This is different from infusion, which creates a new marble.
+      </p>
+
+      <h2>Cost</h2>
+      <p>
+        Each point costs more as that stat gets higher, and higher-rarity marbles cost more
+        per point to upgrade in the first place. Every stat is capped per the rarity table on
+        the <a href="marbles-rarity.html">Marbles &amp; Rarity</a> page &mdash; you cannot
+        upgrade a stat past your marble's rarity cap.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Rarity</th><th>Base cost per point</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Common</td><td>5 Dust</td></tr>
+          <tr><td>Uncommon</td><td>8 Dust</td></tr>
+          <tr><td>Rare</td><td>12 Dust</td></tr>
+          <tr><td>Epic</td><td>18 Dust</td></tr>
+          <tr><td>Legendary</td><td>25 Dust</td></tr>
+        </tbody>
+      </table>
+      <p class="muted">
+        On top of the base cost, every 10 points already in that stat adds +1 Dust to the next
+        point's cost.
+      </p>
+
+      <h2>Upgrade Strategy</h2>
+      <ul>
+        <li>Prioritize stats that match your racing style first.</li>
+        <li>Avoid spreading Dust too thin across too many marbles early.</li>
+        <li>Upgrading a stat gets more expensive the higher it already is &mdash; it's
+          usually more efficient to spread early points across your build before pushing any
+          single stat near its cap.</li>
+      </ul>
+    </main>
+
+    <footer>Alias command: /md upgrades</footer>
+  </div>
+</body>
+</html>

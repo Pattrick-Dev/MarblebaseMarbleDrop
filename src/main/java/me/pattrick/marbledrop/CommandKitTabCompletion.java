@@ -231,7 +231,7 @@ public class CommandKitTabCompletion implements TabCompleter {
 
       List<String> trackSubs = List.of(
               "gui", "create", "addpoint", "info", "delete",
-              "show", "hide", "run", "setwatch", "clearwatch", "autorace"
+              "show", "hide", "run", "setwatch", "clearwatch", "autorace", "laps"
       );
       return filterStartsWith(trackSubs, args[1]);
     }
@@ -243,7 +243,7 @@ public class CommandKitTabCompletion implements TabCompleter {
       String sub = args[1].toLowerCase();
       if (sub.equals("addpoint") || sub.equals("info") || sub.equals("delete")
               || sub.equals("show") || sub.equals("run") || sub.equals("setwatch") || sub.equals("clearwatch")
-              || sub.equals("autorace")) {
+              || sub.equals("autorace") || sub.equals("laps")) {
         return filterStartsWith(trackIds(), args[2]);
       }
 
@@ -254,6 +254,12 @@ public class CommandKitTabCompletion implements TabCompleter {
     if (args.length == 4 && args[0].equalsIgnoreCase("track") && args[1].equalsIgnoreCase("autorace")) {
       if (!isAdmin(sender)) return Collections.emptyList();
       return filterStartsWith(List.of("on", "off"), args[3]);
+    }
+
+    // ---- /md track laps <id> <count> ----
+    if (args.length == 4 && args[0].equalsIgnoreCase("track") && args[1].equalsIgnoreCase("laps")) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+      return filterStartsWith(List.of("1", "2", "3", "4", "5"), args[3]);
     }
 
     // ---- /md race|races <sub> ----
@@ -274,6 +280,7 @@ public class CommandKitTabCompletion implements TabCompleter {
         raceSubs.add("clear");
         raceSubs.add("purge");
         raceSubs.add("forcecycle");
+        raceSubs.add("test");
       }
 
       return filterStartsWith(raceSubs, args[1]);
@@ -283,7 +290,7 @@ public class CommandKitTabCompletion implements TabCompleter {
     if (args.length == 3 && (args[0].equalsIgnoreCase("race") || args[0].equalsIgnoreCase("races"))) {
       String sub = args[1].toLowerCase();
 
-      if (sub.equals("open") || sub.equals("close") || sub.equals("start") || sub.equals("clear")) {
+      if (sub.equals("open") || sub.equals("close") || sub.equals("start") || sub.equals("clear") || sub.equals("test")) {
         if (!isAdmin(sender)) return Collections.emptyList();
         return filterStartsWith(trackIds(), args[2]);
       }
@@ -292,6 +299,20 @@ public class CommandKitTabCompletion implements TabCompleter {
       }
 
       return Collections.emptyList();
+    }
+
+    // ---- /md race|races test <trackId> <aiCount> ----
+    if (args.length == 4 && (args[0].equalsIgnoreCase("race") || args[0].equalsIgnoreCase("races"))
+            && args[1].equalsIgnoreCase("test")) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+      return filterStartsWith(List.of("1", "2", "3", "4", "5", "noself"), args[3]);
+    }
+
+    // ---- /md race|races test <trackId> <aiCount> noself ----
+    if (args.length == 5 && (args[0].equalsIgnoreCase("race") || args[0].equalsIgnoreCase("races"))
+            && args[1].equalsIgnoreCase("test")) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+      return filterStartsWith(List.of("noself"), args[4]);
     }
 
     // ---- /md tutorial <sub> ----

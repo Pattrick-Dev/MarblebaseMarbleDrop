@@ -65,6 +65,13 @@ public final class RaceGuiListener implements Listener {
             return;
         }
 
+        // Already joined -- left click opens the loadout picker instead of
+        // re-attempting to join (which would just fail with "already entered").
+        if (races.hasEntry(trackId, p.getUniqueId())) {
+            RaceLoadoutGui.open(p, races, trackId);
+            return;
+        }
+
         // Left click to join
         ItemStack held = p.getInventory().getItemInMainHand();
         if (held == null || held.getType().isAir() || !MarbleItem.isMarble(held)) {

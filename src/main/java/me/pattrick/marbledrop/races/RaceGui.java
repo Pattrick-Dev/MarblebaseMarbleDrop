@@ -25,10 +25,7 @@ public final class RaceGui {
                 List.of(
                         ChatColor.GRAY + "1) Hold a marble in your main hand",
                         ChatColor.GRAY + "2) Click an OPEN track to join",
-                        ChatColor.GRAY + "Right-click here, or type " + ChatColor.AQUA + "/md leave" + ChatColor.GRAY + ", to leave",
-                        "",
-                        ChatColor.DARK_GRAY + "Your marble is held until the race",
-                        ChatColor.DARK_GRAY + "ends (or you leave), then returned.",
+                        ChatColor.GRAY + "Right-click to leave",
                         "",
                         ChatColor.DARK_GRAY + "Tracks must be opened by admins."
                 )));
@@ -60,11 +57,17 @@ public final class RaceGui {
                     lore.add(ChatColor.GRAY + "Points: " + ChatColor.WHITE + t.size());
                     lore.add(ChatColor.GRAY + "World: " + ChatColor.WHITE + t.getWorld().getName());
                 }
+                if (joined) {
+                    RaceManager.RaceEntry entry = races.findEntry(id, p.getUniqueId());
+                    RaceLoadout loadout = (entry != null) ? entry.loadout : RaceLoadout.BALANCED;
+                    lore.add(ChatColor.GRAY + "Loadout: " + ChatColor.YELLOW + loadout.label());
+                }
                 lore.add("");
 
                 if (running) {
                     lore.add(ChatColor.RED + "Race is currently running.");
                 } else if (joined) {
+                    lore.add(ChatColor.GREEN + "Click to set loadout");
                     lore.add(ChatColor.AQUA + "Right-click to leave");
                 } else {
                     lore.add(ChatColor.GREEN + "Click to join");

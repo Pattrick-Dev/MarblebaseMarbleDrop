@@ -13,19 +13,25 @@ public final class MarbleTrack {
     private final World world;
     private final List<Location> points = new ArrayList<>();
 
-    // Cached Catmull-Rom spline through `points`, used for race physics
-    // (see TrackPhysics/MarbleRunner). Recomputed whenever points change.
-    // The raw `points` list above is left untouched -- track editing
-    // tools (TrackGuiListener, TrackVisualizer, etc.) still work off it
-    // directly, so admins always see/edit exactly what they placed.
-    private TrackSpline spline = TrackSpline.build(points);
+    // Cached Catmull-Rom spline through `points`, used for actual race
+    // physics (see MarbleRunner) -- gives a smooth, evenly arc-length
+    // sampled curve with well-defined slope/curvature at any point along
+    // it, which real gravity/cornering physics needs. Recomputed whenever
+    // points change. The raw `points` list above is left untouched --
+    // track editing tools (TrackGuiListener, TrackVisualizer, etc.) still
+    // work off it directly, so admins always see/edit exactly what they
+    // placed.
+    private TrackSpline raceSpline = TrackSpline.build(new ArrayList<>());
 
     // ✅ Optional watch spot for spectating
     private Location watchLocation;
 
-    // Opt-in flag: only tracks marked eligible are candidates for the
-    // scheduled server race's random pick (see ScheduledRaceManager).
-    private boolean autoRaceEligible;
+    private int laps = 1;
+
+    // Opt-in flag for the scheduled race system (see ScheduledRaceManager) --
+    // false by default so a track isn't auto-cycled before an admin has
+    // actually finished building/testing it.
+    private boolean autoRaceEligible = false;
 
     public MarbleTrack(String id, World world) {
         this.id = id;
@@ -58,13 +64,13 @@ public final class MarbleTrack {
         return Collections.unmodifiableList(points);
     }
 
-    /** Corner-smoothed spline used for race physics. See TrackPhysics. */
-    public TrackSpline getSpline() {
-        return spline;
+    /** Smooth spline through the raw waypoints, used for race physics. See TrackSpline. */
+    public TrackSpline getRaceSpline() {
+        return raceSpline;
     }
 
     private void recomputeRacePath() {
-        spline = TrackSpline.build(points);
+        raceSpline = TrackSpline.build(points);
     }
 
     public Location getWatchLocation() {
@@ -80,11 +86,19 @@ public final class MarbleTrack {
         recomputeRacePath();
     }
 
+    public int getLaps() {
+        return laps;
+    }
+
+    public void setLaps(int laps) {
+        this.laps = Math.max(1, laps);
+    }
+
     public boolean isAutoRaceEligible() {
         return autoRaceEligible;
     }
 
-    public void setAutoRaceEligible(boolean eligible) {
-        this.autoRaceEligible = eligible;
+    public void setAutoRaceEligible(boolean autoRaceEligible) {
+        this.autoRaceEligible = autoRaceEligible;
     }
 }

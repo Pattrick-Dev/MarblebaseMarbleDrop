@@ -163,11 +163,10 @@ public final class MdConfig {
     public List<Integer> scheduledRaceAnnounceMinutesBefore() { return scheduledRaceAnnounceMinutesBefore; }
     public int scheduledRaceWinnerDust() { return scheduledRaceWinnerDust; }
     public int scheduledRaceWinnerDustVsAi() { return scheduledRaceWinnerDustVsAi; }
-    public List<Integer> scheduledRacePlacePercentages() { return scheduledRacePlacePercentages; }
 
     /**
      * Dust for a given 0-indexed finish place, tapered off from baseDust by
-     * {@link #scheduledRacePlacePercentages()} (e.g. [100, 50, 25] pays 1st
+     * races.scheduled.place-dust-percentages (e.g. [100, 50, 25] pays 1st
      * place in full, 2nd half, 3rd a quarter). Places beyond the configured
      * list earn nothing -- this is what stops one player snowballing further
      * ahead every race just by always placing 1st.

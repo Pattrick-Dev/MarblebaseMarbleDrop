@@ -2,7 +2,7 @@ name: MarbleBaseMD
 main: me.pattrick.marbledrop.Main
 version: 1.0
 api-version: "26.2"
-softdepend: [WorldEdit, FastAsyncWorldEdit]
+softdepend: [WorldEdit, FastAsyncWorldEdit, ProtocolLib]
 commands:
    md:
       description: Base command for marble drop

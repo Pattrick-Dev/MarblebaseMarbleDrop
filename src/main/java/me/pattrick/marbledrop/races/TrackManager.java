@@ -101,34 +101,22 @@ public final class TrackManager {
         return true;
     }
 
-    public boolean setAutoRaceEligible(String id, boolean eligible) {
-        if (id == null || id.isBlank()) return false;
-
-        id = id.toLowerCase();
-        MarbleTrack track = tracks.get(id);
-        if (track == null) return false;
-
-        track.setAutoRaceEligible(eligible);
-        saveNow();
-        return true;
-    }
-
-    /** Track IDs currently opted into the scheduled server race's random pick. */
-    public List<String> autoRaceEligibleIds() {
-        List<String> out = new ArrayList<>();
-        for (MarbleTrack t : tracks.values()) {
-            if (t.isAutoRaceEligible()) out.add(t.getId());
-        }
-        Collections.sort(out);
-        return out;
-    }
-
     public Set<String> ids() {
         return Collections.unmodifiableSet(tracks.keySet());
     }
 
     public List<String> sortedIds() {
         List<String> list = new ArrayList<>(tracks.keySet());
+        Collections.sort(list);
+        return list;
+    }
+
+    /** Tracks an admin has explicitly opted into the scheduled race queue (see /md track autorace). */
+    public List<String> autoRaceEligibleIds() {
+        List<String> list = new ArrayList<>();
+        for (MarbleTrack t : tracks.values()) {
+            if (t.isAutoRaceEligible()) list.add(t.getId());
+        }
         Collections.sort(list);
         return list;
     }

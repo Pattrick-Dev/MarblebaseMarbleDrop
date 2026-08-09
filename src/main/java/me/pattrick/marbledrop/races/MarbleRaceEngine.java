@@ -6,33 +6,35 @@ import org.bukkit.World;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.logging.Level;
+import java.lang.reflect.Method;
+import java.util.*;
 
 /**
  * Ticks active MarbleRunner instances.
- * <p>
- * Runners are grouped by the TrackPhysics they share (one per race
- * session) so each session's dyn4j World is stepped exactly once per
- * tick no matter how many marbles are in it: apply every runner's drive
- * force, step that group's World once, then let every runner in that
- * group read its new position back.
+ *
+ * Backwards compatible:
+ * - If MarbleRunner has boolean tick(List<MarbleRunner> allRunners), we call that.
+ * - Otherwise we call legacy boolean tick().
+ *
+ * This lets us add repulsion/wall-collision in MarbleRunner without breaking older runners.
  */
 public final class MarbleRaceEngine {
-
-    private static final double DT = 1.0 / 20.0; // seconds per Minecraft tick
 
     private final Plugin plugin;
     private final List<MarbleRunner> runners = new LinkedList<>();
 
     private BukkitTask task;
 
+    // Cache reflection lookups per runner class to avoid repeated method scanning
+    private final Map<Class<?>, Method> neighborTickCache = new HashMap<>();
+    private final Set<Class<?>> noNeighborTick = new HashSet<>();
+
     public MarbleRaceEngine(Plugin plugin) {
         this.plugin = plugin;
+    }
+
+    public Plugin getPlugin() {
+        return plugin;
     }
 
     public void start() {
@@ -46,7 +48,9 @@ public final class MarbleRaceEngine {
             task.cancel();
             task = null;
         }
-        clearAll();
+        runners.clear();
+        neighborTickCache.clear();
+        noNeighborTick.clear();
     }
 
     public void addRunner(MarbleRunner runner) {
@@ -54,15 +58,14 @@ public final class MarbleRaceEngine {
         runners.add(runner);
     }
 
-    /** Force-despawns every active runner right now (armor stand + physics body), without firing finish listeners. */
-    public void clearAll() {
-        for (MarbleRunner runner : runners) {
-            try {
-                runner.forceRemove();
-            } catch (Throwable t) {
-                plugin.getLogger().log(Level.WARNING, "MarbleRaceEngine: failed to force-remove a runner during purge.", t);
-            }
-        }
+    /** Runs `task` after `delayTicks` on this engine's owning plugin -- lets RaceManager drive a start countdown without needing its own Plugin reference. */
+    public void scheduleDelayed(Runnable task, long delayTicks) {
+        Bukkit.getScheduler().runTaskLater(plugin, task, delayTicks);
+    }
+
+    /** Force-removes every active runner without firing their finish callbacks -- see /md race purge. */
+    public void purgeAll() {
+        for (MarbleRunner r : runners) r.despawn();
         runners.clear();
     }
 
@@ -88,50 +91,64 @@ public final class MarbleRaceEngine {
     private void tick() {
         if (runners.isEmpty()) return;
 
-        try {
-            Map<TrackPhysics, List<MarbleRunner>> groups = new LinkedHashMap<>();
-            for (MarbleRunner runner : runners) {
-                groups.computeIfAbsent(runner.getPhysics(), k -> new ArrayList<>()).add(runner);
+        // Snapshot so each runner sees a consistent view of all runners for this tick
+        final List<MarbleRunner> snapshot = new ArrayList<>(runners);
+
+        Iterator<MarbleRunner> it = runners.iterator();
+        while (it.hasNext()) {
+            MarbleRunner runner = it.next();
+
+            boolean alive = tickRunner(runner, snapshot);
+            if (!alive) {
+                it.remove();
             }
+        }
+    }
 
-            List<MarbleRunner> finished = new ArrayList<>();
-            for (Map.Entry<TrackPhysics, List<MarbleRunner>> group : groups.entrySet()) {
-                List<MarbleRunner> members = group.getValue();
+    private boolean tickRunner(MarbleRunner runner, List<MarbleRunner> snapshot) {
+        // Prefer tick(List<MarbleRunner>) if runner provides it
+        Class<?> cls = runner.getClass();
 
+        Method m = neighborTickCache.get(cls);
+        if (m == null && !noNeighborTick.contains(cls)) {
+            m = findNeighborTick(cls);
+            if (m != null) {
+                neighborTickCache.put(cls, m);
+            } else {
+                noNeighborTick.add(cls);
+            }
+        }
+
+        if (m != null) {
+            try {
+                Object out = m.invoke(runner, snapshot);
+                if (out instanceof Boolean b) return b;
+                return true; // if something weird, don't kill the runner
+            } catch (Throwable t) {
+                // If a runner's advanced tick fails, fall back to legacy tick() this tick
                 try {
-                    for (MarbleRunner runner : members) {
-                        runner.applyDrive();
-                    }
-
-                    group.getKey().step(DT);
-
-                    for (MarbleRunner runner : members) {
-                        if (!runner.syncAfterStep()) {
-                            finished.add(runner);
-                        }
-                    }
-                } catch (Throwable t) {
-                    // One race session's physics going unstable (e.g. an
-                    // extreme pileup at high speed) must not freeze every
-                    // other race -- or this whole repeating task, forever,
-                    // since an uncaught exception here would otherwise
-                    // silently cancel it -- so isolate the failure to just
-                    // this session's runners and keep ticking the rest.
-                    plugin.getLogger().log(Level.SEVERE,
-                            "MarbleRaceEngine: a race session crashed mid-tick, force-removing its runners.", t);
-                    for (MarbleRunner runner : members) {
-                        try {
-                            runner.forceRemove();
-                        } catch (Throwable ignored) {
-                        }
-                    }
-                    finished.addAll(members);
+                    return runner.tick();
+                } catch (Throwable ignored) {
+                    return false;
                 }
             }
-
-            runners.removeAll(finished);
-        } catch (Throwable t) {
-            plugin.getLogger().log(Level.SEVERE, "MarbleRaceEngine: tick failed unexpectedly.", t);
         }
+
+        // Legacy behavior
+        return runner.tick();
+    }
+
+    private Method findNeighborTick(Class<?> cls) {
+        try {
+            // Must be exactly: boolean tick(List<MarbleRunner> runners)
+            Method m = cls.getMethod("tick", List.class);
+            if (m.getReturnType() == boolean.class || m.getReturnType() == Boolean.class) {
+                m.setAccessible(true);
+                return m;
+            }
+        } catch (NoSuchMethodException ignored) {
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 }
