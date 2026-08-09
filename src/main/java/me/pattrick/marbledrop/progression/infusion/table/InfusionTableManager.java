@@ -142,4 +142,9 @@ public final class InfusionTableManager {
         }
         return out;
     }
+
+    /** How many infusion tables are currently registered -- see StationCommands.count(). */
+    public int count() {
+        return keys.size();
+    }
 }

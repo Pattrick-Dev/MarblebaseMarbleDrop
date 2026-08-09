@@ -11,6 +11,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -40,6 +41,28 @@ public final class ProgressionListener implements Listener {
         // Initialize movement baseline
         lastLocation.put(e.getPlayer().getUniqueId(), e.getPlayer().getLocation());
         lastMoveSampleMs.put(e.getPlayer().getUniqueId(), System.currentTimeMillis());
+    }
+
+    /**
+     * Re-baselines the walk tracker on any teleport -- without this, the
+     * NEXT PlayerMoveEvent after a teleport measures distance from the
+     * pre-teleport location (lastLocation is only ever updated by
+     * onMove(), never by the teleport itself), crediting the whole jump as
+     * "walked". That's exploitable directly (teleport somewhere far, take
+     * one step) and also fires constantly from the plugin's own teleports
+     * -- race starting grids, spectator/watch snapping, tutorial
+     * teleports, /spawn, ender pearls, anything. Snapping the baseline to
+     * the destination here means only genuine steps after landing ever
+     * count.
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onTeleport(PlayerTeleportEvent e) {
+        Player p = e.getPlayer();
+        Location to = e.getTo();
+        if (to == null) return;
+
+        lastLocation.put(p.getUniqueId(), to);
+        lastMoveSampleMs.put(p.getUniqueId(), System.currentTimeMillis());
     }
 
     @EventHandler

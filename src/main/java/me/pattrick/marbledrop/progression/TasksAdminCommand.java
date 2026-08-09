@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.progression;
 
+import me.pattrick.marbledrop.command.Commands;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -17,18 +18,10 @@ public final class TasksAdminCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!sender.hasPermission("marbledrop.admin")) {
-            sender.sendMessage(ChatColor.RED + "You don't have permission.");
-            return true;
-        }
+        if (!Commands.requireAdmin(sender)) return true;
 
-        if (args.length < 3) {
-            sender.sendMessage(ChatColor.RED + "Usage: /tasksadmin reset <daily|weekly|all> <player|all>");
-            return true;
-        }
-
-        if (!args[0].equalsIgnoreCase("reset")) {
-            sender.sendMessage(ChatColor.RED + "Usage: /tasksadmin reset <daily|weekly|all> <player|all>");
+        if (args.length < 3 || !args[0].equalsIgnoreCase("reset")) {
+            Commands.usage(sender, "/tasks admin reset <daily|weekly|all> <player|all>");
             return true;
         }
 
@@ -56,11 +49,8 @@ public final class TasksAdminCommand implements CommandExecutor {
             return true;
         }
 
-        Player p = Bukkit.getPlayerExact(target);
-        if (p == null) {
-            sender.sendMessage(ChatColor.RED + "Player not found (must be online): " + target);
-            return true;
-        }
+        Player p = Commands.online(sender, target);
+        if (p == null) return true;
 
         if (both) taskManager.forceResetAll(p);
         else taskManager.forceReset(p, type);

@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop;
 
+import me.pattrick.marbledrop.command.Commands;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationCommand;
 import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
@@ -17,6 +18,16 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 
+/**
+ * Routes /md, /tasks, and /recipes to their per-feature CommandExecutor.
+ * Pure dispatch -- every actual check (player-only, permission) lives in
+ * the target command itself now, not duplicated here. An earlier version
+ * re-checked "is this sender a player" before delegating to nearly every
+ * route, even though the target command almost always re-checked it too;
+ * worse, that router-level check ran BEFORE commands like
+ * DustAdminCommand/TasksAdminCommand, which were written to work from
+ * console, silently blocking them from ever being reached that way.
+ */
 public class CommandKit implements CommandExecutor {
 
     private final JavaPlugin plugin;
@@ -33,6 +44,7 @@ public class CommandKit implements CommandExecutor {
     private final CommandExecutor raceCommand;
     private final CommandExecutor teamCommand;
     private final CommandExecutor tutorialCommand;
+    private final CommandExecutor recipesCommand;
 
     private final File filePath;
     private FileConfiguration config;
@@ -50,7 +62,8 @@ public class CommandKit implements CommandExecutor {
             CommandExecutor trackCommand,
             CommandExecutor raceCommand,
             CommandExecutor teamCommand,
-            CommandExecutor tutorialCommand
+            CommandExecutor tutorialCommand,
+            CommandExecutor recipesCommand
     ) {
 
         this.plugin = plugin;
@@ -67,6 +80,7 @@ public class CommandKit implements CommandExecutor {
         this.raceCommand = raceCommand;
         this.teamCommand = teamCommand;
         this.tutorialCommand = tutorialCommand;
+        this.recipesCommand = recipesCommand;
 
         this.filePath = new File(plugin.getDataFolder(), "config.yml");
         this.config = YamlConfiguration.loadConfiguration(this.filePath);
@@ -86,6 +100,10 @@ public class CommandKit implements CommandExecutor {
             return handleTasks(sender, cmd, label, args);
         }
 
+        if (cmd.getName().equalsIgnoreCase("recipes")) {
+            return recipesCommand.onCommand(sender, cmd, label, args);
+        }
+
         if (!cmd.getName().equalsIgnoreCase("md")) {
             sender.sendMessage(ChatColor.RED + "Use: /md");
             return true;
@@ -99,93 +117,55 @@ public class CommandKit implements CommandExecutor {
 
         String sub = args[0].toLowerCase();
 
-        // ---------------- ROUTING ----------------
-
-        if (sub.equals("track")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Please run this command as a player!");
-                return true;
-            }
-            return trackCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-        }
-
-        if (sub.equals("team")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Please run this command as a player!");
-                return true;
-            }
-            return teamCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-        }
-
-        // race routing
-        if (sub.equals("race") || sub.equals("races")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Please run this command as a player!");
-                return true;
-            }
-            return raceCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-        }
-
-        // join the current scheduled race -- a thin alias for "/md race join"
-        if (sub.equals("join")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Please run this command as a player!");
-                return true;
-            }
-            return raceCommand.onCommand(sender, cmd, label, new String[]{"join"});
-        }
-
-        // leave whatever race you're entered in -- a thin alias for "/md race leave"
-        if (sub.equals("leave")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Please run this command as a player!");
-                return true;
-            }
-            return raceCommand.onCommand(sender, cmd, label, new String[]{"leave"});
-        }
-
-        if (sub.equals("tutorial")) {
-            return tutorialCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-        }
-
-        if (sub.equals("table") || sub.equals("infusiontable")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Please run this command as a player!");
-                return true;
-            }
-            return infusionTableCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-        }
-
-        if (sub.equals("recycler") || sub.equals("recycle")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Please run this command as a player!");
-                return true;
-            }
-            return marbleRecyclerCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-        }
-
-        if (sub.equals("upgrade") || sub.equals("upgrades")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Please run this command as a player!");
-                return true;
-            }
-            return upgradeStationCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-        }
-
-        if (sub.equals("dust")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Please run this command as a player!");
-                return true;
-            }
-            if (args.length >= 2 && args[1].equalsIgnoreCase("admin")) {
-                return dustAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 2));
-            }
-            return dustCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-        }
-
-        // ---------------- CORE / ADMIN ----------------
-
         switch (sub) {
+
+            case "track" -> {
+                return trackCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+            }
+
+            case "team" -> {
+                return teamCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+            }
+
+            case "race", "races" -> {
+                return raceCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+            }
+
+            // thin alias for "/md race join"
+            case "join" -> {
+                return raceCommand.onCommand(sender, cmd, label, new String[]{"join"});
+            }
+
+            // thin alias for "/md race leave"
+            case "leave" -> {
+                return raceCommand.onCommand(sender, cmd, label, new String[]{"leave"});
+            }
+
+            case "tutorial" -> {
+                return tutorialCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+            }
+
+            case "table", "infusiontable" -> {
+                return infusionTableCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+            }
+
+            case "recycler", "recycle" -> {
+                return marbleRecyclerCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+            }
+
+            case "upgrade", "upgrades" -> {
+                return upgradeStationCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+            }
+
+            case "dust" -> {
+                if (args.length >= 2 && args[1].equalsIgnoreCase("admin")) {
+                    return dustAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 2));
+                }
+                return dustCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+            }
+
+            // ---------------- CORE / ADMIN ----------------
+
             case "help" -> {
                 if (sender instanceof Player p) sendHelp(p);
                 else sender.sendMessage("Commands: /md reload");
@@ -193,10 +173,7 @@ public class CommandKit implements CommandExecutor {
             }
 
             case "reload" -> {
-                if (!sender.hasPermission("marbledrop.admin")) {
-                    sender.sendMessage(ChatColor.RED + "You don't have permission");
-                    return true;
-                }
+                if (!Commands.requireAdmin(sender)) return true;
 
                 plugin.reloadConfig();
                 if (mdConfig != null) mdConfig.reload();
@@ -207,11 +184,9 @@ public class CommandKit implements CommandExecutor {
             }
 
             case "debug" -> {
-                if (!(sender instanceof Player player)) return true;
-                if (!player.hasPermission("marbledrop.debug")) {
-                    player.sendMessage(ChatColor.RED + "You don't have permission");
-                    return true;
-                }
+                Player player = Commands.player(sender);
+                if (player == null) return true;
+                if (!Commands.requirePermission(player, Commands.DEBUG)) return true;
 
                 boolean next = !plugin.getConfig().getBoolean("debug.enabled", false);
                 plugin.getConfig().set("debug.enabled", next);
@@ -224,9 +199,13 @@ public class CommandKit implements CommandExecutor {
                 return true;
             }
 
+            // Deliberately silent (no message) on failure, unlike every
+            // other subcommand here -- this is a raw PDC inspector for
+            // devs, not something worth announcing the existence of to
+            // whoever's poking at commands they don't have.
             case "pdc" -> {
                 if (!(sender instanceof Player player)) return true;
-                if (!player.hasPermission("marbledrop.debug")) return true;
+                if (!player.hasPermission(Commands.DEBUG)) return true;
 
                 ItemStack item = player.getInventory().getItemInMainHand();
                 if (item == null || item.getType().isAir()) return true;
@@ -256,10 +235,6 @@ public class CommandKit implements CommandExecutor {
     }
 
     private boolean handleTasks(CommandSender sender, Command cmd, String label, String[] args) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("Please run this command as a player!");
-            return true;
-        }
         if (args.length >= 1 && args[0].equalsIgnoreCase("admin")) {
             return tasksAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
@@ -267,13 +242,14 @@ public class CommandKit implements CommandExecutor {
     }
 
     private void sendHelp(Player player) {
-        boolean admin = player.isOp() || player.hasPermission("marbledrop.admin");
+        boolean admin = player.hasPermission("marbledrop.admin");
 
         if (admin) {
             player.sendMessage(ChatColor.GREEN + "MarbleDrop Admin Commands\n" +
                     ChatColor.DARK_GREEN + "/md table\n" +
                     ChatColor.DARK_GREEN + "/md dust\n" +
                     ChatColor.DARK_GREEN + "/tasks\n" +
+                    ChatColor.DARK_GREEN + "/recipes\n" +
                     ChatColor.DARK_GREEN + "/md recycler\n" +
                     ChatColor.DARK_GREEN + "/md upgrade\n" +
                     ChatColor.DARK_GREEN + "/md track\n" +
@@ -289,8 +265,7 @@ public class CommandKit implements CommandExecutor {
             player.sendMessage(ChatColor.GREEN + "MarbleDrop Commands\n" +
                     ChatColor.DARK_GREEN + "/md dust\n" +
                     ChatColor.DARK_GREEN + "/tasks\n" +
-                    ChatColor.DARK_GREEN + "/md upgrade\n" +
-                    ChatColor.DARK_GREEN + "/md track\n" +
+                    ChatColor.DARK_GREEN + "/recipes\n" +
                     ChatColor.DARK_GREEN + "/md race\n" +
                     ChatColor.DARK_GREEN + "/md join\n" +
                     ChatColor.DARK_GREEN + "/md leave\n" +

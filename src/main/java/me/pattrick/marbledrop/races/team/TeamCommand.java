@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.races.team;
 
+import me.pattrick.marbledrop.command.Commands;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -15,11 +16,10 @@ public final class TeamCommand implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (!(sender instanceof Player p)) {
-            sender.sendMessage("Run this as a player.");
-            return true;
-        }
-        TeamMenu.open(p, mgr);
+        Player player = Commands.player(sender);
+        if (player == null) return true;
+
+        TeamMenu.open(player, mgr);
         return true;
     }
 }

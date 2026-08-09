@@ -8,6 +8,8 @@ import me.pattrick.marbledrop.marble.MarbleKeys;
 import me.pattrick.marbledrop.marble.MarbleRarity;
 import me.pattrick.marbledrop.marble.MarbleStats;
 import me.pattrick.marbledrop.progression.DustManager;
+import me.pattrick.marbledrop.progression.TaskManager;
+import me.pattrick.marbledrop.progression.TaskTrigger;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
@@ -29,6 +31,10 @@ public final class InfusionService {
     private final Plugin plugin;
     private final DustManager dust;
 
+    // Nullable, wired in from Main after construction (see the constructor
+    // comment below on why the constructor signature itself stays fixed).
+    private TaskManager taskManager;
+
     private final NamespacedKey K_ATTUNEMENT;
 
     // per-player daily infusion cap tracking
@@ -47,6 +53,10 @@ public final class InfusionService {
 
         this.K_INFUSE_DAY = new NamespacedKey(plugin, "infuse_day");
         this.K_INFUSE_COUNT = new NamespacedKey(plugin, "infuse_count");
+    }
+
+    public void setTaskManager(TaskManager taskManager) {
+        this.taskManager = taskManager;
     }
 
     /**
@@ -190,6 +200,10 @@ public final class InfusionService {
 
         // ✅ The one-and-only marble schema
         MarbleItem.write(item, data);
+
+        if (taskManager != null) {
+            taskManager.increment(player, TaskTrigger.INFUSE_MARBLE, 1);
+        }
 
         // increment daily infusion count ONLY on success (and do not increment for bypass users)
         if (cap > 0 && !bypass) {

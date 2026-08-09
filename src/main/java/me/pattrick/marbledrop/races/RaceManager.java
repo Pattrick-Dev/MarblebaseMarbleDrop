@@ -6,6 +6,8 @@ import me.pattrick.marbledrop.marble.MarbleItem;
 import me.pattrick.marbledrop.marble.MarbleRarity;
 import me.pattrick.marbledrop.marble.MarbleStat;
 import me.pattrick.marbledrop.marble.MarbleStats;
+import me.pattrick.marbledrop.progression.TaskManager;
+import me.pattrick.marbledrop.progression.TaskTrigger;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -48,6 +50,11 @@ public final class RaceManager {
     // present, giveBoostItem()/giveGlowItem() show ability items via fake
     // packets instead of real inventory writes (see RaceInventoryOverlay).
     private RaceInventoryOverlay inventoryOverlay;
+
+    // Nullable in theory (Main always constructs one) -- guarded anyway so
+    // a real race never NPEs on task progress, which is cosmetic to the
+    // race itself. See onFinish() for WIN_RACE/PLACE_TOP_3/FINISH_RACE.
+    private TaskManager taskManager;
 
     // trackId -> active session
     private final Map<String, RaceSession> active = new HashMap<>();
@@ -112,6 +119,10 @@ public final class RaceManager {
     /** Wired in from Main.java only when ProtocolLib is installed -- see the field javadoc. */
     public void setInventoryOverlay(RaceInventoryOverlay inventoryOverlay) {
         this.inventoryOverlay = inventoryOverlay;
+    }
+
+    public void setTaskManager(TaskManager taskManager) {
+        this.taskManager = taskManager;
     }
 
     /** Defensive copy of a track's current lobby -- read-only peek, doesn't affect join validation. */
@@ -591,6 +602,15 @@ public final class RaceManager {
         session.finishTimes.put(entry.marbleId, elapsed);
 
         int place = session.finished.size();
+
+        Player owner = Bukkit.getPlayer(entry.owner);
+        if (owner != null) {
+            if (taskManager != null) {
+                taskManager.increment(owner, TaskTrigger.FINISH_RACE, 1);
+                if (place <= 3) taskManager.increment(owner, TaskTrigger.PLACE_TOP_3, 1);
+                if (place == 1) taskManager.increment(owner, TaskTrigger.WIN_RACE, 1);
+            }
+        }
 
         String ownerName = Bukkit.getOfflinePlayer(entry.owner).getName();
         if (ownerName == null) ownerName = entry.owner.toString();

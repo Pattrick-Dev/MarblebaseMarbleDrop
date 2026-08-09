@@ -58,11 +58,12 @@ public final class TasksMenu {
         Inventory inv = Bukkit.createInventory(null, 27, TITLE);
         inv.setItem(22, createResetInfoItem());
 
-        List<TaskDefinition> tasks = taskManager.getTasks();
+        List<TaskDefinition> tasks = taskManager.getActiveTasks(player);
         String trackedId = taskManager.getTrackedTaskId(player);
 
         int slot = 0;
         for (TaskDefinition t : tasks) {
+            if (slot == 22) slot++; // reserved for the reset-info clock above
             if (slot >= inv.getSize()) break;
             inv.setItem(slot++, createTaskItem(player, t, trackedId));
         }

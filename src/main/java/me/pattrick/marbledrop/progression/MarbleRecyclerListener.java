@@ -22,13 +22,15 @@ public final class MarbleRecyclerListener implements Listener {
 
     private final MarbleRecyclerManager recyclers;
     private final DustManager dust;
+    private final TaskManager taskManager;
     @SuppressWarnings("unused")
     private final Plugin plugin;
 
-    public MarbleRecyclerListener(Plugin plugin, MarbleRecyclerManager recyclers, DustManager dust) {
+    public MarbleRecyclerListener(Plugin plugin, MarbleRecyclerManager recyclers, DustManager dust, TaskManager taskManager) {
         this.plugin = plugin;
         this.recyclers = recyclers;
         this.dust = dust;
+        this.taskManager = taskManager;
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -98,6 +100,7 @@ public final class MarbleRecyclerListener implements Listener {
 
         // Award dust
         dust.addDust(player, total);
+        taskManager.increment(player, TaskTrigger.RECYCLE_MARBLE, amount);
 
         // Feedback
         var loc = block.getLocation().add(0.5, 1.0, 0.5);

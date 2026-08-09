@@ -21,7 +21,7 @@ public class CommandKitTabCompletion implements TabCompleter {
   }
 
   private static boolean isAdmin(CommandSender sender) {
-    return sender.isOp() || sender.hasPermission("marbledrop.admin");
+    return sender.hasPermission("marbledrop.admin");
   }
 
   private static List<String> filterStartsWith(List<String> options, String token) {
@@ -73,17 +73,24 @@ public class CommandKitTabCompletion implements TabCompleter {
       return filterStartsWith(taskSubs, args[0]);
     }
 
-    // ---- /tasks admin <sub> ----
+    // ---- /tasks admin <sub> ---- (TasksAdminCommand only implements "reset")
     if (args.length == 2 && args[0].equalsIgnoreCase("admin")) {
       if (!isAdmin(sender)) return Collections.emptyList();
+      return filterStartsWith(List.of("reset"), args[1]);
+    }
 
-      List<String> tasksAdminSubs = new ArrayList<>();
-      // Add your TasksAdminCommand subcommands here if you want.
-      // tasksAdminSubs.add("add");
-      // tasksAdminSubs.add("remove");
-      // tasksAdminSubs.add("reload");
+    // ---- /tasks admin reset <daily|weekly|all> ----
+    if (args.length == 3 && args[0].equalsIgnoreCase("admin") && args[1].equalsIgnoreCase("reset")) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+      return filterStartsWith(List.of("daily", "weekly", "all"), args[2]);
+    }
 
-      return filterStartsWith(tasksAdminSubs, args[1]);
+    // ---- /tasks admin reset <daily|weekly|all> <player|all> ----
+    if (args.length == 4 && args[0].equalsIgnoreCase("admin") && args[1].equalsIgnoreCase("reset")) {
+      if (!isAdmin(sender)) return Collections.emptyList();
+      List<String> targets = new ArrayList<>(onlinePlayerNames());
+      targets.add("all");
+      return filterStartsWith(targets, args[3]);
     }
 
     return Collections.emptyList();
@@ -106,9 +113,6 @@ public class CommandKitTabCompletion implements TabCompleter {
       // everyone
       base.add("help");
       base.add("dust");
-      base.add("upgrade");
-      base.add("upgrades");
-      base.add("track");
       base.add("race");
       base.add("races");
       base.add("join");
@@ -116,8 +120,13 @@ public class CommandKitTabCompletion implements TabCompleter {
       base.add("team");
       base.add("tutorial");
 
-      // admin-only router targets
+      // admin-only router targets (TrackCommand and UpgradeStationCommand
+      // both gate everything on marbledrop.admin, same as the station
+      // give/remove/count commands below)
       if (isAdmin(sender)) {
+        base.add("upgrade");
+        base.add("upgrades");
+        base.add("track");
         base.add("table");
         base.add("infusiontable");
         base.add("recycler");
@@ -163,9 +172,9 @@ public class CommandKitTabCompletion implements TabCompleter {
 
       List<String> dustAdminSubs = new ArrayList<>();
       dustAdminSubs.add("give");
-      dustAdminSubs.add("take");
+      dustAdminSubs.add("remove");
+      dustAdminSubs.add("take"); // alias for remove -- see DustAdminCommand
       dustAdminSubs.add("set");
-      dustAdminSubs.add("reset");
 
       return filterStartsWith(dustAdminSubs, args[2]);
     }
@@ -175,7 +184,7 @@ public class CommandKitTabCompletion implements TabCompleter {
       if (!isAdmin(sender)) return Collections.emptyList();
 
       String action = args[2].toLowerCase();
-      if (action.equals("give") || action.equals("take") || action.equals("set") || action.equals("reset")) {
+      if (action.equals("give") || action.equals("remove") || action.equals("take") || action.equals("set")) {
         return filterStartsWith(onlinePlayerNames(), args[3]);
       }
 
@@ -187,7 +196,7 @@ public class CommandKitTabCompletion implements TabCompleter {
       if (!isAdmin(sender)) return Collections.emptyList();
 
       String action = args[2].toLowerCase();
-      if (action.equals("give") || action.equals("take") || action.equals("set")) {
+      if (action.equals("give") || action.equals("remove") || action.equals("take") || action.equals("set")) {
         List<String> amounts = new ArrayList<>();
         amounts.add("50");
         amounts.add("100");
@@ -326,10 +335,7 @@ public class CommandKitTabCompletion implements TabCompleter {
         tutorialSubs.add("skip");
         tutorialSubs.add("setlocation");
         tutorialSubs.add("clearlocation");
-        tutorialSubs.add("listlocations");
         tutorialSubs.add("setrace");
-        tutorialSubs.add("removerace");
-        tutorialSubs.add("listraces");
         tutorialSubs.add("setpost");
         tutorialSubs.add("setcraftframes");
       }
@@ -348,11 +354,11 @@ public class CommandKitTabCompletion implements TabCompleter {
         if (!isAdmin(sender)) return Collections.emptyList();
         return filterStartsWith(onlinePlayerNames(), args[2]);
       }
-      if (sub.equals("setlocation") || sub.equals("clearlocation") || sub.equals("listlocations")) {
+      if (sub.equals("setlocation") || sub.equals("clearlocation")) {
         if (!isAdmin(sender)) return Collections.emptyList();
         return filterStartsWith(tutorialStepNames(), args[2]);
       }
-      if (sub.equals("setrace") || sub.equals("removerace")) {
+      if (sub.equals("setrace")) {
         if (!isAdmin(sender)) return Collections.emptyList();
         return filterStartsWith(trackIds(), args[2]);
       }

@@ -44,6 +44,11 @@ public final class TrackVisualizer {
         player.sendMessage("§aShowing track §e" + trackId);
     }
 
+    /** True if this player currently has a track preview running (any track). */
+    public boolean isShowing(Player player) {
+        return active.containsKey(player.getUniqueId());
+    }
+
     public void hide(Player player) {
         BukkitTask task = active.remove(player.getUniqueId());
         if (task != null) {
