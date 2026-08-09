@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.races;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -15,6 +16,7 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.FoodLevelChangeEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
@@ -41,6 +43,14 @@ public final class RaceWatchManager implements Listener {
 
     private final File file;
     private YamlConfiguration cfg;
+
+    // Nullable -- only set when ProtocolLib is installed (see Main). When
+    // present, start()/stop() never touch a racer's real inventory at all
+    // (ability items are faked via packets instead -- see
+    // RaceInventoryOverlay), so there's nothing to lose on a crash and
+    // nothing to restore. When absent, this falls back to the original
+    // real clear-and-restore behavior below.
+    private RaceInventoryOverlay inventoryOverlay;
 
     private record WatchState(
             Location returnLoc,
@@ -70,6 +80,11 @@ public final class RaceWatchManager implements Listener {
         this.file = new File(plugin.getDataFolder(), "race-watch.yml");
         reloadFile();
         startAnchorTask();
+    }
+
+    /** Wired in from Main.java only when ProtocolLib is installed -- see the field javadoc. */
+    public void setInventoryOverlay(RaceInventoryOverlay inventoryOverlay) {
+        this.inventoryOverlay = inventoryOverlay;
     }
 
     private void startAnchorTask() {
@@ -155,8 +170,22 @@ public final class RaceWatchManager implements Listener {
         // Anchor used to leash movement
         anchor.put(p.getUniqueId(), view.clone());
 
-        // Clear inventory for safety
-        clearPlayerInventory(p);
+        // Real clearing is only the fallback when we can't fake the ability
+        // items instead (see the inventoryOverlay field javadoc). With
+        // ProtocolLib available, the real inventory is never touched --
+        // captureState() above still ran regardless (cheap, and
+        // restoreState() below is a harmless no-op if nothing changed) --
+        // but it still needs to visually disappear, or whatever the player
+        // was already holding (their marble included) just sits there
+        // untouched underneath. hideRealInventory() overlays every slot as
+        // empty; giveBoostItem()/giveGlowItem() (called right after this,
+        // back in RaceManager.start()) then lay the real ability items on
+        // top of their two designated hotbar slots.
+        if (inventoryOverlay != null) {
+            inventoryOverlay.hideRealInventory(p);
+        } else {
+            clearPlayerInventory(p);
+        }
 
         // Adventure + flight allowed (no noclip like spectator)
         p.setGameMode(GameMode.ADVENTURE);
@@ -180,6 +209,14 @@ public final class RaceWatchManager implements Listener {
         if (p == null) return;
 
         UUID id = p.getUniqueId();
+
+        // This is the single choke point every "stop watching" path goes
+        // through -- a race actually finishing, a manual /md race unwatch,
+        // whatever -- so it's the right place to clear any fake ability
+        // items too, rather than relying on every caller to remember.
+        if (inventoryOverlay != null) {
+            inventoryOverlay.clearAll(p);
+        }
 
         WatchState state = watching.remove(id);
         anchor.remove(id);
@@ -423,14 +460,80 @@ public final class RaceWatchManager implements Listener {
     // ------------------------------
     @EventHandler(ignoreCancelled = true) public void onBreak(BlockBreakEvent e) { if (isWatching(e.getPlayer())) e.setCancelled(true); }
     @EventHandler(ignoreCancelled = true) public void onPlace(BlockPlaceEvent e) { if (isWatching(e.getPlayer())) e.setCancelled(true); }
-    @EventHandler(ignoreCancelled = true) public void onInteract(PlayerInteractEvent e) { if (isWatching(e.getPlayer())) e.setCancelled(true); }
     @EventHandler(ignoreCancelled = true) public void onInteractEntity(PlayerInteractEntityEvent e) { if (isWatching(e.getPlayer())) e.setCancelled(true); }
-    @EventHandler(ignoreCancelled = true) public void onDrop(PlayerDropItemEvent e) { if (isWatching(e.getPlayer())) e.setCancelled(true); }
-    @EventHandler(ignoreCancelled = true) public void onPickup(PlayerAttemptPickupItemEvent e) { if (isWatching(e.getPlayer())) e.setCancelled(true); }
-    @EventHandler(ignoreCancelled = true) public void onSwap(PlayerSwapHandItemsEvent e) { if (isWatching(e.getPlayer())) e.setCancelled(true); }
     @EventHandler(ignoreCancelled = true) public void onDamage(EntityDamageEvent e) { if (e.getEntity() instanceof Player p && isWatching(p)) e.setCancelled(true); }
     @EventHandler(ignoreCancelled = true) public void onFood(FoodLevelChangeEvent e) { if (e.getEntity() instanceof Player p && isWatching(p)) e.setCancelled(true); }
-    @EventHandler(ignoreCancelled = true) public void onInvClick(InventoryClickEvent e) { if (e.getWhoClicked() instanceof Player p && isWatching(p)) e.setCancelled(true); }
+
+    /**
+     * Any right-click (not just an ability-item one -- see
+     * RaceBoostListener/RaceGlowListener, which intercept those before
+     * this even runs) can trigger vanilla's forced held-slot resync
+     * (documented on RaceBoostListener), so this reasserts too rather than
+     * just cancelling and hoping.
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onInteract(PlayerInteractEvent e) {
+        if (!isWatching(e.getPlayer())) return;
+        e.setCancelled(true);
+        reassertOverlaySoon(e.getPlayer());
+    }
+
+    /**
+     * Cancelling one of these stops the real inventory effect (the item
+     * doesn't actually leave), but the client already optimistically
+     * predicted it did and updated its own display -- the server's
+     * trailing correction packet for that prediction shows the real item
+     * underneath (the player's marble), silently overwriting our fake
+     * Boost/Glow overlay. reassertOverlaySoon() re-sends the overlay a
+     * tick later, after that correction has already landed, so ours is the
+     * one that sticks. Same root cause, same fix shape, as the
+     * click-triggered held-slot resync documented in RaceBoostListener.
+     */
+    @EventHandler(ignoreCancelled = true)
+    public void onDrop(PlayerDropItemEvent e) {
+        if (!isWatching(e.getPlayer())) return;
+        e.setCancelled(true);
+        reassertOverlaySoon(e.getPlayer());
+    }
+
+    @EventHandler(ignoreCancelled = true) public void onPickup(PlayerAttemptPickupItemEvent e) { if (isWatching(e.getPlayer())) e.setCancelled(true); }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onSwap(PlayerSwapHandItemsEvent e) {
+        if (!isWatching(e.getPlayer())) return;
+        e.setCancelled(true);
+        reassertOverlaySoon(e.getPlayer());
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onInvClick(InventoryClickEvent e) {
+        if (!(e.getWhoClicked() instanceof Player p) || !isWatching(p)) return;
+        e.setCancelled(true);
+        reassertOverlaySoon(p);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onInvDrag(InventoryDragEvent e) {
+        if (!(e.getWhoClicked() instanceof Player p) || !isWatching(p)) return;
+        e.setCancelled(true);
+        reassertOverlaySoon(p);
+    }
+
+    // A cancelled drop was observed sending not one but TWO real trailing
+    // correction packets -- one the same tick, one on the very next tick,
+    // right around when a single-tick-later reassert would run, beating it
+    // about half the time. Rather than guess exactly how many rounds any
+    // given cancelled action produces, reassert several times over the
+    // next few ticks so whichever one is actually last still wins.
+    private static final long[] REASSERT_DELAY_TICKS = {1L, 2L, 3L, 5L};
+
+    /** See the class-level Boost/Glow overlay comment on onDrop() above. */
+    private void reassertOverlaySoon(Player p) {
+        if (inventoryOverlay == null) return;
+        for (long delay : REASSERT_DELAY_TICKS) {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> inventoryOverlay.reassertAll(p), delay);
+        }
+    }
 
     // If they log out mid-watch: DO NOT delete their state; it stays on disk for restoration.
     @EventHandler(ignoreCancelled = true)

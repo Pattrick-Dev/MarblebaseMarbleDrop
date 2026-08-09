@@ -82,6 +82,10 @@ public class CommandKit implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 
+        if (cmd.getName().equalsIgnoreCase("tasks")) {
+            return handleTasks(sender, cmd, label, args);
+        }
+
         if (!cmd.getName().equalsIgnoreCase("md")) {
             sender.sendMessage(ChatColor.RED + "Use: /md");
             return true;
@@ -122,6 +126,24 @@ public class CommandKit implements CommandExecutor {
             return raceCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
 
+        // join the current scheduled race -- a thin alias for "/md race join"
+        if (sub.equals("join")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Please run this command as a player!");
+                return true;
+            }
+            return raceCommand.onCommand(sender, cmd, label, new String[]{"join"});
+        }
+
+        // leave whatever race you're entered in -- a thin alias for "/md race leave"
+        if (sub.equals("leave")) {
+            if (!(sender instanceof Player)) {
+                sender.sendMessage("Please run this command as a player!");
+                return true;
+            }
+            return raceCommand.onCommand(sender, cmd, label, new String[]{"leave"});
+        }
+
         if (sub.equals("tutorial")) {
             return tutorialCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
@@ -148,17 +170,6 @@ public class CommandKit implements CommandExecutor {
                 return true;
             }
             return upgradeStationCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-        }
-
-        if (sub.equals("tasks")) {
-            if (!(sender instanceof Player)) {
-                sender.sendMessage("Please run this command as a player!");
-                return true;
-            }
-            if (args.length >= 2 && args[1].equalsIgnoreCase("admin")) {
-                return tasksAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 2));
-            }
-            return tasksCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
 
         if (sub.equals("dust")) {
@@ -244,6 +255,17 @@ public class CommandKit implements CommandExecutor {
         }
     }
 
+    private boolean handleTasks(CommandSender sender, Command cmd, String label, String[] args) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("Please run this command as a player!");
+            return true;
+        }
+        if (args.length >= 1 && args[0].equalsIgnoreCase("admin")) {
+            return tasksAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+        }
+        return tasksCommand.onCommand(sender, cmd, label, args);
+    }
+
     private void sendHelp(Player player) {
         boolean admin = player.isOp() || player.hasPermission("marbledrop.admin");
 
@@ -251,11 +273,13 @@ public class CommandKit implements CommandExecutor {
             player.sendMessage(ChatColor.GREEN + "MarbleDrop Admin Commands\n" +
                     ChatColor.DARK_GREEN + "/md table\n" +
                     ChatColor.DARK_GREEN + "/md dust\n" +
-                    ChatColor.DARK_GREEN + "/md tasks\n" +
+                    ChatColor.DARK_GREEN + "/tasks\n" +
                     ChatColor.DARK_GREEN + "/md recycler\n" +
                     ChatColor.DARK_GREEN + "/md upgrade\n" +
                     ChatColor.DARK_GREEN + "/md track\n" +
                     ChatColor.DARK_GREEN + "/md race\n" +
+                    ChatColor.DARK_GREEN + "/md join\n" +
+                    ChatColor.DARK_GREEN + "/md leave\n" +
                     ChatColor.DARK_GREEN + "/md team\n" +
                     ChatColor.DARK_GREEN + "/md tutorial\n" +
                     ChatColor.DARK_GREEN + "/md reload\n" +
@@ -264,10 +288,12 @@ public class CommandKit implements CommandExecutor {
         } else {
             player.sendMessage(ChatColor.GREEN + "MarbleDrop Commands\n" +
                     ChatColor.DARK_GREEN + "/md dust\n" +
-                    ChatColor.DARK_GREEN + "/md tasks\n" +
+                    ChatColor.DARK_GREEN + "/tasks\n" +
                     ChatColor.DARK_GREEN + "/md upgrade\n" +
                     ChatColor.DARK_GREEN + "/md track\n" +
                     ChatColor.DARK_GREEN + "/md race\n" +
+                    ChatColor.DARK_GREEN + "/md join\n" +
+                    ChatColor.DARK_GREEN + "/md leave\n" +
                     ChatColor.DARK_GREEN + "/md team\n");
         }
     }

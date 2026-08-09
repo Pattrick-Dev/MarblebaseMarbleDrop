@@ -12,6 +12,10 @@ holograms:
     name: "&8✦ &6Marble Recycler &8✦"
     y-offset: 1.15
 
+  upgrade:
+    name: "&b✦ &dUpgrade Station &b✦"
+    y-offset: 1.2
+
 infusion:
   daily-cap: 5   # 0 = unlimited
 
@@ -68,6 +72,20 @@ upgrade-station:
       LEGENDARY: 2.0
 
   daily-cap: 0  # 0 = unlimited
+
+races:
+  wall-search-radius: 2.5  # blocks from the track's centerline to scan for solid blocks when measuring the starting grid's width
+
+  scheduled:
+    enabled: true
+    interval-minutes: 20               # how often a new scheduled race cycle opens (if anyone's online)
+    announce-minutes-before: [10, 5, 1] # reminder broadcasts before the race starts
+    winner-dust: 50                    # base dust for 1st place against real players
+    winner-dust-vs-ai: 15               # base dust for 1st place when AI had to fill in the lobby
+    place-dust-percentages: [100, 50, 25] # percent of the base dust each finish place earns (index 0 = 1st); places beyond this list earn nothing
+    ai-fill-count: 3                   # AI opponents added when exactly 1 real player joins
+    ai-show-count: 4                   # AI racers for a pure showcase race when no one joins
+    retry-delay-seconds: 60            # how soon to retry after a cycle is skipped (disabled/no players/no free track), instead of waiting a full interval
 
 recycler:
   dust-return:

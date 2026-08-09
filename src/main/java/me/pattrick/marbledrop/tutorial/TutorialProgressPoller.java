@@ -8,7 +8,7 @@ import org.bukkit.scheduler.BukkitTask;
 
 /**
  * The INFUSION and UPGRADE steps use the real, unmodified game systems
- * (the actual Infusion Table, the actual Upgrade Station -- including
+ * (the actual Infusion Cauldron, the actual Upgrade Station -- including
  * the infusion table's own ~6-second reveal animation), so there's no
  * single clean "completion event" to hook. Instead, this polls each
  * active tutorial player currently on one of those two steps and

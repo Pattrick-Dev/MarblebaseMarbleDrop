@@ -16,7 +16,7 @@ import java.util.List;
 
 public final class InfusionTableMenu {
 
-    public static final String TITLE = ChatColor.DARK_PURPLE + "Infusion Table";
+    public static final String TITLE = ChatColor.DARK_PURPLE + "Infusion Cauldron";
 
     // Slots
     public static final int SLOT_CATALYST = 13;
@@ -28,13 +28,15 @@ public final class InfusionTableMenu {
     private final DustManager dust;
     private final InfusionService infusion;
     private final Block cauldron;
+    private final boolean isPrivate;
 
     private int dustAmount;
 
-    public InfusionTableMenu(DustManager dust, InfusionService infusion, Block cauldron) {
+    public InfusionTableMenu(DustManager dust, InfusionService infusion, Block cauldron, boolean isPrivate) {
         this.dust = dust;
         this.infusion = infusion;
         this.cauldron = cauldron;
+        this.isPrivate = isPrivate;
         this.dustAmount = 50;
     }
 
@@ -124,9 +126,11 @@ public final class InfusionTableMenu {
     }
 
     public void confirm(Player player, Inventory inv) {
-        // 🔒 Lock table only during active infusion animation
-        if (!InfusionTableProcess.tryLock(cauldron, player)) {
-            player.sendMessage(ChatColor.RED + "This Infusion Table is already in use.");
+        // Private tables skip the shared per-block lock entirely -- each
+        // user gets their own animation (see InfusionTableProcess), so
+        // there's nothing to contend over.
+        if (!isPrivate && !InfusionTableProcess.tryLock(cauldron, player)) {
+            player.sendMessage(ChatColor.RED + "This Infusion Cauldron is already in use.");
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
             draw(player, inv);
             return;
@@ -139,7 +143,7 @@ public final class InfusionTableMenu {
         ItemStack marble = infusion.infuseToItem(player, dustAmount, catalystValue);
         if (marble == null) {
             // If infusion fails, unlock immediately
-            InfusionTableProcess.unlock(cauldron, player);
+            if (!isPrivate) InfusionTableProcess.unlock(cauldron, player);
 
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
             draw(player, inv);
@@ -160,7 +164,7 @@ public final class InfusionTableMenu {
         player.closeInventory();
 
         // Run animation + give item at the end (unlock happens inside process finish)
-        InfusionTableProcess.run(player, cauldron, marble);
+        InfusionTableProcess.run(player, cauldron, marble, isPrivate);
     }
 
     public Block getCauldron() {

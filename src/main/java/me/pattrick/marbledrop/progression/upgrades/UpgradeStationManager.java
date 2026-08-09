@@ -51,6 +51,28 @@ public final class UpgradeStationManager {
         return stations.contains(keyOf(b.getLocation()));
     }
 
+    /** Convenience accessor for ambient visuals (hologram/particles). */
+    public java.util.Set<org.bukkit.Location> getStationLocations() {
+        java.util.Set<org.bukkit.Location> out = new java.util.HashSet<>();
+        for (String k : stations) {
+            String[] parts = k.split(",");
+            if (parts.length != 4) continue;
+
+            org.bukkit.World w = org.bukkit.Bukkit.getWorld(parts[0]);
+            if (w == null) continue;
+
+            try {
+                int x = Integer.parseInt(parts[1]);
+                int y = Integer.parseInt(parts[2]);
+                int z = Integer.parseInt(parts[3]);
+                out.add(new org.bukkit.Location(w, x, y, z));
+            } catch (NumberFormatException ignored) {
+                // ignore bad entries
+            }
+        }
+        return out;
+    }
+
     public boolean addStation(org.bukkit.Location loc) {
         if (loc == null || loc.getWorld() == null) return false;
         boolean added = stations.add(keyOf(loc));
@@ -65,7 +87,7 @@ public final class UpgradeStationManager {
         return removed;
     }
 
-    private String keyOf(org.bukkit.Location l) {
+    public String keyOf(org.bukkit.Location l) {
         return l.getWorld().getName() + "," + l.getBlockX() + "," + l.getBlockY() + "," + l.getBlockZ();
     }
 }

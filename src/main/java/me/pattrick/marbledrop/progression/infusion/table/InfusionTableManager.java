@@ -19,6 +19,7 @@ public final class InfusionTableManager {
     private FileConfiguration cfg;
 
     private final Set<String> keys = new HashSet<>();
+    private final Set<String> privateKeys = new HashSet<>();
 
     public InfusionTableManager(Plugin plugin) {
         this.plugin = plugin;
@@ -38,8 +39,14 @@ public final class InfusionTableManager {
         this.cfg = YamlConfiguration.loadConfiguration(file);
 
         keys.clear();
+        privateKeys.clear();
         if (cfg.isConfigurationSection("tables")) {
-            keys.addAll(cfg.getConfigurationSection("tables").getKeys(false));
+            for (String k : cfg.getConfigurationSection("tables").getKeys(false)) {
+                keys.add(k);
+                if (cfg.getBoolean("tables." + k + ".private", false)) {
+                    privateKeys.add(k);
+                }
+            }
         }
     }
 
@@ -78,9 +85,37 @@ public final class InfusionTableManager {
         if (!keys.contains(k)) return false;
 
         keys.remove(k);
+        privateKeys.remove(k);
         cfg.set("tables." + k, null);
         save();
         return true;
+    }
+
+    /**
+     * A "private" table skips the usual per-block lock and animates only
+     * for the player using it (see InfusionTableProcess) instead of
+     * broadcasting to everyone nearby -- lets more than one person use the
+     * exact same physical table at once without colliding. Nothing about
+     * the actual infusion (dust/catalyst cost, marble rolled) changes;
+     * this only affects the shared animation/lock, which is otherwise
+     * purely cosmetic. Intended for a dedicated onboarding table, but
+     * works the same for anyone who uses it.
+     */
+    public boolean isPrivate(Location loc) {
+        return privateKeys.contains(keyOf(loc));
+    }
+
+    public void setPrivate(Location loc, boolean isPrivate) {
+        String k = keyOf(loc);
+        if (!keys.contains(k)) return;
+
+        if (isPrivate) {
+            privateKeys.add(k);
+        } else {
+            privateKeys.remove(k);
+        }
+        cfg.set("tables." + k + ".private", isPrivate ? true : null);
+        save();
     }
 
     /**

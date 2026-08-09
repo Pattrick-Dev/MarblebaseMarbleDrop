@@ -1,12 +1,15 @@
 package me.pattrick.marbledrop.races;
 
+import me.pattrick.marbledrop.MdConfig;
 import me.pattrick.marbledrop.marble.MarbleData;
 import me.pattrick.marbledrop.marble.MarbleItem;
+import me.pattrick.marbledrop.marble.MarbleRarity;
 import me.pattrick.marbledrop.marble.MarbleStat;
 import me.pattrick.marbledrop.marble.MarbleStats;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -22,11 +25,29 @@ public final class RaceManager {
 
     public static final int MAX_ENTRIES_PER_TRACK = 16;
 
+    // Starting-grid spacing (both laterally within a row and row-to-row) --
+    // roughly a marble's diameter plus a small buffer, same scale as
+    // MarbleRunner's own marble-vs-marble separation.
+    private static final double GRID_SPACING = 0.45;
+
+    // "On your marks" + 3-2-1 before a held grid is released -- see
+    // runStartCountdown(). Public so ScheduledRaceManager can time its own
+    // synced broadcasts (e.g. announcing the reward) against the same GO
+    // moment without hardcoding a duplicate tick count.
+    public static final int COUNTDOWN_SECONDS = 3;
+    public static final long COUNTDOWN_TOTAL_TICKS = (COUNTDOWN_SECONDS + 1) * 20L; // +1 for the initial "on your marks" beat
+
     private final TrackManager tracks;
     private final MarbleRaceEngine engine;
+    private final MdConfig config;
 
     // ✅ Watch manager (optional)
     private RaceWatchManager watch;
+
+    // Nullable -- only set when ProtocolLib is installed (see Main). When
+    // present, giveBoostItem()/giveGlowItem() show ability items via fake
+    // packets instead of real inventory writes (see RaceInventoryOverlay).
+    private RaceInventoryOverlay inventoryOverlay;
 
     // trackId -> active session
     private final Map<String, RaceSession> active = new HashMap<>();
@@ -37,14 +58,103 @@ public final class RaceManager {
     // ✅ NEW: trackId -> OPEN state
     private final Set<String> openTracks = new HashSet<>();
 
-    public RaceManager(TrackManager tracks, MarbleRaceEngine engine) {
+    // playerId -> their own runner, for the race they're currently in (see
+    // start()/RaceBoostListener). Populated when a real race starts,
+    // removed as each runner finishes (or the field is force-cleared by
+    // purgeAllRunners()) -- never left pointing at a finished/despawned
+    // runner, so a stale Boost item just reports "race already finished"
+    // instead of silently doing nothing to a dead object.
+    private final Map<UUID, MarbleRunner> activeRunnerByOwner = new HashMap<>();
+
+    // playerId -> last-picked RaceLoadout, across all tracks. Doubles as
+    // the fallback getLoadout() reads when there's no real lobby entry to
+    // check -- which is what lets /md race test respect a loadout picked
+    // through the same GUI a real lobby entry uses, without needing a
+    // lobby entry of its own.
+    private final Map<UUID, RaceLoadout> loadoutPreference = new HashMap<>();
+
+    // playerId -> remaining Boost charges for their current race. This is
+    // now the authoritative count -- with the inventory overlay active
+    // there's no real ItemStack whose stack size can double as the
+    // "charges remaining" display the way RaceBoostItem's own javadoc
+    // originally intended, so RaceBoostListener reads/writes this instead
+    // and just re-renders a fresh fake item reflecting it each time.
+    private final Map<UUID, Integer> boostCharges = new HashMap<>();
+
+    /**
+     * Fired whenever a race started via {@link #start} finishes, for any
+     * external code (currently just ScheduledRaceManager) that wants to react
+     * to a race's outcome -- e.g. awarding Dust, running a server-wide
+     * announcement -- without RaceManager itself knowing anything about
+     * dust/scheduling.
+     */
+    public interface OutcomeListener {
+        void onRaceFinished(String trackId, List<RaceEntry> finishOrder);
+    }
+
+    private OutcomeListener outcomeListener;
+
+    public RaceManager(TrackManager tracks, MarbleRaceEngine engine, MdConfig config) {
         this.tracks = tracks;
         this.engine = engine;
+        this.config = config;
+    }
+
+    public void setOutcomeListener(OutcomeListener listener) {
+        this.outcomeListener = listener;
     }
 
     // ✅ allow Main to wire watch manager without redesigning flow
     public void setWatchManager(RaceWatchManager watch) {
         this.watch = watch;
+    }
+
+    /** Wired in from Main.java only when ProtocolLib is installed -- see the field javadoc. */
+    public void setInventoryOverlay(RaceInventoryOverlay inventoryOverlay) {
+        this.inventoryOverlay = inventoryOverlay;
+    }
+
+    /** Defensive copy of a track's current lobby -- read-only peek, doesn't affect join validation. */
+    public List<RaceEntry> lobbySnapshot(String trackId) {
+        if (trackId == null) return List.of();
+        List<RaceEntry> list = lobby.get(trackId.toLowerCase());
+        return list == null ? List.of() : List.copyOf(list);
+    }
+
+    /** This player's own runner in whatever real race they're currently in, or null if they're not racing (or already finished). See RaceBoostListener. */
+    public MarbleRunner getMyRunner(UUID playerId) {
+        if (playerId == null) return null;
+        return activeRunnerByOwner.get(playerId);
+    }
+
+    /** Remaining Boost charges for this player's current race, or 0 if they have none (or aren't racing). */
+    public int getBoostCharges(UUID playerId) {
+        if (playerId == null) return 0;
+        return boostCharges.getOrDefault(playerId, 0);
+    }
+
+    /** Called by RaceBoostListener right after consuming a charge, to persist the new count. */
+    public void setBoostCharges(UUID playerId, int charges) {
+        if (playerId == null) return;
+        boostCharges.put(playerId, Math.max(0, charges));
+    }
+
+    /** The track this player currently has an entry in (first match), or null if none -- so /md leave doesn't need a trackId argument. */
+    public String findTrackIdForPlayer(UUID playerId) {
+        if (playerId == null) return null;
+        for (Map.Entry<String, List<RaceEntry>> e : lobby.entrySet()) {
+            for (RaceEntry entry : e.getValue()) {
+                if (playerId.equals(entry.owner)) return e.getKey();
+            }
+        }
+        return null;
+    }
+
+    /** Force-removes every currently active marble runner without firing finish callbacks -- see /md race purge. */
+    public void purgeAllRunners() {
+        engine.purgeAll();
+        activeRunnerByOwner.clear();
+        boostCharges.clear();
     }
 
     // ----------------------------
@@ -112,6 +222,45 @@ public final class RaceManager {
             if (playerId.equals(e.owner)) return true;
         }
         return false;
+    }
+
+    /** This player's own lobby entry for a track, or null if they haven't joined it (or the race already started). See RaceLoadoutGui. */
+    public RaceEntry findEntry(String trackId, UUID playerId) {
+        if (trackId == null || playerId == null) return null;
+        List<RaceEntry> list = lobby.get(trackId.toLowerCase());
+        if (list == null) return null;
+        for (RaceEntry e : list) {
+            if (playerId.equals(e.owner)) return e;
+        }
+        return null;
+    }
+
+    /**
+     * This player's effective loadout for a track: their actual lobby
+     * entry's choice if they have one there, otherwise their last-picked
+     * preference (see setLoadout()) -- which is also how /md race test
+     * picks up a loadout chosen through the same GUI without needing a
+     * real lobby entry to hang it on. Defaults to BALANCED if neither
+     * exists yet.
+     */
+    public RaceLoadout getLoadout(String trackId, UUID playerId) {
+        RaceEntry entry = findEntry(trackId, playerId);
+        if (entry != null) return entry.loadout;
+        if (playerId == null) return RaceLoadout.BALANCED;
+        return loadoutPreference.getOrDefault(playerId, RaceLoadout.BALANCED);
+    }
+
+    /**
+     * Sets this player's chosen loadout -- both their preference (used as
+     * the getLoadout() fallback, and by /md race test) and their real
+     * lobby entry for this track, if they have one.
+     */
+    public void setLoadout(String trackId, UUID playerId, RaceLoadout loadout) {
+        if (playerId == null || loadout == null) return;
+        loadoutPreference.put(playerId, loadout);
+
+        RaceEntry entry = findEntry(trackId, playerId);
+        if (entry != null) entry.loadout = loadout;
     }
 
     public List<String> openTrackIds() {
@@ -189,14 +338,7 @@ public final class RaceManager {
 
         String marbleDisplayName = getMarbleDisplayName(helmet);
 
-        // Stats-driven speed
-        double speedPerTick = computeSpeedPerTick(data);
-
-        // Option C personality (you already wired chaos/aggression in MarbleRunner)
-        double chaos = computeChaos(data);
-        double aggression = computeAggression(data);
-
-        list.add(new RaceEntry(player.getUniqueId(), marbleId, helmet, data, marbleDisplayName, speedPerTick, chaos, aggression));
+        list.add(new RaceEntry(player.getUniqueId(), marbleId, helmet, data, marbleDisplayName));
 
         player.sendMessage(ChatColor.GREEN + "Entered your marble into track '" + trackId + "'.");
         player.sendMessage(ChatColor.GRAY + "Entries: " + list.size() + "/" + MAX_ENTRIES_PER_TRACK);
@@ -263,6 +405,19 @@ public final class RaceManager {
         }
     }
 
+    /**
+     * A real starting grid: staggered rows fanned across the track's actual
+     * usable width at the start line, staggered further back row by row
+     * along the track's own reverse direction -- not a circle, not a line
+     * -- shared by start(), runTestRace(), and the tutorial's own races.
+     */
+    public List<Location> startingGrid(MarbleTrack track, int count) {
+        TrackSpline spline = track.getRaceSpline();
+        double maxSearch = (config != null) ? config.raceWallSearchRadius() : 2.5;
+        double usableWidth = Math.max(GRID_SPACING, spline.measureWidthAt(0, maxSearch));
+        return spline.startingGrid(Math.max(1, count), usableWidth, GRID_SPACING);
+    }
+
     public void start(Player starter, String trackId) {
         if (starter == null) return;
         if (trackId == null || trackId.isBlank()) return;
@@ -290,9 +445,15 @@ public final class RaceManager {
         RaceSession session = new RaceSession(trackId, starter.getUniqueId(), list);
         active.put(trackId, session);
 
-        Location start = track.getPoint(0).clone();
+        // Clear lobby + close track immediately -- no sneaking in another
+        // entry while the grid/countdown below is still playing out.
+        lobby.remove(trackId);
+        openTracks.remove(trackId);
 
         starter.sendMessage(ChatColor.GREEN + "Starting race on '" + trackId + "' with " + list.size() + " marbles...");
+        if (track.getLaps() > 1) {
+            broadcastToSession(session, Component.text("This race is " + track.getLaps() + " laps.", NamedTextColor.GRAY));
+        }
 
         // ✅ AUTO-WATCH: put all entered players into watch mode when race starts
         if (watch != null) {
@@ -304,34 +465,118 @@ public final class RaceManager {
             }
         }
 
-        double radius = 0.35;
+        // Spawn every marble on its real starting-grid spot right away,
+        // held motionless, so players actually see the grid lined up
+        // instead of marbles popping into motion the instant /md race
+        // start is typed. They're released together once the countdown
+        // below finishes.
         int n = list.size();
+        List<Location> grid = startingGrid(track, n);
+        List<MarbleRunner> runners = new ArrayList<>(n);
 
         for (int i = 0; i < n; i++) {
             RaceEntry entry = list.get(i);
-
-            double angle = (Math.PI * 2.0) * (i / (double) n);
-            double ox = Math.cos(angle) * radius;
-            double oz = Math.sin(angle) * radius;
-
-            Location spawn = start.clone().add(ox, 0.0, oz);
+            Location spawn = grid.get(i);
+            MarbleStats effectiveStats = entry.loadout.applyTo(entry.data.getStats());
 
             MarbleRunner runner = new MarbleRunner(
                     track,
                     spawn,
                     entry.helmet,
-                    entry.speedPerTick,
-                    entry.chaos,
-                    entry.aggression,
-                    () -> onFinish(finalTrackId, entry)
+                    effectiveStats,
+                    track.getLaps(),
+                    () -> {
+                        activeRunnerByOwner.remove(entry.owner);
+                        boostCharges.remove(entry.owner);
+                        onFinish(finalTrackId, entry);
+                    }
             );
-
+            runner.hold();
             engine.addRunner(runner);
+            runners.add(runner);
+
+            activeRunnerByOwner.put(entry.owner, runner);
+
+            // Deferred a tick: start() is commonly reached synchronously
+            // from within a right-click handler (a "start" race sign --
+            // see RaceSignListener), and vanilla resends a player's real
+            // held-slot content as the trailing step of processing that
+            // same click packet, regardless of anything a Bukkit event
+            // handler did with it. That trailing resend happens right
+            // after this loop returns control to it -- if the ability
+            // items were shown synchronously here, on the same tick, it
+            // would immediately overwrite them with whatever's really
+            // there (the entrant's marble). Running one tick later
+            // guarantees we're past that resend, so our packet is the one
+            // that actually sticks. Harmless when start() was reached from
+            // a plain command instead (no click, no trailing resend) --
+            // just an imperceptible extra 1-tick delay there.
+            UUID ownerId = entry.owner;
+            int boostStat = effectiveStats.get(MarbleStat.BOOST);
+            engine.scheduleDelayed(() -> {
+                giveBoostItem(ownerId, boostStat);
+                giveGlowItem(ownerId);
+            }, 1L);
         }
 
-        // once started: clear lobby + close track
-        lobby.remove(trackId);
-        openTracks.remove(trackId);
+        runStartCountdown(session, runners);
+    }
+
+    /** Hands the entrant a Glow item (see RaceGlowListener) -- purely cosmetic, no stat scaling. No-op if they're offline. */
+    private void giveGlowItem(UUID ownerId) {
+        Player owner = Bukkit.getPlayer(ownerId);
+        if (owner == null || !owner.isOnline()) return;
+
+        // Hotbar slot 9 (the one keyed to "9") is Bukkit inventory index 8
+        // -- the hotbar is index 0-8, matching keys 1-9. Fixed on purpose
+        // so it's always in the same place race to race.
+        if (inventoryOverlay != null) {
+            inventoryOverlay.show(owner, 8, RaceInventoryOverlay.TAG_GLOW, RaceGlowItem.create(engine.getPlugin()));
+        } else {
+            owner.getInventory().setItem(8, RaceGlowItem.create(engine.getPlugin()));
+        }
+    }
+
+    /** Hands the entrant a Boost item charged for their marble's BOOST stat -- see RaceBoostListener. No-op if they're offline. */
+    private void giveBoostItem(UUID ownerId, int boostStat) {
+        Player owner = Bukkit.getPlayer(ownerId);
+        if (owner == null || !owner.isOnline()) return;
+
+        int charges = boostChargesForStat(boostStat);
+        boostCharges.put(ownerId, charges);
+
+        // Whatever hotbar slot the player already has selected -- not a
+        // fixed one, so "right-click to boost" works the instant the race
+        // goes with no fumbling to find it. setItemInMainHand (not
+        // addItem) does the same for the real-item fallback below.
+        int slot = owner.getInventory().getHeldItemSlot();
+
+        if (inventoryOverlay != null) {
+            inventoryOverlay.show(owner, slot, RaceInventoryOverlay.TAG_BOOST, RaceBoostItem.create(engine.getPlugin(), charges));
+        } else {
+            owner.getInventory().setItemInMainHand(RaceBoostItem.create(engine.getPlugin(), charges));
+        }
+    }
+
+    /** 2 charges at BOOST 0 up to 6 at BOOST 100 -- even a low-BOOST marble gets a real, if small, budget to spend well. */
+    private int boostChargesForStat(int boostStat) {
+        double frac = Math.max(0.0, Math.min(1.0, boostStat / 100.0));
+        return (int) Math.round(2 + frac * 4);
+    }
+
+    /** "On your marks... 3... 2... 1... GO!" -- then releases every held runner together. See start(). */
+    private void runStartCountdown(RaceSession session, List<MarbleRunner> runners) {
+        broadcastToSession(session, Component.text("On your marks...", NamedTextColor.YELLOW));
+        for (int sec = COUNTDOWN_SECONDS; sec >= 1; sec--) {
+            long delayTicks = (long) (COUNTDOWN_SECONDS - sec + 1) * 20L;
+            String label = sec + "...";
+            engine.scheduleDelayed(() -> broadcastToSession(session, Component.text(label, NamedTextColor.YELLOW)), delayTicks);
+        }
+        engine.scheduleDelayed(() -> {
+            session.startMs = System.currentTimeMillis();
+            for (MarbleRunner runner : runners) runner.release();
+            broadcastToSession(session, Component.text("GO!", NamedTextColor.GREEN, TextDecoration.BOLD));
+        }, COUNTDOWN_TOTAL_TICKS);
     }
 
     private void onFinish(String trackId, RaceEntry entry) {
@@ -362,7 +607,29 @@ public final class RaceManager {
         if (session.finished.size() >= session.total) {
             broadcastResults(session);
             active.remove(trackId);
+            releaseWatchers(session);
+            if (outcomeListener != null) outcomeListener.onRaceFinished(trackId, List.copyOf(session.finished));
         }
+    }
+
+    /**
+     * start() auto-enters every entrant into watch mode (see the AUTO-WATCH
+     * block above) but never released them again -- players were getting
+     * stuck in spectator mode (wrong gamemode, cleared inventory, never
+     * teleported back) after every real race. Restores everyone a few
+     * seconds after the results are posted, so they see the standings
+     * first instead of being yanked out mid-read.
+     */
+    private void releaseWatchers(RaceSession session) {
+        if (watch == null) return;
+        engine.scheduleDelayed(() -> {
+            for (UUID id : session.recipients) {
+                Player p = Bukkit.getPlayer(id);
+                if (p != null && p.isOnline() && watch.isWatching(p)) {
+                    watch.stop(p, true);
+                }
+            }
+        }, 100L);
     }
 
     private void broadcastResults(RaceSession session) {
@@ -410,17 +677,20 @@ public final class RaceManager {
         String name = (entry.marbleDisplayName != null && !entry.marbleDisplayName.isBlank())
                 ? entry.marbleDisplayName
                 : entry.marbleId.toString();
+        return buildMarbleNameComponent(name, entry.data);
+    }
 
-        Component hover = buildMarbleHover(entry);
+    /** Public overload for callers that only have a display name + MarbleData, not a full RaceEntry (e.g. ScheduledRaceManager's AI runners). */
+    public Component buildMarbleNameComponent(String displayName, MarbleData data) {
+        String name = (displayName != null && !displayName.isBlank()) ? displayName : "Marble";
+        Component hover = buildMarbleHover(displayName, data);
 
         return Component.text(name, NamedTextColor.AQUA)
                 .decorate(TextDecoration.UNDERLINED)
                 .hoverEvent(HoverEvent.showText(hover));
     }
 
-    private Component buildMarbleHover(RaceEntry entry) {
-        MarbleData data = entry.data;
-
+    private Component buildMarbleHover(String displayName, MarbleData data) {
         String team = (data.getTeamKey() == null || data.getTeamKey().isBlank()) ? "Neutral" : data.getTeamKey();
         String rarity = (data.getRarity() == null) ? "COMMON" : data.getRarity().name();
 
@@ -432,9 +702,7 @@ public final class RaceManager {
 
         Component c = Component.empty();
 
-        String title = (entry.marbleDisplayName != null && !entry.marbleDisplayName.isBlank())
-                ? entry.marbleDisplayName
-                : "Marble";
+        String title = (displayName != null && !displayName.isBlank()) ? displayName : "Marble";
 
         c = c.append(Component.text(title, NamedTextColor.AQUA).decorate(TextDecoration.BOLD))
                 .append(Component.newline());
@@ -484,79 +752,169 @@ public final class RaceManager {
 
     public MarbleRunner buildStatsRunner(MarbleTrack track, Location spawn, ItemStack helmet,
                                           MarbleData data, MarbleRunner.FinishListener listener) {
-        double speedPerTick = computeSpeedPerTick(data);
-        double chaos = computeChaos(data);
-        double aggression = computeAggression(data);
-        return new MarbleRunner(track, spawn, helmet, speedPerTick, chaos, aggression, listener);
+        // aiBoost=true -- nothing here is under a live player's real-time
+        // click control (test-race AI racers, the tutorial's AI and player
+        // marbles alike, ScheduledRaceManager's automated entries), so the
+        // runner rolls for its own boosts off its BOOST stat instead of
+        // waiting on a right-click that will never come. See MarbleRunner's
+        // aiBoost constructor javadoc.
+        return new MarbleRunner(track, spawn, helmet, data.getStats(), track.getLaps(), listener, true);
     }
 
     // ------------------------------------------------------------
-    // Speed logic + Option C personality
+    // TEST RACE -- debug-only physics testing, bypasses the lobby/open/enter
+    // flow entirely and drops runners straight onto the engine. Gated on
+    // config.debugEnabled() so it's inert on public builds unless an admin
+    // has explicitly flipped debug mode on with /md debug. This version has
+    // no per-viewer visibility (that was a TrackSpline-era feature that got
+    // reverted), so test marbles are visible to everyone nearby, same as a
+    // real race.
     // ------------------------------------------------------------
 
-    private double computeSpeedPerTick(MarbleData data) {
-        MarbleStats stats = data.getStats();
+    public void runTestRace(Player admin, String trackId, int aiCount, boolean includeSelf) {
+        if (config == null || !config.debugEnabled()) {
+            admin.sendMessage(ChatColor.RED + "Test races require debug mode -- run /md debug to enable it first.");
+            return;
+        }
+        if (trackId == null || trackId.isBlank()) {
+            admin.sendMessage(ChatColor.RED + "Usage: /md race test <trackId> [aiCount] [noself]");
+            return;
+        }
+        trackId = trackId.toLowerCase();
 
-        int speed = stats.get(MarbleStat.SPEED);
-        int accel = stats.get(MarbleStat.ACCEL);
-        int handling = stats.get(MarbleStat.HANDLING);
-        int stability = stats.get(MarbleStat.STABILITY);
-        int boost = stats.get(MarbleStat.BOOST);
+        // Loadout comes from the same GUI a real lobby entry uses (see
+        // getLoadout()/RaceLoadoutGui) -- open it with /md race test
+        // loadout <trackId> to set one before running the test.
+        RaceLoadout loadout = getLoadout(trackId, admin.getUniqueId());
 
-        double base = 0.014;
+        MarbleTrack track = tracks.getTrack(trackId);
+        if (track == null || track.size() < 2) {
+            admin.sendMessage(ChatColor.RED + "Track '" + trackId + "' doesn't exist or needs at least 2 points.");
+            return;
+        }
 
-        double statBoost =
-                (speed * 0.00038) +
-                        (accel * 0.00030) +
-                        (handling * 0.00012);
+        aiCount = Math.max(0, Math.min(aiCount, MAX_ENTRIES_PER_TRACK - 1));
 
-        double variance = 0.0012;
-        double stab = clamp01(stability / 100.0);
-        double randomness = (Math.random() - 0.5) * (variance * (1.05 - 0.85 * stab));
+        ItemStack selfMarble = null;
+        MarbleData selfData = null;
+        if (includeSelf) {
+            ItemStack held = admin.getInventory().getItemInMainHand();
+            if (MarbleItem.isMarble(held)) {
+                selfData = MarbleItem.read(held);
+                if (selfData != null) {
+                    selfMarble = held.clone();
+                    selfMarble.setAmount(1);
+                }
+            }
+            if (selfMarble == null) {
+                admin.sendMessage(ChatColor.YELLOW + "You're not holding a marble -- running AI-only.");
+                includeSelf = false;
+            }
+        }
 
-        double boostChance = clamp01(boost * 0.008);
-        double boostBonus = (Math.random() < boostChance) ? 0.00055 : 0;
+        int totalCount = aiCount + (includeSelf ? 1 : 0);
+        if (totalCount == 0) {
+            admin.sendMessage(ChatColor.RED + "Nothing to race -- pass an AI count or hold a marble.");
+            return;
+        }
 
-        double finalSpeed = base + statBoost + randomness + boostBonus;
+        Location start = track.getPoint(0).clone();
 
-        if (finalSpeed < 0.010) finalSpeed = 0.010;
-        if (finalSpeed > 0.030) finalSpeed = 0.030;
+        // Same auto-watch real races use (see start() above) so the admin is
+        // actually standing at the track to see it; fall back to a plain
+        // teleport if no watch anchor is configured for this track yet.
+        if (watch != null) watch.start(admin, trackId);
+        if (watch == null || !watch.isWatching(admin)) {
+            admin.teleport(start.clone().add(0, 2.0, 0));
+            admin.sendMessage(ChatColor.GRAY + "(Tip: run /md track setwatch " + trackId + " for a proper spectator camera.)");
+        }
 
-        return finalSpeed;
+        admin.sendMessage(ChatColor.YELLOW + "[TEST] Launching " + totalCount + " marble(s) on '" + trackId + "' (debug only, not saved).");
+
+        // runTestRace() puts the admin into watch mode above (same as a
+        // real race) but, unlike a real race, had nothing tracking when
+        // every runner was actually done -- the admin was never released:
+        // stuck in spectator mode (wrong gamemode, cleared inventory) with
+        // no teleport back, forever. This mirrors the same fix start()
+        // already got: release a few seconds after the last finish, once
+        // every runner (self + AI) is accounted for.
+        final int finalTotalCount = totalCount;
+        java.util.concurrent.atomic.AtomicInteger finishedCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        Runnable onAnyFinish = () -> {
+            if (finishedCount.incrementAndGet() >= finalTotalCount) {
+                engine.scheduleDelayed(() -> {
+                    if (watch != null && watch.isWatching(admin)) {
+                        watch.stop(admin, true);
+                    }
+                }, 100L);
+            }
+        };
+
+        List<Location> grid = startingGrid(track, totalCount);
+        int slot = 0;
+
+        if (includeSelf) {
+            UUID adminId = admin.getUniqueId();
+            MarbleStats effectiveStats = loadout.applyTo(selfData.getStats());
+
+            MarbleRunner selfRunner = new MarbleRunner(track, grid.get(slot), selfMarble, effectiveStats, track.getLaps(), () -> {
+                activeRunnerByOwner.remove(adminId);
+                boostCharges.remove(adminId);
+                admin.sendMessage(ChatColor.GREEN + "[TEST] Your marble finished!");
+                onAnyFinish.run();
+            });
+            engine.addRunner(selfRunner);
+            slot++;
+
+            // Test races skipped the starting-grid hold/countdown real races
+            // get, so there's no natural "everything's given out, go" beat
+            // to hang this on -- give the item the instant the runner
+            // exists instead, same as a real race does once it releases.
+            activeRunnerByOwner.put(adminId, selfRunner);
+            // Deferred a tick -- see the matching comment in start(). Test
+            // races are usually launched from a typed command (no trailing
+            // resend risk), but this is a cheap, always-safe guard against
+            // the same click-triggered clobbering if one ever launches one
+            // synchronously from an interact handler instead.
+            int testBoostStat = effectiveStats.get(MarbleStat.BOOST);
+            engine.scheduleDelayed(() -> {
+                giveBoostItem(adminId, testBoostStat);
+                giveGlowItem(adminId);
+            }, 1L);
+            if (loadout != RaceLoadout.BALANCED) {
+                admin.sendMessage(ChatColor.GRAY + "[TEST] Loadout: " + ChatColor.YELLOW + loadout.label());
+            }
+        }
+
+        Random rng = new Random();
+        for (int i = 0; i < aiCount; i++) {
+            int mid = 45 + rng.nextInt(20); // 45-64 per stat, mid-tier
+            MarbleStats aiStats = new MarbleStats(mid, mid, mid, mid, mid);
+            MarbleData aiData = new MarbleData(
+                    UUID.randomUUID(), "test_ai", "ai", MarbleRarity.COMMON,
+                    aiStats, null, System.currentTimeMillis(), 0, 0
+            );
+
+            int racerNumber = i + 1;
+            // A marker armor stand with no helmet renders as literally
+            // nothing, so give AI runners a plain default head to equip.
+            ItemStack aiHelmet = new ItemStack(Material.PLAYER_HEAD);
+            ItemMeta aiHelmetMeta = aiHelmet.getItemMeta();
+            if (aiHelmetMeta != null) {
+                aiHelmetMeta.setDisplayName(ChatColor.GRAY + "AI Racer " + racerNumber);
+                aiHelmet.setItemMeta(aiHelmetMeta);
+            }
+
+            MarbleRunner aiRunner = buildStatsRunner(track, grid.get(slot), aiHelmet, aiData, () -> {
+                admin.sendMessage(ChatColor.GRAY + "[TEST] AI Racer " + racerNumber + " finished.");
+                onAnyFinish.run();
+            });
+            engine.addRunner(aiRunner);
+            slot++;
+        }
     }
 
-    private double computeChaos(MarbleData data) {
-        MarbleStats s = data.getStats();
-        double stab = clamp01(s.get(MarbleStat.STABILITY) / 100.0);
-        double hand = clamp01(s.get(MarbleStat.HANDLING) / 100.0);
-
-        double chaos = 0.55 - (stab * 0.28) - (hand * 0.18);
-        return clamp(chaos, 0.12, 0.65);
-    }
-
-    private double computeAggression(MarbleData data) {
-        MarbleStats s = data.getStats();
-        double b = clamp01(s.get(MarbleStat.BOOST) / 100.0);
-        double a = clamp01(s.get(MarbleStat.ACCEL) / 100.0);
-        double sp = clamp01(s.get(MarbleStat.SPEED) / 100.0);
-
-        double aggro = 0.35 + (b * 0.30) + (a * 0.20) + (sp * 0.10);
-        return clamp(aggro, 0.20, 0.95);
-    }
-
-    private double clamp01(double v) {
-        if (v < 0) return 0;
-        if (v > 1) return 1;
-        return v;
-    }
-
-    private double clamp(double v, double min, double max) {
-        if (v < min) return min;
-        if (v > max) return max;
-        return v;
-    }
-
-    private static String formatTime(long ms) {
+    public static String formatTime(long ms) {
         long totalTenths = ms / 100;
         long tenths = totalTenths % 10;
         long totalSeconds = ms / 1000;
@@ -580,28 +938,29 @@ public final class RaceManager {
         public final MarbleData data;
         public final String marbleDisplayName;
 
-        public final double speedPerTick;
-        public final double chaos;
-        public final double aggression;
+        // Mutable, unlike everything else here -- set (and changed) via
+        // RaceLoadoutGui any time before the race actually starts. Defaults
+        // to BALANCED so an entrant who never opens the loadout menu races
+        // on their marble's raw stats, same as before this existed.
+        public RaceLoadout loadout = RaceLoadout.BALANCED;
 
         public RaceEntry(UUID owner, UUID marbleId, ItemStack helmet,
-                         MarbleData data, String marbleDisplayName,
-                         double speedPerTick, double chaos, double aggression) {
+                         MarbleData data, String marbleDisplayName) {
             this.owner = owner;
             this.marbleId = marbleId;
             this.helmet = helmet;
             this.data = data;
             this.marbleDisplayName = marbleDisplayName;
-            this.speedPerTick = speedPerTick;
-            this.chaos = chaos;
-            this.aggression = aggression;
         }
     }
 
     private static final class RaceSession {
         final String trackId;
         final int total;
-        final long startMs = System.currentTimeMillis();
+        // Set to the actual "go" moment once the starting-grid countdown
+        // finishes (see start()) -- not construction time, so finish times
+        // don't include however long marbles sat waiting on the grid.
+        long startMs = System.currentTimeMillis();
 
         final List<RaceEntry> finished = new ArrayList<>();
         final Set<UUID> finishedIds = new HashSet<>();

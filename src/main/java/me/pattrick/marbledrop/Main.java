@@ -11,6 +11,7 @@ import me.pattrick.marbledrop.progression.infusion.table.InfusionTableManager;
 import me.pattrick.marbledrop.feedback.FeedbackCommand;
 import me.pattrick.marbledrop.progression.taskmenu.TasksMenuListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeMenuListener;
+import me.pattrick.marbledrop.progression.upgrades.UpgradeStationAmbient;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationCommand;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationListener;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationManager;
@@ -19,6 +20,9 @@ import me.pattrick.marbledrop.races.team.CustomTeamManager;
 import me.pattrick.marbledrop.races.team.TeamCommand;
 import me.pattrick.marbledrop.races.team.TeamMenuListener;
 import me.pattrick.marbledrop.tutorial.TutorialCommand;
+import me.pattrick.marbledrop.tutorial.TutorialCraftFrameManager;
+import me.pattrick.marbledrop.tutorial.TutorialCraftFrameStore;
+import me.pattrick.marbledrop.tutorial.TutorialCraftHook;
 import me.pattrick.marbledrop.tutorial.TutorialInteractionGuard;
 import me.pattrick.marbledrop.tutorial.TutorialListener;
 import me.pattrick.marbledrop.tutorial.TutorialLocationStore;
@@ -47,12 +51,18 @@ public class Main extends JavaPlugin {
     // watch manager
     private RaceWatchManager raceWatchManager;
 
+    // scheduled server races
+    private ScheduledRaceManager scheduledRaceManager;
+
     // progression ambience
     private InfusionTableAmbient infusionAmbient;
     private RecyclerAmbient recyclerAmbient;
+    private UpgradeStationAmbient upgradeAmbient;
 
     // tutorial
     private TutorialProgressPoller tutorialPoller;
+    private TutorialManager tutorialManager;
+    private TutorialCraftFrameManager craftFrameManager;
 
     public MdConfig cfg() {
         return mdConfig;
@@ -66,6 +76,10 @@ public class Main extends JavaPlugin {
         return recyclerAmbient;
     }
 
+    public UpgradeStationAmbient getUpgradeAmbient() {
+        return upgradeAmbient;
+    }
+
     @Override
     public void onEnable() {
 
@@ -75,6 +89,9 @@ public class Main extends JavaPlugin {
 
         // -------------------- Init marble keys --------------------
         MarbleKeys.init(this);
+
+        // -------------------- Silent item grants --------------------
+        SilentGive.register(this);
 
         // -------------------- Ensure resource files exist --------------------
         if (!new File(getDataFolder(), "heads.yml").exists()) {
@@ -88,6 +105,7 @@ public class Main extends JavaPlugin {
         ensureFile("tracks.yml");
         ensureFile("race-signs.yml");
         ensureFile("race-watch.yml");
+        ensureFile("race-pending-marbles.yml");
 
         // -------------------- Racing --------------------
         TrackManager trackManager = new TrackManager(this);
@@ -111,7 +129,7 @@ public class Main extends JavaPlugin {
         );
 
         // Race entry flow
-        RaceManager raceManager = new RaceManager(trackManager, raceEngine);
+        RaceManager raceManager = new RaceManager(trackManager, raceEngine, mdConfig);
 
         // Watch manager (inventory safe)
         raceWatchManager = new RaceWatchManager(this, trackManager, raceEngine);
@@ -120,11 +138,38 @@ public class Main extends JavaPlugin {
         // Wire watch into race manager (auto-watch on start)
         raceManager.setWatchManager(raceWatchManager);
 
-        RaceCommand raceCommand = new RaceCommand(raceManager, trackManager, raceWatchManager);
+        // ProtocolLib-backed features (see RaceGlowPrivacy/RaceInventoryOverlay)
+        // -- softdepend in plugin.yml, not a hard depend, so only build these
+        // if ProtocolLib actually loaded. Without it: glow is visible to
+        // everyone instead of just the toggler, and Boost/Glow fall back to
+        // real inventory items (with RaceWatchManager's original real
+        // clear-and-restore protecting them), same as before either existed.
+        RaceGlowPrivacy glowPrivacy = null;
+        RaceInventoryOverlay inventoryOverlay = null;
+        if (getServer().getPluginManager().isPluginEnabled("ProtocolLib")) {
+            glowPrivacy = new RaceGlowPrivacy(this);
+            inventoryOverlay = new RaceInventoryOverlay(this);
+            raceWatchManager.setInventoryOverlay(inventoryOverlay);
+            raceManager.setInventoryOverlay(inventoryOverlay);
+        } else {
+            getLogger().info("ProtocolLib not found -- marble glow will be visible to everyone instead of just the racer who toggled it, "
+                    + "and race items (Boost/Glow) will be real inventory items instead of packet overlays.");
+        }
+
+        // Boost/Glow item click handlers -- must run before RaceWatchManager's
+        // own interact handler cancels everything while watching (see RaceBoostListener/RaceGlowListener).
+        getServer().getPluginManager().registerEvents(new RaceBoostListener(this, raceManager, inventoryOverlay), this);
+        getServer().getPluginManager().registerEvents(new RaceGlowListener(this, raceManager, glowPrivacy, inventoryOverlay), this);
 
         // Race GUI listener (click-to-join menu)
         getServer().getPluginManager().registerEvents(
                 new RaceGuiListener(trackManager, raceManager),
+                this
+        );
+
+        // Loadout picker (pre-race strategy -- click an already-joined track to open it)
+        getServer().getPluginManager().registerEvents(
+                new RaceLoadoutGuiListener(trackManager, raceManager),
                 this
         );
 
@@ -153,6 +198,19 @@ public class Main extends JavaPlugin {
         HeadPool headPool = new HeadPool(this);
         headPool.load();
 
+        // -------------------- Scheduled server races --------------------
+        // Needs raceManager/raceWatchManager/raceEngine (racing section above)
+        // and dustManager/headPool (just above), so it's wired here rather
+        // than alongside the rest of the racing setup.
+        scheduledRaceManager = new ScheduledRaceManager(
+                this, mdConfig, trackManager, raceManager, raceWatchManager, raceEngine, dustManager, headPool
+        );
+        // Listens for PlayerJoinEvent so a fresh joiner mid-countdown still sees the boss bar.
+        getServer().getPluginManager().registerEvents(scheduledRaceManager, this);
+        scheduledRaceManager.start();
+
+        RaceCommand raceCommand = new RaceCommand(raceManager, trackManager, raceWatchManager, scheduledRaceManager);
+
         // -------------------- Infusion service --------------------
         InfusionService infusionService = new InfusionService(this, dustManager, headPool);
 
@@ -167,7 +225,7 @@ public class Main extends JavaPlugin {
                 this
         );
 
-        InfusionTableCommand infusionTableCommand = new InfusionTableCommand(tableManager, infusionAmbient);
+        InfusionTableCommand infusionTableCommand = new InfusionTableCommand(this, tableManager, infusionAmbient);
 
         // -------------------- Recycler --------------------
         MarbleRecyclerManager recyclerManager = new MarbleRecyclerManager(this);
@@ -175,7 +233,7 @@ public class Main extends JavaPlugin {
         recyclerAmbient = new RecyclerAmbient(this, recyclerManager);
         recyclerAmbient.start();
 
-        MarbleRecyclerCommand marbleRecyclerCommand = new MarbleRecyclerCommand(recyclerManager, recyclerAmbient);
+        MarbleRecyclerCommand marbleRecyclerCommand = new MarbleRecyclerCommand(this, recyclerManager, recyclerAmbient);
 
         getServer().getPluginManager().registerEvents(
                 new MarbleRecyclerListener(this, recyclerManager, dustManager),
@@ -184,7 +242,10 @@ public class Main extends JavaPlugin {
 
         // -------------------- Upgrades --------------------
         UpgradeStationManager upgradeStations = new UpgradeStationManager(this);
-        UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(upgradeStations);
+        UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(this, upgradeStations);
+
+        upgradeAmbient = new UpgradeStationAmbient(this, upgradeStations);
+        upgradeAmbient.start();
 
         getServer().getPluginManager().registerEvents(
                 new UpgradeStationListener(this, upgradeStations, dustManager),
@@ -196,15 +257,31 @@ public class Main extends JavaPlugin {
                 this
         );
 
+        // -------------------- Station crafting recipes --------------------
+        // Infusion tables, upgrade stations, and recyclers are obtained via
+        // crafting recipes and become "real" stations only once placed --
+        // see StationBlockListener for the place/break registration.
+        StationRecipes.registerAll(this);
+
+        getServer().getPluginManager().registerEvents(
+                new StationBlockListener(this, tableManager, infusionAmbient, upgradeStations, upgradeAmbient, recyclerManager, recyclerAmbient),
+                this
+        );
+
         // -------------------- Tutorial --------------------
         // Wired here (not earlier) because it needs trackManager/raceEngine/
         // raceManager (racing section), dustManager (progression section),
         // and tableManager/recyclerManager/upgradeStations (all just above)
         // to already exist.
         TutorialLocationStore tutorialLocations = new TutorialLocationStore(this);
-        TutorialManager tutorialManager = new TutorialManager(this, dustManager, tutorialLocations);
 
-        TutorialTasksHandler tutorialTasksHandler = new TutorialTasksHandler(tutorialManager);
+        TutorialCraftFrameStore craftFrameStore = new TutorialCraftFrameStore(this);
+        craftFrameManager = new TutorialCraftFrameManager(this, craftFrameStore);
+        craftFrameManager.start();
+
+        tutorialManager = new TutorialManager(this, dustManager, mdConfig, tutorialLocations, craftFrameManager);
+
+        TutorialTasksHandler tutorialTasksHandler = new TutorialTasksHandler(this, tutorialManager);
         getServer().getPluginManager().registerEvents(tutorialTasksHandler, this);
 
         TutorialRaceService tutorialRaceService = new TutorialRaceService(
@@ -212,7 +289,7 @@ public class Main extends JavaPlugin {
         );
 
         getServer().getPluginManager().registerEvents(
-                new TutorialListener(tutorialManager, tutorialTasksHandler, tutorialRaceService),
+                new TutorialListener(this, tutorialManager, tutorialTasksHandler, tutorialRaceService),
                 this
         );
 
@@ -222,7 +299,12 @@ public class Main extends JavaPlugin {
         );
 
         getServer().getPluginManager().registerEvents(
-                new TutorialInteractionGuard(tutorialManager, tableManager, upgradeStations, recyclerManager),
+                new TutorialCraftHook(this, tutorialManager),
+                this
+        );
+
+        getServer().getPluginManager().registerEvents(
+                new TutorialInteractionGuard(this, tutorialManager, tableManager, upgradeStations, recyclerManager),
                 this
         );
 
@@ -235,7 +317,7 @@ public class Main extends JavaPlugin {
         poller.start();
         this.tutorialPoller = poller;
 
-        TutorialCommand tutorialCommand = new TutorialCommand(tutorialManager);
+        TutorialCommand tutorialCommand = new TutorialCommand(tutorialManager, craftFrameManager);
 
         // -------------------- Core listeners --------------------
         getServer().getPluginManager().registerEvents(new ListenEvents(), this);
@@ -264,11 +346,20 @@ public class Main extends JavaPlugin {
                 tutorialCommand
         );
 
+        CommandKitTabCompletion mdTabCompletion = new CommandKitTabCompletion(trackManager);
+
         if (getCommand("md") != null) {
             getCommand("md").setExecutor(md);
-            getCommand("md").setTabCompleter(new CommandKitTabCompletion());
+            getCommand("md").setTabCompleter(mdTabCompletion);
         } else {
             getLogger().severe("Command 'md' is not defined in plugin.yml!");
+        }
+
+        if (getCommand("tasks") != null) {
+            getCommand("tasks").setExecutor(md);
+            getCommand("tasks").setTabCompleter(mdTabCompletion);
+        } else {
+            getLogger().severe("Command 'tasks' is not defined in plugin.yml!");
         }
 
         // -------------------- Feedback --------------------
@@ -302,6 +393,16 @@ public class Main extends JavaPlugin {
             tutorialPoller = null;
         }
 
+        if (tutorialManager != null) {
+            tutorialManager.shutdown();
+            tutorialManager = null;
+        }
+
+        if (scheduledRaceManager != null) {
+            scheduledRaceManager.stop();
+            scheduledRaceManager = null;
+        }
+
         if (infusionAmbient != null) {
             infusionAmbient.stop();
             infusionAmbient = null;
@@ -310,6 +411,11 @@ public class Main extends JavaPlugin {
         if (recyclerAmbient != null) {
             recyclerAmbient.stop();
             recyclerAmbient = null;
+        }
+
+        if (craftFrameManager != null) {
+            craftFrameManager.stop();
+            craftFrameManager = null;
         }
 
         if (trackVisualizer != null) {

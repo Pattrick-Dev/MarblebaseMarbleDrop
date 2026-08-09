@@ -111,6 +111,16 @@ public final class TrackManager {
         return list;
     }
 
+    /** Tracks an admin has explicitly opted into the scheduled race queue (see /md track autorace). */
+    public List<String> autoRaceEligibleIds() {
+        List<String> list = new ArrayList<>();
+        for (MarbleTrack t : tracks.values()) {
+            if (t.isAutoRaceEligible()) list.add(t.getId());
+        }
+        Collections.sort(list);
+        return list;
+    }
+
     public Collection<MarbleTrack> getTracks() {
         return Collections.unmodifiableCollection(tracks.values());
     }

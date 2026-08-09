@@ -8,6 +8,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -25,6 +26,8 @@ public final class MdConfig {
     private double infusionHoloYOffset;
     private String recyclerHoloName;
     private double recyclerHoloYOffset;
+    private String upgradeHoloName;
+    private double upgradeHoloYOffset;
 
     private int infusionDailyCap;
 
@@ -34,6 +37,18 @@ public final class MdConfig {
     private double animBobAmplitude;
     private double animBobSpeed;
     private double animStartingTurns;
+
+    private double raceWallSearchRadius;
+
+    private boolean scheduledRaceEnabled;
+    private int scheduledRaceIntervalMinutes;
+    private List<Integer> scheduledRaceAnnounceMinutesBefore;
+    private int scheduledRaceWinnerDust;
+    private int scheduledRaceWinnerDustVsAi;
+    private List<Integer> scheduledRacePlacePercentages;
+    private int scheduledRaceAiFillCount;
+    private int scheduledRaceAiShowCount;
+    private int scheduledRaceRetryDelaySeconds;
 
     private boolean catalystMarbleStatBased;
     private int catalystDefaultPerItem;
@@ -58,6 +73,27 @@ public final class MdConfig {
 
         recyclerHoloName = color(c.getString("holograms.recycler.name", "&8✦ &6Marble Recycler &8✦"));
         recyclerHoloYOffset = c.getDouble("holograms.recycler.y-offset", 1.15);
+
+        upgradeHoloName = color(c.getString("holograms.upgrade.name", "&b✦ &dUpgrade Station &b✦"));
+        upgradeHoloYOffset = c.getDouble("holograms.upgrade.y-offset", 1.2);
+
+        raceWallSearchRadius = c.getDouble("races.wall-search-radius", 2.5);
+
+        scheduledRaceEnabled = c.getBoolean("races.scheduled.enabled", true);
+        scheduledRaceIntervalMinutes = c.getInt("races.scheduled.interval-minutes", 20);
+        scheduledRaceAnnounceMinutesBefore = c.getIntegerList("races.scheduled.announce-minutes-before");
+        if (scheduledRaceAnnounceMinutesBefore.isEmpty()) {
+            scheduledRaceAnnounceMinutesBefore = List.of(10, 5, 1);
+        }
+        scheduledRaceWinnerDust = c.getInt("races.scheduled.winner-dust", 50);
+        scheduledRaceWinnerDustVsAi = c.getInt("races.scheduled.winner-dust-vs-ai", 15);
+        scheduledRacePlacePercentages = c.getIntegerList("races.scheduled.place-dust-percentages");
+        if (scheduledRacePlacePercentages.isEmpty()) {
+            scheduledRacePlacePercentages = List.of(100, 50, 25);
+        }
+        scheduledRaceAiFillCount = c.getInt("races.scheduled.ai-fill-count", 3);
+        scheduledRaceAiShowCount = c.getInt("races.scheduled.ai-show-count", 4);
+        scheduledRaceRetryDelaySeconds = c.getInt("races.scheduled.retry-delay-seconds", 60);
 
         infusionDailyCap = c.getInt("infusion.daily-cap", 5);
 
@@ -120,17 +156,43 @@ public final class MdConfig {
     // ---- getters ----
     public boolean debugEnabled() { return debugEnabled; }
 
+    public double raceWallSearchRadius() { return raceWallSearchRadius; }
+
+    public boolean scheduledRaceEnabled() { return scheduledRaceEnabled; }
+    public int scheduledRaceIntervalMinutes() { return scheduledRaceIntervalMinutes; }
+    public List<Integer> scheduledRaceAnnounceMinutesBefore() { return scheduledRaceAnnounceMinutesBefore; }
+    public int scheduledRaceWinnerDust() { return scheduledRaceWinnerDust; }
+    public int scheduledRaceWinnerDustVsAi() { return scheduledRaceWinnerDustVsAi; }
+
+    /**
+     * Dust for a given 0-indexed finish place, tapered off from baseDust by
+     * races.scheduled.place-dust-percentages (e.g. [100, 50, 25] pays 1st
+     * place in full, 2nd half, 3rd a quarter). Places beyond the configured
+     * list earn nothing -- this is what stops one player snowballing further
+     * ahead every race just by always placing 1st.
+     */
+    public int scheduledRaceDustForPlace(int baseDust, int placeIndex) {
+        if (placeIndex < 0 || placeIndex >= scheduledRacePlacePercentages.size()) return 0;
+        int percent = scheduledRacePlacePercentages.get(placeIndex);
+        return Math.round(baseDust * (percent / 100f));
+    }
+    public int scheduledRaceAiFillCount() { return scheduledRaceAiFillCount; }
+    public int scheduledRaceAiShowCount() { return scheduledRaceAiShowCount; }
+    public int scheduledRaceRetryDelaySeconds() { return scheduledRaceRetryDelaySeconds; }
+
     public double hologramNameRadius() { return holoNameRadius; }
     public String infusionHologramName() { return infusionHoloName; }
     public double infusionHologramYOffset() { return infusionHoloYOffset; }
     public String recyclerHologramName() { return recyclerHoloName; }
     public double recyclerHologramYOffset() { return recyclerHoloYOffset; }
+    public String upgradeHologramName() { return upgradeHoloName; }
+    public double upgradeHologramYOffset() { return upgradeHoloYOffset; }
 
     public int infusionDailyCap() { return infusionDailyCap; }
 
     public int infusionAnimTotalTicks() { return animTotalTicks; }
     public int infusionAnimHoldTicks() { return animHoldTicks; }
-    public int infusionAnimRevealEarlyTicks() { return animRevealEarlyTicks; }
+public int infusionAnimRevealEarlyTicks() { return animRevealEarlyTicks; }
     public double infusionAnimBobAmplitude() { return animBobAmplitude; }
     public double infusionAnimBobSpeed() { return animBobSpeed; }
     public double infusionAnimStartingTurns() { return animStartingTurns; }

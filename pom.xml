@@ -28,6 +28,12 @@
 			<id>minecraft-repo</id>
 			<url>https://libraries.minecraft.net/</url>
 		</repository>
+
+		<!-- EngineHub (WorldEdit); FAWE is API-compatible with worldedit-bukkit -->
+		<repository>
+			<id>enginehub-maven</id>
+			<url>https://maven.enginehub.org/repo/</url>
+		</repository>
 	</repositories>
 
 	<dependencies>
@@ -36,6 +42,37 @@
 			<groupId>io.papermc.paper</groupId>
 			<artifactId>paper-api</artifactId>
 			<version>${paper.api.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<!-- Optional: only used by TutorialCraftFrameManager.setupFromSelection
+		     to read an admin's WorldEdit/FAWE selection. provided scope;
+		     supplied at runtime by WorldEdit or FAWE, not bundled in our jar.
+		     Nothing else in the plugin references these classes, so the
+		     plugin loads and runs fine even if neither is installed. -->
+		<dependency>
+			<groupId>com.sk89q.worldedit</groupId>
+			<artifactId>worldedit-bukkit</artifactId>
+			<version>7.4.0</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<!-- Optional: only used by RaceGlowPrivacy to make a marble's glow
+		     toggle (see RaceGlowListener) visible to just the toggling
+		     player instead of everyone. Bukkit's own Entity#setGlowing()
+		     has no per-viewer option, so this needs raw packet filtering.
+		     provided scope; supplied at runtime by ProtocolLib, not bundled
+		     in our jar. Main only constructs RaceGlowPrivacy when
+		     ProtocolLib is actually installed (see softdepend in
+		     plugin.yml), so the plugin loads and runs fine without it;
+		     glow just falls back to being visible to everyone. Installed
+		     locally from the dev-build release (no fixed-version release
+		     exists on a public Maven repo for this snapshot):
+		     https://github.com/dmulloy2/ProtocolLib/releases/tag/dev-build -->
+		<dependency>
+			<groupId>com.comphenix.protocol</groupId>
+			<artifactId>ProtocolLib</artifactId>
+			<version>5.5.0-dev-build</version>
 			<scope>provided</scope>
 		</dependency>
 
@@ -55,6 +92,20 @@
 					<source>${java.version}</source>
 					<target>${java.version}</target>
 				</configuration>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-shade-plugin</artifactId>
+				<version>3.6.2</version>
+				<executions>
+					<execution>
+						<phase>package</phase>
+						<goals>
+							<goal>shade</goal>
+						</goals>
+					</execution>
+				</executions>
 			</plugin>
 
 		</plugins>

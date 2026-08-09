@@ -229,8 +229,20 @@ public final class InfusionTableProcess {
     }
 
     public static void run(Player player, Block cauldron, ItemStack marble) {
-        // Guard in case this is called directly
-        if (!isLocked(cauldron)) {
+        run(player, cauldron, marble, false);
+    }
+
+    /**
+     * @param solo When true, skips the shared per-block lock entirely and
+     *             animates only for {@code player} (armor stand hidden from
+     *             everyone else, particles sent only to them) instead of
+     *             broadcasting to everyone nearby -- lets more than one
+     *             person use the exact same physical table at once. See
+     *             InfusionTableManager#isPrivate.
+     */
+    public static void run(Player player, Block cauldron, ItemStack marble, boolean solo) {
+        // Guard in case this is called directly (non-solo only -- solo tables never lock)
+        if (!solo && !isLocked(cauldron)) {
             tryLock(cauldron, player);
         }
 
@@ -282,12 +294,19 @@ public final class InfusionTableProcess {
             as.setInvulnerable(true);
             as.setSilent(true);
 
+            // Solo tables: nobody else should see this player's animation --
+            // hide the stand from everyone by default, then explicitly show
+            // it to just the acting player below.
+            if (solo) as.setVisibleByDefault(false);
+
             if (!decoys.isEmpty()) {
                 as.getEquipment().setHelmet(decoys.get(0).clone());
             } else {
                 as.getEquipment().setHelmet(resultMarble.clone());
             }
         });
+
+        if (solo) player.showEntity(plugin, stand);
 
         player.playSound(player.getLocation(), Sound.BLOCK_BREWING_STAND_BREW, 1f, 1f);
 
@@ -312,17 +331,34 @@ public final class InfusionTableProcess {
             // Announce once, and ONLY after the award
             boolean announced = false;
 
+            /** Solo tables send particles only to the acting player instead of broadcasting to everyone nearby. */
+            private void fx(Particle type, Location loc, int count, double dx, double dy, double dz, double extra) {
+                if (solo) {
+                    player.spawnParticle(type, loc, count, dx, dy, dz, extra);
+                } else {
+                    w.spawnParticle(type, loc, count, dx, dy, dz, extra);
+                }
+            }
+
+            private <T> void fx(Particle type, Location loc, int count, double dx, double dy, double dz, double extra, T data) {
+                if (solo) {
+                    player.spawnParticle(type, loc, count, dx, dy, dz, extra, data);
+                } else {
+                    w.spawnParticle(type, loc, count, dx, dy, dz, extra, data);
+                }
+            }
+
             private void spawnWhitePoof(Location loc) {
-                w.spawnParticle(Particle.POOF, loc, 28, 0.26, 0.20, 0.26, 0.03);
-                w.spawnParticle(Particle.SMOKE, loc, 18, 0.24, 0.18, 0.24, 0.02);
+                fx(Particle.POOF, loc, 28, 0.26, 0.20, 0.26, 0.03);
+                fx(Particle.SMOKE, loc, 18, 0.24, 0.18, 0.24, 0.02);
             }
 
             private void spawnRevealBurst(Location loc) {
-                w.spawnParticle(Particle.FIREWORK, loc, 80, 0.42, 0.30, 0.42, 0.20);
-                w.spawnParticle(Particle.END_ROD, loc, 22, 0.30, 0.22, 0.30, 0.08);
-                w.spawnParticle(Particle.CRIT, loc, 28, 0.30, 0.22, 0.30, 0.18);
-                w.spawnParticle(Particle.ENCHANT, loc, 36, 0.30, 0.30, 0.30, 0.02);
-                w.spawnParticle(Particle.FLASH, loc, 1, 0, 0, 0, 0, Color.WHITE);
+                fx(Particle.FIREWORK, loc, 80, 0.42, 0.30, 0.42, 0.20);
+                fx(Particle.END_ROD, loc, 22, 0.30, 0.22, 0.30, 0.08);
+                fx(Particle.CRIT, loc, 28, 0.30, 0.22, 0.30, 0.18);
+                fx(Particle.ENCHANT, loc, 36, 0.30, 0.30, 0.30, 0.02);
+                fx(Particle.FLASH, loc, 1, 0, 0, 0, 0, Color.WHITE);
 
                 player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.7f, 2.0f);
                 player.playSound(player.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_TWINKLE, 0.55f, 1.6f);
@@ -444,10 +480,10 @@ public final class InfusionTableProcess {
 
                         spawnWhitePoof(popLoc);
 
-                        w.spawnParticle(Particle.FIREWORK, popLoc, 22, 0.24, 0.18, 0.24, 0.10);
-                        w.spawnParticle(Particle.END_ROD, popLoc, 10, 0.20, 0.16, 0.20, 0.05);
-                        w.spawnParticle(Particle.CRIT, popLoc, 18, 0.25, 0.20, 0.25, 0.15);
-                        w.spawnParticle(Particle.ENCHANT, popLoc, 24, 0.25, 0.25, 0.25, 0.02);
+                        fx(Particle.FIREWORK, popLoc, 22, 0.24, 0.18, 0.24, 0.10);
+                        fx(Particle.END_ROD, popLoc, 10, 0.20, 0.16, 0.20, 0.05);
+                        fx(Particle.CRIT, popLoc, 18, 0.25, 0.20, 0.25, 0.15);
+                        fx(Particle.ENCHANT, popLoc, 24, 0.25, 0.25, 0.25, 0.02);
 
                         player.playSound(player.getLocation(), Sound.ENTITY_FIREWORK_ROCKET_BLAST, 0.6f, 1.3f);
                         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 0.9f, 1.8f);
@@ -507,21 +543,21 @@ public final class InfusionTableProcess {
 
             private void spawnCauldronActiveParticles(int t) {
                 if (t % 2 == 0) {
-                    w.spawnParticle(Particle.BUBBLE_POP, cauldronTop, 6, 0.20, 0.02, 0.20, 0.01);
-                    w.spawnParticle(Particle.SPLASH, cauldronTop, 2, 0.18, 0.01, 0.18, 0.02);
+                    fx(Particle.BUBBLE_POP, cauldronTop, 6, 0.20, 0.02, 0.20, 0.01);
+                    fx(Particle.SPLASH, cauldronTop, 2, 0.18, 0.01, 0.18, 0.02);
                 }
 
                 if (t % 4 == 0) {
-                    w.spawnParticle(Particle.SMOKE, cauldronTop.clone().add(0, 0.05, 0),
+                    fx(Particle.SMOKE, cauldronTop.clone().add(0, 0.05, 0),
                             2, 0.12, 0.05, 0.12, 0.01);
                 }
 
                 if (t % 6 == 0) {
-                    w.spawnParticle(Particle.ENCHANT, base, 10, 0.22, 0.12, 0.22, 0.02);
+                    fx(Particle.ENCHANT, base, 10, 0.22, 0.12, 0.22, 0.02);
                 }
 
                 if (t % 8 == 0) {
-                    w.spawnParticle(Particle.PORTAL, base, 6, 0.18, 0.18, 0.18, 0.02);
+                    fx(Particle.PORTAL, base, 6, 0.18, 0.18, 0.18, 0.02);
                 }
             }
 
@@ -568,7 +604,7 @@ public final class InfusionTableProcess {
                     stand.teleport(loc);
 
                     if (holdLeft % 5 == 0) {
-                        w.spawnParticle(Particle.ENCHANT, base, 10, 0.20, 0.20, 0.20, 0.02);
+                        fx(Particle.ENCHANT, base, 10, 0.20, 0.20, 0.20, 0.02);
                     }
 
                     holdLeft--;
@@ -603,8 +639,8 @@ public final class InfusionTableProcess {
                 stand.teleport(animLoc);
 
                 if (elapsed % 3 == 0) {
-                    w.spawnParticle(Particle.ENCHANT, base, 8, 0.25, 0.25, 0.25, 0.02);
-                    w.spawnParticle(Particle.PORTAL, base, 6, 0.2, 0.2, 0.2, 0.02);
+                    fx(Particle.ENCHANT, base, 8, 0.25, 0.25, 0.25, 0.02);
+                    fx(Particle.PORTAL, base, 6, 0.2, 0.2, 0.2, 0.02);
                 }
 
                 if (elapsed % 20 == 0) {

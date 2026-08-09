@@ -57,11 +57,17 @@ public final class RaceGui {
                     lore.add(ChatColor.GRAY + "Points: " + ChatColor.WHITE + t.size());
                     lore.add(ChatColor.GRAY + "World: " + ChatColor.WHITE + t.getWorld().getName());
                 }
+                if (joined) {
+                    RaceManager.RaceEntry entry = races.findEntry(id, p.getUniqueId());
+                    RaceLoadout loadout = (entry != null) ? entry.loadout : RaceLoadout.BALANCED;
+                    lore.add(ChatColor.GRAY + "Loadout: " + ChatColor.YELLOW + loadout.label());
+                }
                 lore.add("");
 
                 if (running) {
                     lore.add(ChatColor.RED + "Race is currently running.");
                 } else if (joined) {
+                    lore.add(ChatColor.GREEN + "Click to set loadout");
                     lore.add(ChatColor.AQUA + "Right-click to leave");
                 } else {
                     lore.add(ChatColor.GREEN + "Click to join");

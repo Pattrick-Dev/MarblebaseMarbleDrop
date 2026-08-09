@@ -33,6 +33,10 @@ public final class MarbleRaceEngine {
         this.plugin = plugin;
     }
 
+    public Plugin getPlugin() {
+        return plugin;
+    }
+
     public void start() {
         if (task != null) return;
 
@@ -52,6 +56,17 @@ public final class MarbleRaceEngine {
     public void addRunner(MarbleRunner runner) {
         if (runner == null) return;
         runners.add(runner);
+    }
+
+    /** Runs `task` after `delayTicks` on this engine's owning plugin -- lets RaceManager drive a start countdown without needing its own Plugin reference. */
+    public void scheduleDelayed(Runnable task, long delayTicks) {
+        Bukkit.getScheduler().runTaskLater(plugin, task, delayTicks);
+    }
+
+    /** Force-removes every active runner without firing their finish callbacks -- see /md race purge. */
+    public void purgeAll() {
+        for (MarbleRunner r : runners) r.despawn();
+        runners.clear();
     }
 
     /** Returns the average position of all active runners, or null if none. */
