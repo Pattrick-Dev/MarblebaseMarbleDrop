@@ -492,7 +492,13 @@ public final class ScheduledRaceManager implements Listener {
 
             FinishTracker tracker = new FinishTracker(total);
 
-            MarbleRunner playerRunner = races.buildStatsRunner(track, grid.get(0), solo.helmet, solo.data, () -> {
+            // Apply the player's loadout (RaceManager#start does the same
+            // for its own 2+-player path) -- buildStatsRunner's MarbleData
+            // overload uses raw, un-loadout-adjusted stats, which is correct
+            // for the AI racers below but was silently skipping the human's
+            // own loadout choice entirely.
+            MarbleStats effectiveStats = solo.loadout.applyTo(solo.data.getStats());
+            MarbleRunner playerRunner = races.buildStatsRunner(track, grid.get(0), solo.helmet, effectiveStats, () -> {
                 FinishTracker.Finish f = tracker.recordFinish(player.getName(), true, solo.data, solo.marbleDisplayName);
                 broadcastPlaceFinish(tracker.finishes.size(), f);
                 maybeConclude(trackId, tracker, player);

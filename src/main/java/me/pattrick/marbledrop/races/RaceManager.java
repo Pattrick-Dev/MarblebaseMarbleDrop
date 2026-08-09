@@ -349,10 +349,18 @@ public final class RaceManager {
 
         String marbleDisplayName = getMarbleDisplayName(helmet);
 
-        list.add(new RaceEntry(player.getUniqueId(), marbleId, helmet, data, marbleDisplayName));
+        RaceEntry newEntry = new RaceEntry(player.getUniqueId(), marbleId, helmet, data, marbleDisplayName);
+        // New entries default to BALANCED (see the RaceEntry field itself) --
+        // apply this player's remembered loadout preference (set via /md race
+        // or /md race test loadout) instead, so it doesn't silently reset to
+        // BALANCED every time they join a new race, scheduled or otherwise.
+        newEntry.loadout = loadoutPreference.getOrDefault(player.getUniqueId(), RaceLoadout.BALANCED);
+        list.add(newEntry);
 
         player.sendMessage(ChatColor.GREEN + "Entered your marble into track '" + trackId + "'.");
         player.sendMessage(ChatColor.GRAY + "Entries: " + list.size() + "/" + MAX_ENTRIES_PER_TRACK);
+        player.sendMessage(ChatColor.GRAY + "Loadout: " + ChatColor.YELLOW + newEntry.loadout.label()
+                + ChatColor.GRAY + " (change it with " + ChatColor.AQUA + "/md race" + ChatColor.GRAY + ")");
     }
 
     public void leave(Player player, String trackId) {
@@ -772,13 +780,25 @@ public final class RaceManager {
 
     public MarbleRunner buildStatsRunner(MarbleTrack track, Location spawn, ItemStack helmet,
                                           MarbleData data, MarbleRunner.FinishListener listener) {
+        return buildStatsRunner(track, spawn, helmet, data.getStats(), listener);
+    }
+
+    /**
+     * Same as {@link #buildStatsRunner(MarbleTrack, Location, ItemStack, MarbleData, MarbleRunner.FinishListener)},
+     * but takes already-computed effective stats directly -- for callers
+     * (ScheduledRaceManager's solo-vs-AI path) that need to apply a
+     * RaceEntry's loadout first via {@code entry.loadout.applyTo(entry.data.getStats())},
+     * the same way RaceManager#start does for its own 2+-player lobby loop.
+     */
+    public MarbleRunner buildStatsRunner(MarbleTrack track, Location spawn, ItemStack helmet,
+                                          MarbleStats stats, MarbleRunner.FinishListener listener) {
         // aiBoost=true -- nothing here is under a live player's real-time
         // click control (test-race AI racers, the tutorial's AI and player
         // marbles alike, ScheduledRaceManager's automated entries), so the
         // runner rolls for its own boosts off its BOOST stat instead of
         // waiting on a right-click that will never come. See MarbleRunner's
         // aiBoost constructor javadoc.
-        return new MarbleRunner(track, spawn, helmet, data.getStats(), track.getLaps(), listener, true);
+        return new MarbleRunner(track, spawn, helmet, stats, track.getLaps(), listener, true);
     }
 
     // ------------------------------------------------------------
