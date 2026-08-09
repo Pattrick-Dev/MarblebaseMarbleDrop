@@ -30,30 +30,27 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
 
 /**
- * Runs a fully-automatic, perpetually recurring server race: as soon as one
- * cycle resolves, the next one is scheduled (a few seconds later, or after a
- * short retry delay if it had to be skipped) -- there is always either a race
- * open, running, or about to open, forever, until {@link #stop()}. A random
+ * Runs a server race at each of {@link MdConfig#scheduledRaceDailyTimes()}
+ * (fixed clock times, server-local) -- races happen ONLY at those specific
+ * times, never on any kind of recurring interval. The entry window for a
+ * race is always open: the moment one race concludes (or the plugin starts),
+ * the next one opens immediately and stays open right up until the next
+ * configured daily-time, at which point entries close and it runs -- so
+ * there's no idle "nothing joinable" gap, but races still only ever
+ * physically happen at the 4 (or however many) configured times. A random
  * eligible track (see MarbleTrack#isAutoRaceEligible, set via
  * {@code /md track autorace}) opens for entries, a boss bar + chat reminders
  * (at each of {@link MdConfig#scheduledRaceAnnounceMinutesBefore()}) count
- * down the entry window, and at zero the race runs.
- * <p>
- * This deliberately does NOT use a fixed {@code runTaskTimer} period: since
- * the entry window and the timer's own period were both exactly
- * {@code intervalMinutes}, the next timer firing and the current cycle's
- * resolution landed on the same tick, and depending on execution order the
- * new firing could see the old {@code openTrackId} still set and silently
- * skip a whole cycle. Chaining a single {@code runTaskLater} at a time (see
- * {@link #scheduleNextCycleSoon()}/{@link #scheduleRetry()}) means there is
- * never more than one pending scheduled step, so that race is structurally
- * impossible.
+ * down to that close time, and at zero the race runs.
  * <p>
  * Three outcomes depending on how many real players joined via {@code /md join}:
  * <ul>
@@ -85,11 +82,17 @@ public final class ScheduledRaceManager implements Listener {
 
     private final Random rng = new Random();
 
-    // ~5s after enable, so the very first cycle doesn't wait a full interval either.
+    // ~5s after enable, so the very first open isn't racing plugin startup.
     private static final long INITIAL_DELAY_TICKS = 100L;
-    // Buffer between one cycle resolving and the next one being attempted --
-    // just long enough for that cycle's own messages to land before new ones start.
-    private static final long NEXT_CYCLE_DELAY_TICKS = 200L;
+    // Buffer between one race concluding and the next one opening -- just
+    // long enough for that race's own result messages to land before the
+    // next "opens for entries" announcement starts.
+    private static final long REOPEN_DELAY_TICKS = 200L;
+    // Floor on a freshly-opened entry window, in case runCycle() ever fires
+    // right at the exact instant a daily-time hits (millisUntilNextDailyTime()
+    // would otherwise return ~0) -- keeps the boss bar/countdown sane instead
+    // of appearing to open and instantly close.
+    private static final long MIN_WINDOW_MILLIS = 30_000L;
 
     private volatile boolean running;
     private BukkitTask nextTask;
@@ -118,6 +121,9 @@ public final class ScheduledRaceManager implements Listener {
     private BukkitTask bossBarTickTask;
     private volatile long entryWindowEndsAtMillis;
 
+    // No-op everywhere unless discord.webhook-url is configured -- see DiscordRaceStatus.
+    private final DiscordRaceStatus discord;
+
     public ScheduledRaceManager(Plugin plugin, MdConfig config, TrackManager tracks, RaceManager races,
                                  RaceWatchManager watch, MarbleRaceEngine engine, DustManager dustManager,
                                  HeadPool headPool) {
@@ -129,6 +135,7 @@ public final class ScheduledRaceManager implements Listener {
         this.engine = engine;
         this.dustManager = dustManager;
         this.headPool = headPool;
+        this.discord = new DiscordRaceStatus(plugin, config, this, races);
 
         races.setOutcomeListener(this::onRaceFinished);
     }
@@ -136,7 +143,6 @@ public final class ScheduledRaceManager implements Listener {
     public void start() {
         stop();
         running = true;
-        nextCycleAtMillis = System.currentTimeMillis() + INITIAL_DELAY_TICKS * 50L;
         nextTask = Bukkit.getScheduler().runTaskLater(plugin, this::runCycle, INITIAL_DELAY_TICKS);
     }
 
@@ -147,6 +153,7 @@ public final class ScheduledRaceManager implements Listener {
             nextTask = null;
         }
         stopBossBar();
+        discord.shutdown();
 
         // Don't leave a track stuck "open forever" with no scheduler left to
         // ever resolve it -- close it out and refund anyone already joined.
@@ -181,9 +188,23 @@ public final class ScheduledRaceManager implements Listener {
         return activeCycleTrackId;
     }
 
+    /**
+     * nextCycleAtMillis is when the currently-open race's entry window
+     * closes (the next configured daily-time), set fresh every time
+     * runCycle() successfully opens one -- since a race is meant to always
+     * be open (see class doc), this is normally always meaningful; it only
+     * goes stale during the rare gap where nothing could open at all
+     * (disabled, or no eligible track free).
+     */
     public int minutesUntilNextCycle() {
         long remainingMs = nextCycleAtMillis - System.currentTimeMillis();
         return (int) Math.max(0, Math.ceil(remainingMs / 60000.0));
+    }
+
+    /** Same underlying countdown as {@link #minutesUntilNextCycle()}, just second-precision for a real mm:ss readout (e.g. RaceMotdListener) instead of a ceiling-rounded minute count. */
+    public long secondsUntilNextCycle() {
+        long remainingMs = nextCycleAtMillis - System.currentTimeMillis();
+        return Math.max(0, remainingMs / 1000);
     }
 
     /**
@@ -192,15 +213,30 @@ public final class ScheduledRaceManager implements Listener {
      * finish callbacks, so without this, purging a stuck scheduled race
      * would leave activeCycleTrackId set forever and jam the scheduler
      * permanently. No-op if nothing was actually in flight.
+     * <p>
+     * If the cycle was still in its open-for-entry window (not yet an
+     * actual running race) when this was called, that track's own open
+     * state has to be torn down here too -- otherwise races.isOpen(trackId)
+     * is left permanently true with nothing left driving it forward.
      */
     public void releaseStuckCycle() {
         if (activeCycleTrackId == null) return;
+        String trackId = activeCycleTrackId;
         activeCycleTrackId = null;
         awaitingOutcomeTrackId = null;
-        scheduleNextCycleSoon();
+
+        if (trackId.equals(openTrackId)) {
+            openTrackId = null;
+            stopBossBar();
+            discord.shutdown();
+            races.close(null, trackId);
+            races.clear(trackId);
+        }
+
+        scheduleReopenSoon();
     }
 
-    /** Admin escape hatch (see /md race forcecycle) -- runs a cycle right now instead of waiting. No-op if a cycle is already open/running. */
+    /** Admin escape hatch (see /md race forcecycle) -- opens a race right now instead of waiting for the next reopen. No-op if a cycle is already open/running. */
     public void forceCycleNow() {
         if (activeCycleTrackId != null) return;
         if (nextTask != null) {
@@ -210,16 +246,41 @@ public final class ScheduledRaceManager implements Listener {
         runCycle();
     }
 
+    private void scheduleReopenSoon() {
+        if (!running) return;
+        nextTask = Bukkit.getScheduler().runTaskLater(plugin, this::runCycle, REOPEN_DELAY_TICKS);
+    }
+
+    /** Milliseconds until the soonest configured daily-time, rolling over to tomorrow if every one of today's has already passed. Long.MAX_VALUE if none are configured. */
+    private long millisUntilNextDailyTime() {
+        List<LocalTime> times = config.scheduledRaceDailyTimes();
+        if (times.isEmpty()) return Long.MAX_VALUE;
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime soonest = null;
+
+        for (LocalTime t : times) {
+            LocalDateTime candidate = LocalDateTime.of(now.toLocalDate(), t);
+            if (!candidate.isAfter(now)) {
+                candidate = candidate.plusDays(1);
+            }
+            if (soonest == null || candidate.isBefore(soonest)) {
+                soonest = candidate;
+            }
+        }
+
+        return Duration.between(now, soonest).toMillis();
+    }
+
     // ---------------- Cycle ----------------
 
     private void runCycle() {
         if (!running) return;
+        if (activeCycleTrackId != null) return; // a cycle is already open/running -- never overlap
 
-        if (!config.scheduledRaceEnabled() || Bukkit.getOnlinePlayers().isEmpty()) {
-            scheduleRetry();
-            return;
+        if (!config.scheduledRaceEnabled() || config.scheduledRaceDailyTimes().isEmpty()) {
+            return; // scheduled races off entirely -- nothing opens until re-enabled + /md race forcecycle or a restart
         }
-        if (activeCycleTrackId != null) return; // previous cycle's race hasn't fully finished yet -- never overlap
 
         List<String> candidates = new ArrayList<>();
         for (String id : tracks.autoRaceEligibleIds()) {
@@ -229,50 +290,53 @@ public final class ScheduledRaceManager implements Listener {
             candidates.add(id);
         }
         if (candidates.isEmpty()) {
-            scheduleRetry();
+            plugin.getLogger().info("[ScheduledRaceManager] No eligible track free right now -- will keep trying.");
+            // Keep the idle countdown honest even though nothing actually opened.
+            nextCycleAtMillis = System.currentTimeMillis() + millisUntilNextDailyTime();
+            scheduleReopenSoon(); // transient (e.g. an admin mid-edit on the only eligible track) -- retry rather than going silent until the next race conclusion
             return;
         }
 
         String trackId = candidates.get(rng.nextInt(candidates.size()));
         if (!races.open(null, trackId)) {
-            scheduleRetry();
+            plugin.getLogger().info("[ScheduledRaceManager] Couldn't open '" + trackId + "' -- will keep trying.");
+            scheduleReopenSoon();
             return;
         }
 
         openTrackId = trackId;
         activeCycleTrackId = trackId;
 
-        List<Integer> announceMinutes = config.scheduledRaceAnnounceMinutesBefore();
-        int intervalMinutes = Math.max(1, config.scheduledRaceIntervalMinutes());
+        long windowMs = Math.max(MIN_WINDOW_MILLIS, millisUntilNextDailyTime());
+        long windowMinutes = Math.max(1, windowMs / 60_000L);
 
+        List<Integer> announceMinutes = config.scheduledRaceAnnounceMinutesBefore();
         for (int minutesBefore : announceMinutes) {
-            if (minutesBefore <= 0 || minutesBefore >= intervalMinutes) continue;
-            long delayTicks = (long) (intervalMinutes - minutesBefore) * 1200L;
+            if (minutesBefore <= 0 || minutesBefore >= windowMinutes) continue;
+            long delayTicks = (windowMinutes - minutesBefore) * 1200L;
             Bukkit.getScheduler().runTaskLater(plugin, () -> announceReminder(trackId, minutesBefore), delayTicks);
         }
 
-        announceOpen(trackId, intervalMinutes);
+        // Set BEFORE announceOpen() -- announceOpen() (via startBossBar/discord.onOpen)
+        // immediately reads nextCycleAtMillis for its very first countdown display, so
+        // it has to already reflect this cycle's actual close time.
+        nextCycleAtMillis = System.currentTimeMillis() + windowMs;
+        nextTask = Bukkit.getScheduler().runTaskLater(plugin, () -> resolveCycle(trackId), windowMs / 50L);
 
-        nextCycleAtMillis = System.currentTimeMillis() + (long) intervalMinutes * 60_000L;
-        nextTask = Bukkit.getScheduler().runTaskLater(plugin, () -> resolveCycle(trackId), (long) intervalMinutes * 1200L);
+        announceOpen(trackId, windowMs);
     }
 
-    /** Skipped this attempt (disabled / no players / nothing free) -- retry soon rather than waiting a full interval. */
-    private void scheduleRetry() {
-        if (!running) return;
-        long delayTicks = Math.max(1, config.scheduledRaceRetryDelaySeconds()) * 20L;
-        nextCycleAtMillis = System.currentTimeMillis() + delayTicks * 50L;
-        nextTask = Bukkit.getScheduler().runTaskLater(plugin, this::runCycle, delayTicks);
+    /** Formats a duration as "H:MM:SS" once it's an hour or more, else "M:SS" -- entry windows can now span many hours (e.g. between the last daily-time of one day and the first of the next). */
+    static String formatDuration(long totalSeconds) {
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+        return hours > 0
+                ? String.format("%d:%02d:%02d", hours, minutes, seconds)
+                : String.format("%d:%02d", minutes, seconds);
     }
 
-    /** A cycle just finished resolving (whichever branch) -- this is what makes cycling perpetual. */
-    private void scheduleNextCycleSoon() {
-        if (!running) return;
-        nextCycleAtMillis = System.currentTimeMillis() + NEXT_CYCLE_DELAY_TICKS * 50L;
-        nextTask = Bukkit.getScheduler().runTaskLater(plugin, this::runCycle, NEXT_CYCLE_DELAY_TICKS);
-    }
-
-    private void announceOpen(String trackId, int intervalMinutes) {
+    private void announceOpen(String trackId, long windowMs) {
         int fullDust = config.scheduledRaceWinnerDust();
         int aiDust = config.scheduledRaceWinnerDustVsAi();
 
@@ -280,7 +344,7 @@ public final class ScheduledRaceManager implements Listener {
                 .append(Component.text(trackId, NamedTextColor.YELLOW))
                 .append(Component.text(" opens for entries! ", NamedTextColor.GOLD))
                 .append(Component.text("/md join", NamedTextColor.AQUA))
-                .append(Component.text(" within " + intervalMinutes + " minutes.", NamedTextColor.GOLD));
+                .append(Component.text(" -- starts in " + formatDuration(windowMs / 1000) + ".", NamedTextColor.GOLD));
 
         Component rewardMsg = Component.text("1st place gets " + fullDust + " Dust, less for runners-up", NamedTextColor.GREEN)
                 .append(Component.text(" (" + aiDust + " for 1st if AI has to fill the field, none if nobody joins).", NamedTextColor.GRAY));
@@ -291,7 +355,8 @@ public final class ScheduledRaceManager implements Listener {
             p.playSound(p.getLocation(), Sound.BLOCK_NOTE_BLOCK_BELL, 1f, 1.2f);
         }
 
-        startBossBar(trackId, intervalMinutes);
+        startBossBar(trackId, windowMs);
+        discord.onOpen(trackId);
     }
 
     private void announceReminder(String trackId, int minutesLeft) {
@@ -315,6 +380,7 @@ public final class ScheduledRaceManager implements Listener {
 
         openTrackId = null;
         stopBossBar();
+        discord.onClose(trackId);
         races.close(null, trackId);
 
         List<RaceManager.RaceEntry> lobby = races.lobbySnapshot(trackId);
@@ -354,7 +420,7 @@ public final class ScheduledRaceManager implements Listener {
         MarbleTrack track = tracks.getTrack(trackId);
         if (track == null || track.size() < 2) {
             activeCycleTrackId = null; // nothing actually ran -- release the gate now
-            scheduleNextCycleSoon();
+            scheduleReopenSoon();
             return;
         }
 
@@ -401,9 +467,9 @@ public final class ScheduledRaceManager implements Listener {
             announceServerPodium(trackId, payouts);
         }
 
-        // This race has genuinely finished -- release the gate and let the next cycle begin.
+        // This race has genuinely finished -- release the gate and open the next one.
         activeCycleTrackId = null;
-        scheduleNextCycleSoon();
+        scheduleReopenSoon();
     }
 
     // ---------------- 1 real player: AI fills the rest ----------------
@@ -485,9 +551,9 @@ public final class ScheduledRaceManager implements Listener {
             }
         }, 100L);
 
-        // This race has genuinely finished -- release the gate and let the next cycle begin.
+        // This race has genuinely finished -- release the gate and open the next one.
         activeCycleTrackId = null;
-        scheduleNextCycleSoon();
+        scheduleReopenSoon();
     }
 
     // ---------------- 0 real players: pure AI showcase ----------------
@@ -526,9 +592,9 @@ public final class ScheduledRaceManager implements Listener {
             announceServerResult(trackId, tracker.finishes.get(0).name(), 0);
         }
 
-        // This race has genuinely finished -- release the gate and let the next cycle begin.
+        // This race has genuinely finished -- release the gate and open the next one.
         activeCycleTrackId = null;
-        scheduleNextCycleSoon();
+        scheduleReopenSoon();
     }
 
     // ---------------- Shared helpers ----------------
@@ -619,34 +685,34 @@ public final class ScheduledRaceManager implements Listener {
 
     // ---------------- Boss bar (entry-window countdown, everyone online) ----------------
 
-    private void startBossBar(String trackId, int intervalMinutes) {
+    private void startBossBar(String trackId, long windowMs) {
         stopBossBar();
 
-        entryWindowEndsAtMillis = System.currentTimeMillis() + (long) intervalMinutes * 60_000L;
+        entryWindowEndsAtMillis = System.currentTimeMillis() + windowMs;
 
         countdownBar = Bukkit.createBossBar(" ", BarColor.YELLOW, BarStyle.SOLID);
         for (Player p : Bukkit.getOnlinePlayers()) countdownBar.addPlayer(p);
         countdownBar.setVisible(true);
-        updateBossBarTitle(trackId, intervalMinutes);
+        updateBossBarTitle(trackId, windowMs);
 
         bossBarTickTask = Bukkit.getScheduler().runTaskTimer(plugin,
-                () -> updateBossBarTitle(trackId, intervalMinutes), 20L, 20L);
+                () -> updateBossBarTitle(trackId, windowMs), 20L, 20L);
     }
 
-    private void updateBossBarTitle(String trackId, int intervalMinutes) {
+    private void updateBossBarTitle(String trackId, long windowMs) {
         if (countdownBar == null) return;
 
         long remainingMs = Math.max(0, entryWindowEndsAtMillis - System.currentTimeMillis());
-        long totalSeconds = remainingMs / 1000;
-        long minutes = totalSeconds / 60;
-        long seconds = totalSeconds % 60;
+
+        int joined = races.lobbyCount(trackId);
+        String plural = joined == 1 ? "" : "s";
 
         countdownBar.setTitle(ChatColor.GOLD + "Race on " + ChatColor.YELLOW + trackId +
-                ChatColor.GOLD + " -- " + String.format("%d:%02d", minutes, seconds) +
+                ChatColor.GOLD + " -- " + formatDuration(remainingMs / 1000) +
+                ChatColor.GOLD + " -- " + ChatColor.AQUA + joined + " player" + plural + " joined" +
                 ChatColor.GOLD + " -- " + ChatColor.AQUA + "/md join" + ChatColor.GOLD + "!");
 
-        double totalMs = intervalMinutes * 60_000.0;
-        double progress = totalMs <= 0 ? 0 : Math.max(0.0, Math.min(1.0, remainingMs / totalMs));
+        double progress = windowMs <= 0 ? 0 : Math.max(0.0, Math.min(1.0, remainingMs / (double) windowMs));
         countdownBar.setProgress(progress);
     }
 

@@ -1,5 +1,6 @@
 package me.pattrick.marbledrop.races;
 
+import me.pattrick.marbledrop.MdConfig;
 import me.pattrick.marbledrop.command.Commands;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -13,12 +14,15 @@ public final class RaceCommand implements CommandExecutor {
     private final TrackManager tracks;
     private final RaceWatchManager watch;
     private final ScheduledRaceManager scheduledRaces;
+    private final MdConfig config;
 
-    public RaceCommand(RaceManager races, TrackManager tracks, RaceWatchManager watch, ScheduledRaceManager scheduledRaces) {
+    public RaceCommand(RaceManager races, TrackManager tracks, RaceWatchManager watch, ScheduledRaceManager scheduledRaces,
+                        MdConfig config) {
         this.races = races;
         this.tracks = tracks;
         this.watch = watch;
         this.scheduledRaces = scheduledRaces;
+        this.config = config;
     }
 
     @Override
@@ -190,6 +194,12 @@ public final class RaceCommand implements CommandExecutor {
                 return true;
             }
 
+            case "schedule" -> {
+                if (!Commands.requireAdmin(player)) return true;
+                RaceScheduleMenu.open(player, config);
+                return true;
+            }
+
             default -> {
                 usage(player);
                 return true;
@@ -213,5 +223,6 @@ public final class RaceCommand implements CommandExecutor {
         player.sendMessage(ChatColor.GRAY + "/md leave " + ChatColor.DARK_GRAY + "(leave whatever race you're entered in)");
         player.sendMessage(ChatColor.GRAY + "/md race next " + ChatColor.DARK_GRAY + "(time until the next scheduled race)");
         player.sendMessage(ChatColor.GRAY + "/md race forcecycle " + ChatColor.DARK_GRAY + "(admin, runs the scheduled race cycle now)");
+        player.sendMessage(ChatColor.GRAY + "/md race schedule " + ChatColor.DARK_GRAY + "(admin, GUI to tune scheduled race settings)");
     }
 }

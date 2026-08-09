@@ -5,12 +5,14 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Skull;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -20,7 +22,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * Per-marble hologram + particle ticker for placed marble displays --
@@ -33,15 +34,16 @@ public final class MarbleDisplayAmbient {
 
     private static final double STAND_Y_OFFSET = 0.75;
 
-    // Fingerprints holoName()'s "<color>Label<gray> (RARITY)" format so
-    // sweepOrphans() can recognize our own holograms (and only ours)
-    // without colliding with InfusionTable/Recycler/UpgradeStation, which
-    // use their own fixed, differently-shaped names.
-    private static final Pattern HOLOGRAM_NAME_PATTERN =
-            Pattern.compile(".* \\((COMMON|UNCOMMON|RARE|EPIC|LEGENDARY)\\)$");
-
     private final Plugin plugin;
     private final PlacedMarbleManager marbles;
+
+    // Tags every armor stand we spawn so it can be positively identified
+    // as "ours" (by findAnyHologramStand/removeDuplicateHolograms/
+    // sweepOrphans) regardless of what its display name currently says --
+    // the name alone isn't a safe fingerprint since SHOW_RARITY can change
+    // it at any time (and InfusionTable/Recycler/UpgradeStation spawn
+    // their own isMarker+isInvisible stands too).
+    private final NamespacedKey markerTag;
 
     private BukkitTask task;
 
@@ -50,6 +52,7 @@ public final class MarbleDisplayAmbient {
     public MarbleDisplayAmbient(Plugin plugin, PlacedMarbleManager marbles) {
         this.plugin = plugin;
         this.marbles = marbles;
+        this.markerTag = new NamespacedKey(plugin, "marble_display_hologram");
     }
 
     public void start() {
@@ -77,18 +80,18 @@ public final class MarbleDisplayAmbient {
         for (World w : Bukkit.getWorlds()) {
             for (Entity e : new ArrayList<>(w.getEntities())) {
                 if (!(e instanceof ArmorStand as)) continue;
-                if (!as.isValid() || !as.isMarker() || !as.isInvisible()) continue;
-
-                String name = as.getCustomName();
-                if (name == null) continue;
-                String stripped = ChatColor.stripColor(name);
-                if (stripped == null || !HOLOGRAM_NAME_PATTERN.matcher(stripped).matches()) continue;
+                if (!as.isValid() || !isOurs(as)) continue;
 
                 if (!validKeys.contains(blockKey(as.getLocation()))) {
                     as.remove();
                 }
             }
         }
+    }
+
+    private boolean isOurs(ArmorStand as) {
+        return as.isMarker() && as.isInvisible()
+                && as.getPersistentDataContainer().has(markerTag, PersistentDataType.BYTE);
     }
 
     private String blockKey(Location loc) {
@@ -170,7 +173,7 @@ public final class MarbleDisplayAmbient {
 
             if (showHologram) {
                 boolean nearby = !w.getNearbyEntities(loc.clone().add(0.5, 1, 0.5), nameRadius, nameRadius, nameRadius).isEmpty();
-                ensureMarker(loc, standLoc, key, holoName(skull, data), nearby);
+                ensureMarker(loc, standLoc, key, holoName(data, pdc), nearby);
             } else {
                 UUID id = markerIds.remove(key);
                 if (id != null) {
@@ -194,14 +197,16 @@ public final class MarbleDisplayAmbient {
         });
     }
 
-    private String holoName(Skull skull, MarbleData data) {
-        String placedName = skull.getPersistentDataContainer()
-                .get(MarbleKeys.PLACED_NAME, org.bukkit.persistence.PersistentDataType.STRING);
+    private String holoName(MarbleData data, PersistentDataContainer pdc) {
+        String placedName = pdc.get(MarbleKeys.PLACED_NAME, PersistentDataType.STRING);
 
         MarbleRarity rarity = data.getRarity() == null ? MarbleRarity.COMMON : data.getRarity();
         String color = MarbleItem.rarityColor(rarity);
 
         String label = (placedName != null && !placedName.isBlank()) ? ChatColor.stripColor(placedName) : "Marble";
+        if (!MarbleDisplayMenu.isRarityEnabled(pdc)) {
+            return color + label;
+        }
         return color + label + ChatColor.GRAY + " (" + rarity.name() + ")";
     }
 
@@ -234,6 +239,7 @@ public final class MarbleDisplayAmbient {
                     as.setSilent(true);
                     as.setCustomName(name);
                     as.setCustomNameVisible(showName);
+                    as.getPersistentDataContainer().set(markerTag, PersistentDataType.BYTE, (byte) 1);
                 });
                 markerIds.put(key, stand.getUniqueId());
             }
@@ -244,6 +250,11 @@ public final class MarbleDisplayAmbient {
 
         stand.setCustomName(name);
         stand.setCustomNameVisible(showName);
+
+        // Unconditionally (re-)tag on every pass, not just at spawn time --
+        // this self-heals stands that were adopted via findAnyHologramStand
+        // from before this tag existed, so sweepOrphans() recognizes them too.
+        stand.getPersistentDataContainer().set(markerTag, PersistentDataType.BYTE, (byte) 1);
 
         if (stand.getEquipment() != null) {
             stand.getEquipment().setHelmet(null);

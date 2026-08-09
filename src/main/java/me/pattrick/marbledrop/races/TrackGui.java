@@ -80,7 +80,8 @@ public final class TrackGui {
                 List.of(ChatColor.GRAY + "ID: " + id,
                         ChatColor.GRAY + "World: " + t.getWorld().getName(),
                         ChatColor.GRAY + "Points: " + t.size(),
-                        ChatColor.GRAY + "Watch: " + (t.getWatchLocation() != null ? ChatColor.GREEN + "set" : ChatColor.RED + "not set"))));
+                        ChatColor.GRAY + "Watch: " + (t.getWatchLocation() != null ? ChatColor.GREEN + "set" : ChatColor.RED + "not set"),
+                        ChatColor.GRAY + "Scheduled Races: " + (t.isAutoRaceEligible() ? ChatColor.GREEN + "ON" : ChatColor.RED + "OFF"))));
 
         // Point management
         inv.setItem(10, item(Material.LIME_WOOL, ChatColor.GREEN + "Add Point (Here)",
@@ -114,6 +115,15 @@ public final class TrackGui {
         // Save/Delete
         inv.setItem(22, item(Material.WRITABLE_BOOK, ChatColor.GOLD + "Save",
                 List.of(ChatColor.GRAY + "Writes tracks.yml")));
+
+        boolean autoRace = t.isAutoRaceEligible();
+        inv.setItem(23, item(autoRace ? Material.LIME_DYE : Material.GRAY_DYE,
+                (autoRace ? ChatColor.GREEN : ChatColor.RED) + "Scheduled Races: " + (autoRace ? "ON" : "OFF"),
+                List.of(ChatColor.GRAY + "Whether this track can be picked",
+                        ChatColor.GRAY + "for the automatic race queue",
+                        ChatColor.DARK_GRAY + "(needs 2+ points either way)",
+                        "",
+                        ChatColor.AQUA + "Click to toggle")));
 
         inv.setItem(24, item(Material.REDSTONE_BLOCK, ChatColor.RED + "Delete Track",
                 List.of(ChatColor.GRAY + "Permanent")));

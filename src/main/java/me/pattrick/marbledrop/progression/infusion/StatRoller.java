@@ -1,9 +1,10 @@
 package me.pattrick.marbledrop.progression.infusion;
 
 import me.pattrick.marbledrop.marble.MarbleRarity;
+import me.pattrick.marbledrop.marble.MarbleStat;
 import me.pattrick.marbledrop.marble.MarbleStats;
 
-
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 public final class StatRoller {
@@ -20,6 +21,18 @@ public final class StatRoller {
     public static final int STAT_MAX = 100;
 
     public static MarbleStats rollStats(MarbleRarity rarity) {
+        return rollStats(rarity, Map.of());
+    }
+
+    /**
+     * Same roll as {@link #rollStats(MarbleRarity)}, but stats present in
+     * statAffinity (weight 0-1) get an extra reroll-take-best chance
+     * proportional to their weight -- e.g. a Blaze Rod catalyst configured
+     * for BOOST gives BOOST a chance to reroll-and-keep-the-better-result,
+     * while every other stat rolls exactly as it always has. Pure upside:
+     * a stat with affinity never rolls worse than an unbiased roll would.
+     */
+    public static MarbleStats rollStats(MarbleRarity rarity, Map<MarbleStat, Double> statAffinity) {
 
         // Rarity tiers (min/max per stat, plus a minimum total power floor)
         int min;
@@ -59,11 +72,11 @@ public final class StatRoller {
             }
         }
 
-        int speed = roll(min, max);
-        int accel = roll(min, max);
-        int handling = roll(min, max);
-        int stability = roll(min, max);
-        int boost = roll(min, max);
+        int speed = rollAffine(min, max, weightOf(statAffinity, MarbleStat.SPEED));
+        int accel = rollAffine(min, max, weightOf(statAffinity, MarbleStat.ACCEL));
+        int handling = rollAffine(min, max, weightOf(statAffinity, MarbleStat.HANDLING));
+        int stability = rollAffine(min, max, weightOf(statAffinity, MarbleStat.STABILITY));
+        int boost = rollAffine(min, max, weightOf(statAffinity, MarbleStat.BOOST));
 
         int total = speed + accel + handling + stability + boost;
 
@@ -99,6 +112,22 @@ public final class StatRoller {
         int hi = Math.min(STAT_MAX, max);
         if (hi < lo) hi = lo;
         return ThreadLocalRandom.current().nextInt(lo, hi + 1);
+    }
+
+    /** Rolls once; with probability `weight` rolls a second time and keeps the better of the two. weight <= 0 is a single unbiased roll, identical to before this catalyst-affinity feature existed. */
+    private static int rollAffine(int min, int max, double weight) {
+        int a = roll(min, max);
+        if (weight <= 0.0) return a;
+
+        int b = roll(min, max);
+        double w = Math.min(1.0, weight);
+        return (ThreadLocalRandom.current().nextDouble() < w) ? Math.max(a, b) : a;
+    }
+
+    private static double weightOf(Map<MarbleStat, Double> statAffinity, MarbleStat stat) {
+        if (statAffinity == null) return 0.0;
+        Double w = statAffinity.get(stat);
+        return w == null ? 0.0 : w;
     }
 
     private static int clamp(int value) {

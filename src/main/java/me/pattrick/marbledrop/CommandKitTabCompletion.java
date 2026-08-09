@@ -290,6 +290,7 @@ public class CommandKitTabCompletion implements TabCompleter {
         raceSubs.add("purge");
         raceSubs.add("forcecycle");
         raceSubs.add("test");
+        raceSubs.add("schedule");
       }
 
       return filterStartsWith(raceSubs, args[1]);

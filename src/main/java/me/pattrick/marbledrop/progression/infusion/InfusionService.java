@@ -1,7 +1,6 @@
 package me.pattrick.marbledrop.progression.infusion;
 
 import me.pattrick.marbledrop.HeadDatabase;
-import me.pattrick.marbledrop.Main;
 import me.pattrick.marbledrop.marble.MarbleData;
 import me.pattrick.marbledrop.marble.MarbleItem;
 import me.pattrick.marbledrop.marble.MarbleKeys;
@@ -24,7 +23,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 
 public final class InfusionService {
 
@@ -63,7 +61,7 @@ public final class InfusionService {
      * Existing command behavior (gives the item directly).
      */
     public void infuse(Player player, int amount) {
-        ItemStack result = infuseToItem(player, amount, 0);
+        ItemStack result = infuseToItem(player, amount);
         if (result == null) return;
 
         if (player.getInventory().firstEmpty() == -1) {
@@ -74,21 +72,20 @@ public final class InfusionService {
         }
     }
 
-    /**
-     * Backwards compatible method used by existing code.
-     * bonusValue is hidden value from catalyst items.
-     */
-    public ItemStack infuseToItem(Player player, int amount, int bonusValue) {
-        return infuseToItem(player, amount, bonusValue, null);
+    /** No-catalyst convenience overload. */
+    public ItemStack infuseToItem(Player player, int amount) {
+        return infuseToItem(player, amount, CatalystProfile.EMPTY);
     }
 
     /**
-     * Produce the infused marble ItemStack with optional marble catalyst rarity bias.
-     * catalystRarity comes from a marble catalyst (MODERN schema).
+     * Produce the infused marble ItemStack, soft-skewed by the given
+     * catalyst (rarity value/bias, stat affinity, team bias -- see
+     * CatalystProfile). Pass CatalystProfile.EMPTY (or null) for no catalyst.
      *
      * Returns null if failed (and refunds dust if dust was taken).
      */
-    public ItemStack infuseToItem(Player player, int amount, int bonusValue, MarbleRarity catalystRarity) {
+    public ItemStack infuseToItem(Player player, int amount, CatalystProfile catalyst) {
+        if (catalyst == null) catalyst = CatalystProfile.EMPTY;
         if (amount <= 0) {
             player.sendMessage(ChatColor.RED + "Use: /dust infuse <amount>");
             return null;
@@ -121,10 +118,10 @@ public final class InfusionService {
         Integer stored = player.getPersistentDataContainer().get(K_ATTUNEMENT, PersistentDataType.INTEGER);
         int attunement = stored != null ? Math.max(0, stored) : 0;
 
-        int effective = amount + attunement + Math.max(0, bonusValue);
+        int effective = amount + attunement + Math.max(0, catalyst.rarityValue());
 
         // Roll rarity (biased if catalyst marble rarity present)
-        MarbleRarity rarity = rollWithCatalystBias(effective, catalystRarity);
+        MarbleRarity rarity = RarityRoller.roll(effective, catalyst.rarityBias());
 
         // Update attunement (hidden pity)
         int newAttunement = attunement;
@@ -141,7 +138,7 @@ public final class InfusionService {
         // Create marble head using your proven working database
         ItemStack item;
         try {
-            item = HeadDatabase.getMarbleHead(player.getDisplayName());
+            item = HeadDatabase.getMarbleHead(player.getDisplayName(), catalyst.teamBias());
         } catch (Exception ex) {
             dust.addDust(player, amount); // refund
             player.sendMessage(ChatColor.RED + "Infusion failed creating a marble head. Refunded dust.");
@@ -167,8 +164,8 @@ public final class InfusionService {
         String team = readTeamFromModernPdc(meta);
         if (team == null || team.isEmpty()) team = "Neutral";
 
-        // Stats: modern stats only
-        MarbleStats stats = StatRoller.rollStats(rarity);
+        // Stats: modern stats only, soft-skewed by the catalyst's affinity (if any)
+        MarbleStats stats = StatRoller.rollStats(rarity, catalyst.statAffinity());
 
         // Write MODERN schema (single system)
         String marbleKey = teamKeyFromTeam(team);
@@ -215,77 +212,11 @@ public final class InfusionService {
         player.sendMessage(ChatColor.GRAY + "Infusion value: "
                 + ChatColor.YELLOW + effective
                 + ChatColor.GRAY + " (" + amount + " dust"
-                + (bonusValue > 0 ? (" + " + bonusValue + " catalyst") : "")
-                + (catalystRarity != null ? (ChatColor.GRAY + " + " + rarityColor(catalystRarity) + catalystRarity.name() + ChatColor.GRAY + " marble") : "")
+                + (catalyst.rarityValue() > 0 ? (" + " + catalyst.rarityValue() + " catalyst") : "")
+                + (catalyst.rarityBias() != null ? (ChatColor.GRAY + " + " + rarityColor(catalyst.rarityBias()) + catalyst.rarityBias().name() + ChatColor.GRAY + " marble") : "")
                 + ChatColor.GRAY + ")");
 
         return item;
-    }
-
-    /**
-     * Reads catalyst rarity from a MODERN marble item.
-     * Returns null if the item is not a modern marble.
-     */
-    public MarbleRarity readMarbleCatalystRarity(ItemStack item) {
-        if (item == null) return null;
-        if (!MarbleItem.isMarble(item)) return null;
-
-        MarbleData data = MarbleItem.read(item);
-        if (data == null) return null;
-
-        return data.getRarity();
-    }
-
-    private MarbleRarity rollWithCatalystBias(int effectiveValue, MarbleRarity catalystRarity) {
-        // Base roll (modern roller)
-        MarbleRarity best = RarityRoller.roll(effectiveValue);
-
-        if (catalystRarity == null) {
-            return best;
-        }
-
-        int extraRolls;
-        double floorChance;
-
-        switch (catalystRarity) {
-            case UNCOMMON -> {
-                extraRolls = 1;
-                floorChance = 0.20;
-            }
-            case RARE -> {
-                extraRolls = 1;
-                floorChance = 0.30;
-            }
-            case EPIC -> {
-                extraRolls = 2;
-                floorChance = 0.40;
-            }
-            case LEGENDARY -> {
-                extraRolls = 2;
-                floorChance = 0.50;
-            }
-            default -> {
-                extraRolls = 0;
-                floorChance = 0.0;
-            }
-        }
-
-        // Extra rerolls – take best
-        for (int i = 0; i < extraRolls; i++) {
-            MarbleRarity rolled = RarityRoller.roll(effectiveValue);
-            if (rolled.ordinal() > best.ordinal()) {
-                best = rolled;
-            }
-        }
-
-        // Soft floor chance
-        if (best.ordinal() < catalystRarity.ordinal()) {
-            if (ThreadLocalRandom.current().nextDouble() < floorChance) {
-                best = catalystRarity;
-            }
-        }
-
-        return best;
     }
 
     private String teamKeyFromTeam(String team) {

@@ -175,6 +175,16 @@ public final class TrackGuiListener implements Listener {
                     tracks.saveNow();
                     p.sendMessage(ChatColor.GOLD + "Saved tracks.yml");
                 }
+                case 23 -> {
+                    MarbleTrack track = tracks.getTrack(id);
+                    boolean next = !track.isAutoRaceEligible();
+                    track.setAutoRaceEligible(next);
+                    tracks.saveNow();
+                    p.sendMessage(next
+                            ? ChatColor.GREEN + "'" + id + "' added to the scheduled race queue."
+                            : ChatColor.YELLOW + "'" + id + "' removed from the scheduled race queue.");
+                    TrackGui.openEditor(p, tracks, id, visualizer);
+                }
                 case 24 -> {
                     tracks.removeTrack(id);
                     visualizer.hide(p);

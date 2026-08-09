@@ -1,6 +1,10 @@
 debug:
   enabled: false
 
+discord:
+  webhook-url: ""             # paste a Discord channel webhook URL here to enable scheduled-race status posts; blank = disabled
+  update-interval-seconds: 20 # how often the countdown message is edited while a race is open (keep this reasonable -- Discord will rate-limit edits that are too frequent)
+
 holograms:
   name-visible-radius: 8.0
 
@@ -34,6 +38,7 @@ infusion:
   catalyst:
     marble-stat-based: true
     default-per-item: 10
+    team-bias-chance: 0.5  # chance a marble catalyst's team filters the pick to just that team (soft bias, not a guarantee)
 
     values:
       DIAMOND: 200
@@ -54,6 +59,17 @@ infusion:
       RARE:       { min: 18, max: 60 }
       EPIC:       { min: 25, max: 85 }
       LEGENDARY:  { min: 35, max: 120 }
+
+    # Material catalysts give a higher chance (never a guarantee) of
+    # rolling higher on the listed stats -- see StatRoller. Materials left
+    # out here (DIAMOND, EMERALD, NETHERITE_*, etc.) still work as pure
+    # rarity-value catalysts with no stat skew.
+    stat-affinity:
+      BLAZE_ROD: [BOOST]
+      ENDER_PEARL: [HANDLING]
+      PRISMARINE_CRYSTALS: [STABILITY]
+      AMETHYST_SHARD: [ACCEL]
+      IRON_INGOT: [SPEED]
 
 upgrade-station:
   gui:
@@ -78,14 +94,22 @@ races:
 
   scheduled:
     enabled: true
-    interval-minutes: 20               # how often a new scheduled race cycle opens (if anyone's online)
     announce-minutes-before: [10, 5, 1] # reminder broadcasts before the race starts
     winner-dust: 50                    # base dust for 1st place against real players
     winner-dust-vs-ai: 15               # base dust for 1st place when AI had to fill in the lobby
     place-dust-percentages: [100, 50, 25] # percent of the base dust each finish place earns (index 0 = 1st); places beyond this list earn nothing
     ai-fill-count: 3                   # AI opponents added when exactly 1 real player joins
     ai-show-count: 4                   # AI racers for a pure showcase race when no one joins
-    retry-delay-seconds: 60            # how soon to retry after a cycle is skipped (disabled/no players/no free track), instead of waiting a full interval
+
+    # The ONLY times a race actually runs (24h HH:mm, server's local time).
+    # Entry is always open -- the moment one race ends (or the plugin
+    # starts), the next one opens immediately and stays joinable right up
+    # until the next one of these times, then closes and runs. If no
+    # eligible track happens to be free right then, it keeps retrying every
+    # few seconds until one opens up. Empty list, or `enabled: false` above,
+    # turns scheduled races off entirely -- re-enabling requires
+    # /md race forcecycle or a restart to kick it back off.
+    daily-times: ["12:00", "16:00", "20:00", "00:00"]
 
 recycler:
   dust-return:
