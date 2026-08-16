@@ -19,6 +19,10 @@
 *.tar.gz
 *.rar
 
+# ...except vendored dependencies not available on any public Maven repo -
+# see the local-libs repository entry in pom.xml.
+!/local-libs/**/*.jar
+
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.comphenix.protocol</groupId>
+    <artifactId>ProtocolLib</artifactId>
+    <version>5.5.0-dev-build</version>
+    <packaging>jar</packaging>
+    <!-- Minimal, hand-authored POM for the locally installed ProtocolLib
+         dev-build jar. No dependencies on purpose: everything ProtocolLib
+         needs (including byte-buddy) is already shaded directly into the
+         jar itself, so declaring them again here would just make Maven
+         try to resolve separate, unshaded copies it doesn't need. -->
+</project>

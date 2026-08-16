@@ -34,6 +34,24 @@
 			<id>enginehub-maven</id>
 			<url>https://maven.enginehub.org/repo/</url>
 		</repository>
+
+		<!-- ProtocolLib's 5.5.0-dev-build (see the dependency below) doesn't
+		     exist on any public Maven repo - dmulloy2's own Nexus only ever
+		     published 5.3.0/5.4.0-SNAPSHOT for this artifact. Vendored here
+		     (local-libs/, committed to git) instead of relying on a local
+		     .m2 install, so a clean checkout - CI included - can actually
+		     resolve it without a developer having manually
+		     install:install-file'd it first. -->
+		<repository>
+			<id>local-libs</id>
+			<url>file://${project.basedir}/local-libs</url>
+			<!-- No .sha1/.md5 sidecar files here - suppress the (harmless
+			     but noisy) checksum-missing warning Maven would otherwise
+			     log a full stack trace for on every resolve. -->
+			<releases>
+				<checksumPolicy>ignore</checksumPolicy>
+			</releases>
+		</repository>
 	</repositories>
 
 	<dependencies>
@@ -65,9 +83,9 @@
 		     in our jar. Main only constructs RaceGlowPrivacy when
 		     ProtocolLib is actually installed (see softdepend in
 		     plugin.yml), so the plugin loads and runs fine without it;
-		     glow just falls back to being visible to everyone. Installed
-		     locally from the dev-build release (no fixed-version release
-		     exists on a public Maven repo for this snapshot):
+		     glow just falls back to being visible to everyone. Resolved
+		     from the local-libs/ repository above (no fixed-version
+		     release exists on a public Maven repo for this snapshot):
 		     https://github.com/dmulloy2/ProtocolLib/releases/tag/dev-build -->
 		<dependency>
 			<groupId>com.comphenix.protocol</groupId>
