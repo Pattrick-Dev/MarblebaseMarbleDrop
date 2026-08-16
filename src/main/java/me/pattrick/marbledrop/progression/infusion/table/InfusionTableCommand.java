@@ -50,7 +50,7 @@ public final class InfusionTableCommand implements CommandExecutor {
                         ambient != null ? ambient::removeTable : null);
             }
 
-            // Not part of StationCommands -- unique to infusion tables, no shared mechanism needed for one caller.
+            // Not part of StationCommands - unique to infusion tables, no shared mechanism needed for one caller.
             case "private" -> {
                 Block target = player.getTargetBlockExact(6);
                 if (target == null || !tables.isTable(target.getLocation())) {

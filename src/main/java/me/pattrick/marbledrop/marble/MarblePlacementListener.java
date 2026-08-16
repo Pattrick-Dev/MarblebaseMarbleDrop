@@ -35,7 +35,7 @@ import java.util.UUID;
  * unconditionally).
  * <p>
  * Placing an item as a block does NOT carry over its custom
- * PersistentDataContainer data on its own -- only vanilla's own skin/
+ * PersistentDataContainer data on its own - only vanilla's own skin/
  * texture transfers automatically. On place, this copies the marble's
  * full PDC (stats, rarity, level, XP, ...) onto the new block's own PDC
  * (a Skull is a TileState, which is a PersistentDataHolder) via
@@ -45,13 +45,13 @@ import java.util.UUID;
  * re-applied), and drops that instead of vanilla's blank head drop.
  * <p>
  * Only the placer (or a marbledrop.admin) can break a placed marble back
- * -- otherwise it's cancelled. Without this, anyone could walk up and
+ * - otherwise it's cancelled. Without this, anyone could walk up and
  * break-and-pocket someone else's displayed marble.
  * <p>
  * Also protected from anything that would destroy or move it without
  * going through the owner-checked onBreak path above: explosions
  * (TNT/creepers via EntityExplodeEvent, beds/respawn anchors via
- * BlockExplodeEvent -- filtered out of the event's block list so the rest
+ * BlockExplodeEvent - filtered out of the event's block list so the rest
  * of the explosion still happens normally) and piston push/pull
  * (cancelled outright, since a piston can't selectively skip one block
  * out of the row it's moving).
@@ -73,7 +73,7 @@ public final class MarblePlacementListener implements Listener {
 
         ItemStack used = event.getItemInHand();
         MarbleData data = MarbleItem.read(used);
-        if (data == null) return; // a normal head, not a marble -- leave it alone
+        if (data == null) return; // a normal head, not a marble - leave it alone
 
         BlockState state = event.getBlock().getState();
         if (!(state instanceof Skull skull)) return;
@@ -83,7 +83,7 @@ public final class MarblePlacementListener implements Listener {
                 MarbleKeys.PLACED_BY, PersistentDataType.STRING, event.getPlayer().getUniqueId().toString());
 
         // Display name rides along on the ItemStack forever normally --
-        // MarbleItem#write() only ever touches PDC + lore -- but placing
+        // MarbleItem#write() only ever touches PDC + lore - but placing
         // as a block drops it like every other un-PDC'd ItemMeta field,
         // so it has to be snapshotted here to survive the round trip.
         ItemMeta usedMeta = used.getItemMeta();
@@ -98,7 +98,7 @@ public final class MarblePlacementListener implements Listener {
 
         // Creative mode never consumes the item being placed (vanilla's
         // own behavior, since creative inventories are meant to be
-        // infinite) -- for a one-of-a-kind marble that would leave a
+        // infinite) - for a one-of-a-kind marble that would leave a
         // duplicate sitting in hand right next to the one now on
         // display, so it's removed by hand here regardless of gamemode.
         if (event.getPlayer().getGameMode() == GameMode.CREATIVE) {
@@ -136,7 +136,7 @@ public final class MarblePlacementListener implements Listener {
         if (!(state instanceof Skull skull)) return;
 
         MarbleData data = MarbleItem.readFromContainer(skull.getPersistentDataContainer());
-        if (data == null) return; // a normal head, not a marble display -- leave it alone
+        if (data == null) return; // a normal head, not a marble display - leave it alone
 
         Player breaker = event.getPlayer();
         String placedByStr = skull.getPersistentDataContainer().get(MarbleKeys.PLACED_BY, PersistentDataType.STRING);
@@ -159,13 +159,13 @@ public final class MarblePlacementListener implements Listener {
         ambient.removeMarker(block.getLocation());
     }
 
-    /** TNT, creepers, etc. -- pulls placed marbles out of the destroyed-block list so the rest of the explosion still happens, they just survive. */
+    /** TNT, creepers, etc. - pulls placed marbles out of the destroyed-block list so the rest of the explosion still happens, they just survive. */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onEntityExplode(EntityExplodeEvent event) {
         event.blockList().removeIf(this::isPlacedMarble);
     }
 
-    /** Beds/respawn anchors exploding out of season, etc. -- same treatment as onEntityExplode. */
+    /** Beds/respawn anchors exploding out of season, etc. - same treatment as onEntityExplode. */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBlockExplode(BlockExplodeEvent event) {
         event.blockList().removeIf(this::isPlacedMarble);

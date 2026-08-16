@@ -14,7 +14,7 @@ public final class MarbleTrack {
     private final List<Location> points = new ArrayList<>();
 
     // Cached Catmull-Rom spline through `points`, used for actual race
-    // physics (see MarbleRunner) -- gives a smooth, evenly arc-length
+    // physics (see MarbleRunner) - gives a smooth, evenly arc-length
     // sampled curve with well-defined slope/curvature at any point along
     // it, which real gravity/cornering physics needs. Recomputed whenever
     // points change. The raw `points` list above is left untouched --

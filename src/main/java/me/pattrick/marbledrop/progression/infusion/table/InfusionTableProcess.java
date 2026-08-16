@@ -236,12 +236,12 @@ public final class InfusionTableProcess {
      * @param solo When true, skips the shared per-block lock entirely and
      *             animates only for {@code player} (armor stand hidden from
      *             everyone else, particles sent only to them) instead of
-     *             broadcasting to everyone nearby -- lets more than one
+     *             broadcasting to everyone nearby - lets more than one
      *             person use the exact same physical table at once. See
      *             InfusionTableManager#isPrivate.
      */
     public static void run(Player player, Block cauldron, ItemStack marble, boolean solo) {
-        // Guard in case this is called directly (non-solo only -- solo tables never lock)
+        // Guard in case this is called directly (non-solo only - solo tables never lock)
         if (!solo && !isLocked(cauldron)) {
             tryLock(cauldron, player);
         }

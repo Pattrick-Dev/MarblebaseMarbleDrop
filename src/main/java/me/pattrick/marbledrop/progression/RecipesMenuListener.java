@@ -12,8 +12,8 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
 /**
- * Cancels every click/drag in the /recipes preview -- see RecipesMenu, a
- * read-only display with no real crafting behind it -- and additionally
+ * Cancels every click/drag in the /recipes preview - see RecipesMenu, a
+ * read-only display with no real crafting behind it - and additionally
  * handles the Prev/Next nav arrows, which carry the page index to jump to
  * in a PersistentDataContainer tag rather than needing any separate
  * per-player "what page are they on" state here.

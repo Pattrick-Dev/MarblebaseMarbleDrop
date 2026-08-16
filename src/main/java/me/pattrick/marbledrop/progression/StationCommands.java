@@ -33,7 +33,7 @@ public final class StationCommands {
     public static boolean give(Plugin plugin, Player player, StationType type) {
         SilentGive.give(plugin, player, StationItems.create(plugin, type));
         player.sendMessage(ChatColor.GREEN + "Gave you a " + type.displayName()
-                + ChatColor.GREEN + " -- place it to create a station.");
+                + ChatColor.GREEN + " - place it to create a station.");
         return true;
     }
 

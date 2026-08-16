@@ -152,7 +152,7 @@ public final class InfusionTableMenu {
     }
 
     public void confirm(Player player, Inventory inv) {
-        // Private tables skip the shared per-block lock entirely -- each
+        // Private tables skip the shared per-block lock entirely - each
         // user gets their own animation (see InfusionTableProcess), so
         // there's nothing to contend over.
         if (!isPrivate && !InfusionTableProcess.tryLock(cauldron, player)) {

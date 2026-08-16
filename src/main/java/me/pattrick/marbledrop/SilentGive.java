@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * those criteria are purely inventory-content-based and fire regardless
  * of how the item got there, so a plugin handing someone a diamond pops
  * the same toast as mining one. Scoped to items THIS plugin hands out
- * directly (tutorial rewards, admin "give" commands) -- normal survival
+ * directly (tutorial rewards, admin "give" commands) - normal survival
  * mining/crafting is completely unaffected.
  */
 public final class SilentGive implements Listener {
@@ -35,7 +35,7 @@ public final class SilentGive implements Listener {
         player.getInventory().addItem(items);
 
         // The advancement-done flush happens a tick or two after the
-        // inventory change is broadcast -- keep suppressing for a short
+        // inventory change is broadcast - keep suppressing for a short
         // window, then let normal advancement checks resume as usual.
         Bukkit.getScheduler().runTaskLater(plugin, () -> suppressing.remove(id), 5L);
     }

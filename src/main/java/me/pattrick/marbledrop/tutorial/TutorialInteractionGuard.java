@@ -23,7 +23,7 @@ import org.bukkit.plugin.Plugin;
 /**
  * /md command gating alone doesn't stop a player from just walking up
  * to any Infusion Cauldron / Upgrade Station / Recycler in the world and
- * right-clicking it directly -- those systems trigger off
+ * right-clicking it directly - those systems trigger off
  * PlayerInteractEvent, independent of any command. This closes that
  * gap for the tutorial specifically: if a player is mid-tutorial and
  * not yet on the matching step, the interaction is cancelled here
@@ -71,7 +71,7 @@ public final class TutorialInteractionGuard implements Listener {
         if (required == null) return; // not a progression station block at all
 
         TutorialStep current = tutorialManager.getStep(player);
-        if (current == required) return; // exactly the step they're supposed to be doing -- allow
+        if (current == required) return; // exactly the step they're supposed to be doing - allow
 
         e.setCancelled(true);
         player.sendMessage(ChatColor.RED + "Finish the current tutorial step first: " +
@@ -81,7 +81,7 @@ public final class TutorialInteractionGuard implements Listener {
 
     /**
      * A player who drops their marble and lets it despawn (vanilla items
-     * despawn after 5 minutes) has no way to recover -- Upgrade/Recycler/
+     * despawn after 5 minutes) has no way to recover - Upgrade/Recycler/
      * Race all require having a marble in hand. Rather than relying on a
      * region plugin, just block dropping a marble outright while the
      * tutorial is active; nothing about the tutorial requires dropping
@@ -91,7 +91,7 @@ public final class TutorialInteractionGuard implements Listener {
      * TutorialManager#giveNextCraftIngredients) are handed out exactly
      * once per recipe stage, so dropping any of them (into the ground, a
      * hopper, lava, etc.) leaves the player with no way to get a fresh
-     * batch -- block every drop for the whole step, not just marbles.
+     * batch - block every drop for the whole step, not just marbles.
      */
     @EventHandler(priority = EventPriority.LOW)
     public void onDrop(PlayerDropItemEvent e) {
@@ -100,7 +100,7 @@ public final class TutorialInteractionGuard implements Listener {
 
         if (tutorialManager.getStep(player) == TutorialStep.CRAFT) {
             e.setCancelled(true);
-            player.sendMessage(ChatColor.RED + "You can't drop items during this step -- craft the station shown in the frames.");
+            player.sendMessage(ChatColor.RED + "You can't drop items during this step - craft the station shown in the frames.");
             return;
         }
 
@@ -113,7 +113,7 @@ public final class TutorialInteractionGuard implements Listener {
     /**
      * The CRAFT step hands a player exactly the ingredients for one
      * recipe at a time and only ever gives that batch once (see
-     * TutorialManager#giveNextCraftIngredients) -- if those ingredients
+     * TutorialManager#giveNextCraftIngredients) - if those ingredients
      * get consumed by some OTHER vanilla recipe (e.g. shapeless-crafting
      * the 4 given glowstone dust back into a glowstone block) the player
      * is left without enough to ever craft the station, softlocking the
@@ -129,16 +129,16 @@ public final class TutorialInteractionGuard implements Listener {
         if (TutorialCraftGui.TITLE.equals(e.getView().getTitle())) return; // preview GUI: onGuiClick already cancels this
         if (e.getRecipe() == null) return;
 
-        if (StationItems.readType(plugin, e.getRecipe().getResult()) != null) return; // one of the 3 stations -- allowed
+        if (StationItems.readType(plugin, e.getRecipe().getResult()) != null) return; // one of the 3 stations - allowed
 
         e.setCancelled(true);
-        player.sendMessage(ChatColor.RED + "Don't waste those ingredients -- craft the station shown in the frames.");
+        player.sendMessage(ChatColor.RED + "Don't waste those ingredients - craft the station shown in the frames.");
     }
 
     /**
      * The infusion amount is fixed at its default (50) during the
      * tutorial so a first-time player can't fiddle with it or accidentally
-     * queue up more than they have dust for -- just place a catalyst (or
+     * queue up more than they have dust for - just place a catalyst (or
      * not) and click Infuse. Runs before InfusionTableListener's own
      * click handling (LOW < that handler's default NORMAL priority); see
      * the preCancelled capture added there for how this actually takes
@@ -156,7 +156,7 @@ public final class TutorialInteractionGuard implements Listener {
         if (rawSlot != InfusionTableMenu.SLOT_MINUS && rawSlot != InfusionTableMenu.SLOT_PLUS) return;
 
         e.setCancelled(true);
-        player.sendMessage(ChatColor.GRAY + "The infusion amount is fixed for the tutorial -- just click Infuse.");
+        player.sendMessage(ChatColor.GRAY + "The infusion amount is fixed for the tutorial - just click Infuse.");
     }
 
     private TutorialStep requiredStepFor(Block block) {

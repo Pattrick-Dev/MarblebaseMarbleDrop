@@ -17,11 +17,11 @@ import java.util.Map;
 /**
  * Everything a catalyst item (the item dropped in the Infusion Cauldron's
  * center slot) contributes to an infusion, computed once via {@link #of}.
- * Replaces the old flat-int-only CatalystValue -- on top of the existing
+ * Replaces the old flat-int-only CatalystValue - on top of the existing
  * rarityValue/rarityBias mechanic, a catalyst can now also soft-skew which
  * stats roll higher (statAffinity) and which team the marble is more
  * likely to come from (teamBias). All of these are soft biases (extra
- * rerolls / weighted odds), never guarantees -- see InfusionService,
+ * rerolls / weighted odds), never guarantees - see InfusionService,
  * StatRoller#rollStats(rarity, statAffinity), and Sampler#main(preferredTeam).
  */
 public record CatalystProfile(
@@ -69,7 +69,7 @@ public record CatalystProfile(
 
             // Naming trap: getTeamKey() holds the raw human-readable team
             // string (e.g. "Mellow Yellow") that matches heads.yml's
-            // `team:` field -- getMarbleKey() holds the sanitized key
+            // `team:` field - getMarbleKey() holds the sanitized key
             // instead. See InfusionService#infuseToItem's MarbleData
             // construction for where this naming originates.
             String teamBias = data.getTeamKey();
@@ -91,11 +91,11 @@ public record CatalystProfile(
 
     /**
      * Ranks a marble catalyst's 5 stats highest-to-lowest and boosts only
-     * the top 3 -- its best stat gets weight 1.0 (strongest reroll-take-
+     * the top 3 - its best stat gets weight 1.0 (strongest reroll-take-
      * best chance in StatRoller), 2nd/3rd taper down from there, and its
      * bottom 2 stats get 0.0 (roll plain, unbiased). Ties keep MarbleStat's
      * declared enum order (SPEED, ACCEL, HANDLING, STABILITY, BOOST) since
-     * Arrays.sort is stable -- deterministic rather than proportional-to-
+     * Arrays.sort is stable - deterministic rather than proportional-to-
      * magnitude, so a catalyst's strongest stats are always favored
      * regardless of how close together its other stats happen to be.
      */

@@ -11,7 +11,7 @@ import org.bukkit.plugin.Plugin;
 
 /**
  * Restores tutorial state on relog if a player is already mid-tutorial
- * (they start it themselves with /md tutorial start -- see TutorialCommand),
+ * (they start it themselves with /md tutorial start - see TutorialCommand),
  * and gates /md subcommands (plus the standalone /tasks command) so only
  * the current step's command can be used once they have.
  * <p>
@@ -20,7 +20,7 @@ import org.bukkit.plugin.Plugin;
  * systems, so when the gate sees those two commands used at the right
  * step it cancels the real command and hands off to the matching
  * tutorial handler instead. INFUSION/UPGRADE/RECYCLER let the real
- * command through unmodified -- those steps are completed by observing
+ * command through unmodified - those steps are completed by observing
  * the real systems (see TutorialProgressPoller / TutorialRecyclerHook),
  * not by intercepting them.
  */
@@ -47,7 +47,7 @@ public final class TutorialListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
 
-        // Independent of hasCompleted/isActive below -- a completed or
+        // Independent of hasCompleted/isActive below - a completed or
         // never-started player still needs to be hidden from/to anyone
         // ELSE who's currently active, and a fresh connection doesn't
         // inherit any prior hidden/shown state either way.
@@ -92,7 +92,7 @@ public final class TutorialListener implements Listener {
 
         // Admins need unrestricted access to *real* administrative subcommands
         // (managing or purging an actual race, real task admin actions) even
-        // while their own account happens to be mid-tutorial -- this gate
+        // while their own account happens to be mid-tutorial - this gate
         // exists to onboard regular players, not to sandbox admins away from
         // their own admin tools. It deliberately does NOT cover the bare
         // "try this step" form (/md race, /md race gui|menu, /tasks) --
@@ -129,7 +129,7 @@ public final class TutorialListener implements Listener {
         // INFUSION / UPGRADE / RECYCLER: let the real command through untouched.
     }
 
-    /** The arg right after the subcommand keyword -- parts[2] for "/md race open", parts[1] for the standalone "/tasks admin". */
+    /** The arg right after the subcommand keyword - parts[2] for "/md race open", parts[1] for the standalone "/tasks admin". */
     private String actionArg(String label, String[] parts) {
         if (label.equals("tasks")) {
             return parts.length >= 2 ? parts[1] : null;
@@ -137,7 +137,7 @@ public final class TutorialListener implements Listener {
         return parts.length >= 3 ? parts[2] : null;
     }
 
-    /** True for subcommands past the bare/GUI form of "race" or "tasks" -- real admin actions, not "try this step". */
+    /** True for subcommands past the bare/GUI form of "race" or "tasks" - real admin actions, not "try this step". */
     private boolean isRealManagementSubcommand(String sub, String action) {
         if (sub.equals("race") || sub.equals("races")) {
             if (action == null) return false; // bare "/md race"

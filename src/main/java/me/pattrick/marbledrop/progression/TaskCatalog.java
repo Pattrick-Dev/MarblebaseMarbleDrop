@@ -5,13 +5,13 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The task pool -- generated, not hand-written. With hundreds of tasks per
+ * The task pool - generated, not hand-written. With hundreds of tasks per
  * type, individually authoring each TaskDefinition would make this file
  * enormous and unreviewable; instead, each trigger gets a small set of
  * flavor-text phrasings and a handful of goal tiers, and every
  * (tier x phrasing) combination becomes one task. TaskManager only ever
  * hands a player a small random subset of this pool per cycle (see
- * DAILY_ACTIVE_COUNT/WEEKLY_ACTIVE_COUNT there) -- this class is just the
+ * DAILY_ACTIVE_COUNT/WEEKLY_ACTIVE_COUNT there) - this class is just the
  * pool they're drawn from.
  * <p>
  * Reward scales with goal size (dustPerUnit), with a small per-tier
@@ -60,7 +60,10 @@ public final class TaskCatalog {
                     "Salvage {n} marbles", "Process {n} marbles at a recycler"
             }, new int[] {1, 2, 3, 5, 8}, new int[] {5, 10, 15, 25, 40}),
 
-            new Def(TaskTrigger.INFUSE_MARBLE, "inf", 20.0, new String[] {
+            // dustPerUnit must clear infusion.min-dust (50, see InfusionService) with
+            // room to spare after the per-tier discount, or this task pays out less
+            // than it costs to complete - 70 keeps every tier comfortably profitable.
+            new Def(TaskTrigger.INFUSE_MARBLE, "inf", 70.0, new String[] {
                     "Infuse {n} marbles", "Create {n} infused marbles", "Roll {n} marble infusions", "Infuse {n} new marbles",
                     "Spend Dust on {n} infusions", "Produce {n} infused marbles", "Craft {n} marbles via infusion", "Perform {n} infusions",
                     "Forge {n} marbles with Dust", "Complete {n} infusion attempts"
@@ -107,7 +110,7 @@ public final class TaskCatalog {
             int goal = goals[tierIndex];
             // Mild per-tier discount so the biggest goals don't scale purely
             // linearly (matches how the original hand-picked daily/weekly
-            // examples felt -- e.g. break-128 paid ~0.39/block, break-2000
+            // examples felt - e.g. break-128 paid ~0.39/block, break-2000
             // paid ~0.175/block).
             double tierDiscount = 1.0 - (tierIndex * 0.03);
             int reward = Math.max(10, (int) Math.round(goal * def.dustPerUnit() * tierDiscount));

@@ -18,7 +18,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
  * Deliberately NOT ignoreCancelled: UpgradeMenu.handleClick() always
  * calls setCancelled(true) on the click (it's a fake inventory, nothing
  * should actually be taken), so an ignoreCancelled handler here would
- * never run -- same class of bug as TutorialRecyclerHook's MONITOR
+ * never run - same class of bug as TutorialRecyclerHook's MONITOR
  * handler had to avoid.
  */
 public final class TutorialUpgradeHook implements Listener {

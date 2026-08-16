@@ -13,7 +13,7 @@ import java.util.List;
 /**
  * Builds/reads the PDC-tagged ItemStack handed to a real racer for the
  * duration of their race (see RaceGlowListener). A plain on/off toggle,
- * not a limited resource like RaceBoostItem -- right-click flips whether
+ * not a limited resource like RaceBoostItem - right-click flips whether
  * the player's own marble renders with a glowing outline (visible even
  * through terrain and other marbles). Purely about being able to actually
  * spot your own marble in a crowded field, not a competitive lever.
@@ -30,7 +30,7 @@ public final class RaceGlowItem {
         return create(plugin, false);
     }
 
-    /** Builds a fresh item already reflecting {@code glowing} -- used by the overlay path, which shows a new fake item each toggle rather than mutating a real one. */
+    /** Builds a fresh item already reflecting {@code glowing} - used by the overlay path, which shows a new fake item each toggle rather than mutating a real one. */
     public static ItemStack create(Plugin plugin, boolean glowing) {
         ItemStack item = new ItemStack(Material.GLOW_INK_SAC, 1);
         applyMeta(plugin, item, glowing);
@@ -43,7 +43,7 @@ public final class RaceGlowItem {
         return meta.getPersistentDataContainer().has(key(plugin), PersistentDataType.BYTE);
     }
 
-    /** Updates the held item's name/lore to reflect the new state -- called by the listener right after a successful toggle. */
+    /** Updates the held item's name/lore to reflect the new state - called by the listener right after a successful toggle. */
     public static void updateState(Plugin plugin, ItemStack item, boolean glowing) {
         applyMeta(plugin, item, glowing);
     }

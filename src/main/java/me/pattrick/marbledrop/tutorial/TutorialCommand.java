@@ -55,7 +55,7 @@ public final class TutorialCommand implements CommandExecutor {
                     return true;
                 }
                 if (tutorialManager.isActive(player)) {
-                    tutorialManager.resume(player); // already started (e.g. from a previous session) -- just re-show the current step
+                    tutorialManager.resume(player); // already started (e.g. from a previous session) - just re-show the current step
                     return true;
                 }
                 tutorialManager.start(player);

@@ -17,7 +17,7 @@ import java.util.List;
  * (RaceScheduleMenuListener, same plugin.getConfig().set()+saveConfig()
  * pattern CommandKit's debug toggle already uses) then MdConfig#reload(),
  * which ScheduledRaceManager reads fresh every time it schedules a cycle
- * -- so a change here takes effect starting the next cycle, no different
+ * - so a change here takes effect starting the next cycle, no different
  * from editing config.yml and running /md reload.
  */
 public final class RaceScheduleMenu {
@@ -30,6 +30,7 @@ public final class RaceScheduleMenu {
     public static final int SLOT_WINNER_DUST_AI = 12;
     public static final int SLOT_AI_FILL = 14;
     public static final int SLOT_AI_SHOW = 15;
+    public static final int SLOT_DAILY_TIMES = 16;
     public static final int SLOT_CLOSE = 22;
 
     public enum Field {
@@ -93,6 +94,13 @@ public final class RaceScheduleMenu {
         for (Field field : Field.values()) {
             inv.setItem(field.slot, numberItem(field, currentValue(field, cfg)));
         }
+
+        int timeCount = cfg.scheduledRaceDailyTimes().size();
+        inv.setItem(SLOT_DAILY_TIMES, item(Material.CLOCK, ChatColor.GOLD + "Daily Times: " + ChatColor.WHITE + timeCount,
+                List.of(
+                        ChatColor.GRAY + "The clock times races actually run at.",
+                        ChatColor.GRAY + "Click to add/remove times."
+                )));
 
         inv.setItem(SLOT_CLOSE, item(Material.BARRIER, ChatColor.RED + "Close", List.of()));
 

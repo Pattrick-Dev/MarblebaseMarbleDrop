@@ -8,7 +8,7 @@ import org.bukkit.event.server.ServerListPingEvent;
 
 /**
  * Rewrites the server list MOTD on every single ping (server.properties'
- * motd is only ever a static fallback -- this fires fresh each time a
+ * motd is only ever a static fallback - this fires fresh each time a
  * client's multiplayer screen pings/refreshes, which is what makes the
  * race countdown "live" with no polling/scheduling of our own needed).
  */
@@ -34,8 +34,8 @@ public final class RaceMotdListener implements Listener {
         }
 
         if (scheduledRaces.openTrackId() != null) {
-            return Component.text("Race open -- starts in " + ScheduledRaceManager.formatDuration(scheduledRaces.secondsUntilNextCycle())
-                    + " -- join with /md join!", NamedTextColor.GREEN);
+            return Component.text("Race open - starts in " + ScheduledRaceManager.formatDuration(scheduledRaces.secondsUntilNextCycle())
+                    + " - join with /md join!", NamedTextColor.GREEN);
         }
 
         long seconds = scheduledRaces.secondsUntilNextCycle();

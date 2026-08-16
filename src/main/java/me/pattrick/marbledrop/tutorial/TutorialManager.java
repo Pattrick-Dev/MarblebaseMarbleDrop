@@ -86,7 +86,7 @@ public final class TutorialManager {
         return locationStore;
     }
 
-    /** Nullable -- see TutorialTabListPrivacy#createIfAvailable. Used by TutorialListener's own join-time visibility sync. */
+    /** Nullable - see TutorialTabListPrivacy#createIfAvailable. Used by TutorialListener's own join-time visibility sync. */
     TutorialTabListPrivacy tabPrivacy() {
         return tabPrivacy;
     }
@@ -151,14 +151,14 @@ public final class TutorialManager {
      * The single entry point every real-gameplay completion hook calls
      * (sheep killed, marble received, marble upgraded, marble recycled,
      * race finished). Verifies the player is still actually on the step
-     * being completed before doing anything -- this is what makes it
+     * being completed before doing anything - this is what makes it
      * safe against duplicate/late/out-of-order events, and against two
      * different players' completions ever being able to cross-affect
      * each other (everything here is keyed off the individual player).
      */
     public void completeStep(Player player, TutorialStep justCompleted) {
         if (!isActive(player)) return;
-        if (getStep(player) != justCompleted) return; // already moved on, or event fired late/twice -- ignore
+        if (getStep(player) != justCompleted) return; // already moved on, or event fired late/twice - ignore
 
         int reward = justCompleted.rewardDust();
         if (reward > 0) {
@@ -192,7 +192,7 @@ public final class TutorialManager {
             // Extra room: the real recycler's own confirmation message, then
             // the tutorial's own (separately delayed) marble-back message,
             // then this step's title/hint would otherwise all land within a
-            // couple seconds of each other -- too much text at once.
+            // couple seconds of each other - too much text at once.
             case RECYCLER -> 100; // ~5s
             case TASKS -> 40;     // ~2s
             default -> 30;
@@ -226,7 +226,7 @@ public final class TutorialManager {
 
     // ---------------- Admin controls ----------------
 
-    /** Wipes tutorial progress back to a fresh, unstarted state. Does NOT re-enter/auto-start it -- the player runs /md tutorial start themselves when ready. */
+    /** Wipes tutorial progress back to a fresh, unstarted state. Does NOT re-enter/auto-start it - the player runs /md tutorial start themselves when ready. */
     public void reset(Player player) {
         boolean wasActive = isActive(player);
         removeBossBar(player);
@@ -289,7 +289,7 @@ public final class TutorialManager {
         player.sendMessage(ChatColor.GRAY + step.hint());
 
         if (step == TutorialStep.TASKS) {
-            player.sendMessage(ChatColor.GRAY + "Tasks are your main source of Dust -- the currency spent at " +
+            player.sendMessage(ChatColor.GRAY + "Tasks are your main source of Dust - the currency spent at " +
                     "Infusion Tables and Upgrade Stations. Check /tasks anytime for your daily and weekly list.");
         } else if (step == TutorialStep.CRAFT) {
             giveNextCraftIngredients(player);
@@ -302,7 +302,7 @@ public final class TutorialManager {
             infusionBaselineCount.put(player.getUniqueId(), TutorialMarbleUtil.countMarbles(player));
             int cap = config.infusionDailyCap();
             player.sendMessage(ChatColor.GRAY + (cap > 0
-                    ? "You can perform up to " + cap + " infusions per day -- the limit resets daily."
+                    ? "You can perform up to " + cap + " infusions per day - the limit resets daily."
                     : "Infusions have no daily limit on this server."));
         } else if (step == TutorialStep.UPGRADE) {
             upgradeBaselineTotal.put(player.getUniqueId(), TutorialMarbleUtil.highestStatTotal(player));
@@ -318,7 +318,7 @@ public final class TutorialManager {
     /**
      * Shows the current recipe: the physical item-frame display if one is
      * configured (see TutorialCraftFrameManager), otherwise falls back to
-     * TutorialCraftGui -- a forced GUI popup on fresh entry, or a plain
+     * TutorialCraftGui - a forced GUI popup on fresh entry, or a plain
      * chat message on later stages so an in-progress crafting table isn't
      * interrupted.
      */
@@ -337,7 +337,7 @@ public final class TutorialManager {
 
     /**
      * Hands over exactly what's needed for the CURRENT recipe only (see
-     * StationRecipes) -- one recipe at a time, not all three at once.
+     * StationRecipes) - one recipe at a time, not all three at once.
      * Guarded per-stage so a relog mid-recipe (which re-enters via
      * resume() -> enterStep()) doesn't hand out a second batch of the same
      * recipe's ingredients; TutorialCraftHook calls this again itself
@@ -360,9 +360,9 @@ public final class TutorialManager {
     /** What the station the player is about to learn actually does once placed. */
     private String explanationFor(StationType type) {
         return switch (type) {
-            case INFUSION_TABLE -> "Infusion Table -- spend Dust (plus an optional catalyst) here to create brand new marbles.";
-            case UPGRADE_STATION -> "Upgrade Station -- spend Dust here to redistribute one of your marble's stats.";
-            case RECYCLER -> "Recycler -- break a marble you don't want back down into Dust.";
+            case INFUSION_TABLE -> "Infusion Table - spend Dust (plus an optional catalyst) here to create brand new marbles.";
+            case UPGRADE_STATION -> "Upgrade Station - spend Dust here to redistribute one of your marble's stats.";
+            case RECYCLER -> "Recycler - break a marble you don't want back down into Dust.";
         };
     }
 
@@ -419,7 +419,7 @@ public final class TutorialManager {
 
     /**
      * Removes every currently-tracked boss bar from every viewer. Call on
-     * plugin disable -- boss bars aren't tied to the plugin's lifecycle, so
+     * plugin disable - boss bars aren't tied to the plugin's lifecycle, so
      * without this a reload orphans one for anyone mid-tutorial: still
      * visible to them, but no longer reachable by the fresh TutorialManager
      * the next onEnable() creates, which then hands out a brand new bar next

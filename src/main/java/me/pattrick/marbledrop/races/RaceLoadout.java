@@ -6,7 +6,7 @@ import me.pattrick.marbledrop.marble.MarbleStats;
 /**
  * A race-only tuning tradeoff an entrant picks in the lobby (see
  * RaceLoadoutGui) before their marble actually races. Never touches the
- * marble item's own stored stats -- applyTo() returns a new MarbleStats
+ * marble item's own stored stats - applyTo() returns a new MarbleStats
  * used just to build that race's MarbleRunner, so the choice only matters
  * for that one race and the marble itself is untouched.
  * <p>
@@ -15,7 +15,7 @@ import me.pattrick.marbledrop.marble.MarbleStats;
  * loadout boosts gets little or nothing extra from it (clamped away)
  * while still eating the tradeoff's downside in full. So picking the
  * wrong loadout for an already-strong marble can genuinely make it worse,
- * not just "less optimal" -- the choice has to fit both the marble AND
+ * not just "less optimal" - the choice has to fit both the marble AND
  * the track, not just chase the biggest number.
  */
 public enum RaceLoadout {
@@ -27,7 +27,7 @@ public enum RaceLoadout {
     ),
     BALANCED(
             "Balanced",
-            "No changes -- race on your marble's raw stats.",
+            "No changes - race on your marble's raw stats.",
             0, 0, 0, 0, 0
     ),
     DEFENSIVE(
@@ -63,7 +63,7 @@ public enum RaceLoadout {
         return description;
     }
 
-    /** A new MarbleStats with this loadout's tradeoffs applied and clamped -- never mutates {@code base}. */
+    /** A new MarbleStats with this loadout's tradeoffs applied and clamped - never mutates {@code base}. */
     public MarbleStats applyTo(MarbleStats base) {
         return new MarbleStats(
                 clamp(base.get(MarbleStat.SPEED) + speedDelta),

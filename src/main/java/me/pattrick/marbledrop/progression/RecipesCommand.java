@@ -8,7 +8,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-/** Standalone /recipes command -- opens RecipesMenu, the always-available preview of every station recipe. */
+/** Standalone /recipes command - opens RecipesMenu, the always-available preview of every station recipe. */
 public final class RecipesCommand implements CommandExecutor {
 
     private final Plugin plugin;

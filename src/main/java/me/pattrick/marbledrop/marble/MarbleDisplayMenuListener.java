@@ -23,12 +23,12 @@ import java.util.UUID;
 
 /**
  * Right-click your own placed marble (or any, if you're a
- * marbledrop.admin -- same rule as breaking one) to open
+ * marbledrop.admin - same rule as breaking one) to open
  * MarbleDisplayMenu and toggle its hologram/particles, or drill into
  * MarbleDisplayStyleMenu to pick a particle style. Which block a given
  * open menu belongs to is tracked in-memory per player (the same
  * "openMenus" shape InfusionTableListener already uses for its own menu)
- * -- shared across both menus since navigating between them is just
+ * - shared across both menus since navigating between them is just
  * re-opening a different inventory for the same block.
  */
 public final class MarbleDisplayMenuListener implements Listener {

@@ -1,12 +1,5 @@
 package me.pattrick.marbledrop.races;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.ProtocolManager;
-import com.comphenix.protocol.events.ListenerPriority;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.EnumWrappers;
 import me.pattrick.marbledrop.command.Commands;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -44,9 +37,18 @@ import org.bukkit.plugin.Plugin;
  * <p>
  * Which track a tool acts on is tracked as real server-side state on
  * TrackBuildInventoryManager (activeTrackId()) rather than read off the
- * item itself -- there's no real item to read it from in the overlay
+ * item itself - there's no real item to read it from in the overlay
  * path, and only one build session is supported per player at a time
  * regardless of path, so nothing is lost by keying off the player alone.
+ * <p>
+ * The actual packet-reading logic lives in TrackBuildToolsPacketBridge,
+ * a separate class this one only ever constructs from inside the
+ * ProtocolLib-present branch below. This class itself must never contain
+ * ProtocolLib-referencing bytecode anywhere (not even behind an if-guard)
+ * - it's a real Bukkit Listener, unconditionally constructed and passed
+ * to registerEvents() in Main, and that alone is enough to throw
+ * NoClassDefFoundError on a server without ProtocolLib if the class
+ * itself references ProtocolLib types anywhere in its own bytecode.
  */
 public final class TrackBuildToolsListener implements Listener {
 
@@ -65,31 +67,11 @@ public final class TrackBuildToolsListener implements Listener {
         this.overlay = buildInventory.overlay();
 
         if (overlay != null && Bukkit.getPluginManager().isPluginEnabled("ProtocolLib")) {
-            registerPacketListener();
+            new TrackBuildToolsPacketBridge(plugin, overlay, this::handle);
         }
     }
 
-    private void registerPacketListener() {
-        ProtocolManager manager = ProtocolLibrary.getProtocolManager();
-        manager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.LOW,
-                PacketType.Play.Client.USE_ITEM, PacketType.Play.Client.USE_ITEM_ON) {
-            @Override
-            public void onPacketReceiving(PacketEvent event) {
-                EnumWrappers.Hand hand = event.getPacket().getHands().readSafely(0);
-                if (hand != null && hand != EnumWrappers.Hand.MAIN_HAND) return;
-
-                Player player = event.getPlayer();
-                int heldSlot = player.getInventory().getHeldItemSlot();
-                TrackCreationKit.Tool tool = TrackCreationKit.Tool.bySlot(heldSlot);
-                if (tool == null || !overlay.isFakeSlot(player, heldSlot, tool.tag)) return;
-
-                event.setCancelled(true);
-                Bukkit.getScheduler().runTask(plugin, () -> handle(player, tool));
-            }
-        });
-    }
-
-    /** Fallback only -- see the class javadoc. Never fires for a tool click when the packet listener above already handled (and cancelled) it. */
+    /** Fallback only - see the class javadoc. Never fires for a tool click when the packet listener above already handled (and cancelled) it. */
     @EventHandler(priority = EventPriority.LOW)
     public void onInteract(PlayerInteractEvent e) {
         if (e.getHand() != EquipmentSlot.HAND) return;
@@ -173,7 +155,7 @@ public final class TrackBuildToolsListener implements Listener {
         buildInventory.exit(p);
 
         p.sendMessage(ChatColor.GREEN + "Finished building '" + ChatColor.YELLOW + trackId
-                + ChatColor.GREEN + "' -- " + ChatColor.YELLOW + count + ChatColor.GREEN + " point(s).");
+                + ChatColor.GREEN + "' - " + ChatColor.YELLOW + count + ChatColor.GREEN + " point(s).");
         p.sendMessage(ChatColor.GRAY + "Use " + ChatColor.AQUA + "/md track" + ChatColor.GRAY
                 + " to set laps, enable auto-race, or make further changes.");
     }

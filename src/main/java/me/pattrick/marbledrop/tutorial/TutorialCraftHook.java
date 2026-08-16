@@ -18,7 +18,7 @@ import java.util.Set;
 
 /**
  * Crafting has no /md command to gate/intercept the way TASKS ("/tasks")
- * and RACE ("/md race") do -- it happens entirely through the vanilla
+ * and RACE ("/md race") do - it happens entirely through the vanilla
  * crafting-table UI. This is the CRAFT step's only completion path,
  * observing (MONITOR, after anything else) for a genuine station item
  * coming out of the crafting grid, analogous to TutorialRecyclerHook.
@@ -41,7 +41,7 @@ public final class TutorialCraftHook implements Listener {
     }
 
     /**
-     * Purely cosmetic preview GUI -- nothing in it should be takeable, and
+     * Purely cosmetic preview GUI - nothing in it should be takeable, and
      * (see onCraft below) its result slot must never be treated as a real
      * craft even though it's a WORKBENCH inventory populated with valid
      * ingredients.
@@ -60,7 +60,7 @@ public final class TutorialCraftHook implements Listener {
         if (e.getRecipe() == null) return;
 
         // The preview GUI (TutorialCraftGui) is deliberately populated with
-        // a real, valid ingredient layout so it looks right -- without this
+        // a real, valid ingredient layout so it looks right - without this
         // check, clicking ITS result slot would look like a genuine craft.
         if (TutorialCraftGui.TITLE.equals(e.getView().getTitle())) return;
 
@@ -72,7 +72,7 @@ public final class TutorialCraftHook implements Listener {
         // (normal click) or in the inventory (shift-click auto-collect)
         // once this event finishes, and touching the player's inventory
         // or swapping their open view while the original crafting-table
-        // transaction is still mid-flight corrupts it -- that's what let
+        // transaction is still mid-flight corrupts it - that's what let
         // ingredients survive a craft instead of being consumed. Recording
         // progress and handing over the next recipe both wait here too,
         // for the same reason.
@@ -101,7 +101,7 @@ public final class TutorialCraftHook implements Listener {
             // still standing at (and likely still looking at) the real
             // crafting table and forcing a new inventory open would yank
             // them out of it. The frame display itself is unaffected either
-            // way -- it's world-space entities, not an inventory swap.
+            // way - it's world-space entities, not an inventory swap.
             tutorialManager.showCraftPreviewForCurrentTarget(player, false);
         });
     }

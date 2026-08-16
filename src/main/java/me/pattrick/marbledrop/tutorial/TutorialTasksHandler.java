@@ -20,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The TASKS tutorial step's mini-task: kill one spawned sheep. This is
- * intentionally NOT the real task/progression system -- it's a simple,
+ * intentionally NOT the real task/progression system - it's a simple,
  * self-contained, one-shot objective just for onboarding, shown via its
  * own small GUI (TutorialTaskGui) rather than the real Tasks menu.
  * <p>
@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * The sheep is also only visible to its owner (setVisibleByDefault(false)
  * + showEntity), so two players doing the tutorial near each other never
- * see or accidentally hit each other's sheep -- each one's task looks
+ * see or accidentally hit each other's sheep - each one's task looks
  * fully private to them, same as the tutorial's private infusion table.
  */
 public final class TutorialTasksHandler implements Listener {
@@ -52,7 +52,7 @@ public final class TutorialTasksHandler implements Listener {
     public void beginTask(Player player) {
         UUID existing = activeSheep.get(player.getUniqueId());
         if (existing != null) {
-            // Already have one out there -- just reopen the GUI as a reminder,
+            // Already have one out there - just reopen the GUI as a reminder,
             // don't spawn a second sheep or hand out a second weapon.
             TutorialTaskGui.open(player);
             return;
@@ -81,8 +81,8 @@ public final class TutorialTasksHandler implements Listener {
     /**
      * Finds an open spot near the player to spawn the task sheep. A blind
      * fixed offset can land inside a wall (the sheep then suffocates
-     * immediately and dies with no killer, which -- while not a hard
-     * softlock, since onSheepDeath clears the assignment -- is a bad
+     * immediately and dies with no killer, which - while not a hard
+     * softlock, since onSheepDeath clears the assignment - is a bad
      * first impression). Falls back to the player's own square, which is
      * always safe since they're already standing there.
      */
@@ -104,7 +104,7 @@ public final class TutorialTasksHandler implements Listener {
         return !feet.getType().isSolid() && !head.getType().isSolid() && ground.getType().isSolid();
     }
 
-    /** Purely cosmetic GUI -- nothing in it should be takeable. */
+    /** Purely cosmetic GUI - nothing in it should be takeable. */
     @EventHandler
     public void onGuiClick(InventoryClickEvent e) {
         if (!TutorialTaskGui.TITLE.equals(e.getView().getTitle())) return;
@@ -126,7 +126,7 @@ public final class TutorialTasksHandler implements Listener {
         }
         if (ownerId == null) return; // not a tutorial sheep, ignore entirely
 
-        // Tutorial prop -- never drops loot or XP, no matter who/what kills it.
+        // Tutorial prop - never drops loot or XP, no matter who/what kills it.
         event.getDrops().clear();
         event.setDroppedExp(0);
 
@@ -146,7 +146,7 @@ public final class TutorialTasksHandler implements Listener {
 
     /**
      * Inventory.removeItem(new ItemStack(WOODEN_SWORD)) matches by full
-     * item similarity, which includes durability -- a fresh (undamaged)
+     * item similarity, which includes durability - a fresh (undamaged)
      * comparison ItemStack won't match the player's sword once it's taken
      * any damage from hitting the sheep, so it silently fails to remove
      * anything. Scan for the material directly instead.
@@ -167,7 +167,7 @@ public final class TutorialTasksHandler implements Listener {
 
     public void handleQuit(Player player) {
         activeSheep.remove(player.getUniqueId());
-        // The sheep entity itself is left alone -- it just becomes a normal
+        // The sheep entity itself is left alone - it just becomes a normal
         // (loot-clearing no longer applies once it's not tracked) sheep.
     }
 }

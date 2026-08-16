@@ -1,12 +1,5 @@
 package me.pattrick.marbledrop.races;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.ProtocolManager;
-import com.comphenix.protocol.events.ListenerPriority;
-import com.comphenix.protocol.events.PacketAdapter;
-import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.wrappers.EnumWrappers;
 import me.pattrick.marbledrop.progression.TaskManager;
 import me.pattrick.marbledrop.progression.TaskTrigger;
 import org.bukkit.Bukkit;
@@ -24,7 +17,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.Plugin;
 
 /**
- * Handles right-clicking the Boost item (see RaceBoostItem) -- fires a
+ * Handles right-clicking the Boost item (see RaceBoostItem) - fires a
  * real, player-timed speed impulse on that player's own marble for the
  * race they're currently in.
  * <p>
@@ -34,7 +27,7 @@ import org.bukkit.plugin.Plugin;
  * vanilla anti-desync behavior: after processing a right-click packet
  * (ServerboundUseItemOnPacket), the server unconditionally re-sends the
  * player's real held-slot content back to the client afterward
- * (InventoryMenu.forceHeldSlot()) -- regardless of whether the
+ * (InventoryMenu.forceHeldSlot()) - regardless of whether the
  * Bukkit-level PlayerInteractEvent for that click got cancelled. With the
  * inventory overlay active (see RaceInventoryOverlay), that resync
  * immediately overwrites our fake Boost item with whatever's really in
@@ -45,14 +38,21 @@ import org.bukkit.plugin.Plugin;
  * place, so the forced resync never fires.
  * <p>
  * Fallback path (ProtocolLib absent, or overlay null): the original
- * PlayerInteractEvent handling -- fine there since without the overlay
+ * PlayerInteractEvent handling - fine there since without the overlay
  * there's no fake item for a stray resync to clobber.
  * <p>
  * Charges are tracked as real server-side state on RaceManager (see
  * getBoostCharges()/setBoostCharges()) rather than the item's own stack
- * amount -- with the inventory overlay active there's no real ItemStack to
+ * amount - with the inventory overlay active there's no real ItemStack to
  * read a stack size off in the first place, so the count has to live
  * somewhere real regardless of which detection path above is active.
+ * <p>
+ * The actual packet-reading logic lives in RaceBoostPacketBridge, a
+ * separate class this one only ever constructs from inside the
+ * ProtocolLib-present branch below - see TrackBuildToolsListener's
+ * javadoc for why that split is required (this class is a real Bukkit
+ * Listener, unconditionally constructed/registered in Main, and must
+ * never itself contain ProtocolLib-referencing bytecode).
  */
 public final class RaceBoostListener implements Listener {
 
@@ -68,29 +68,11 @@ public final class RaceBoostListener implements Listener {
         this.taskManager = taskManager;
 
         if (Bukkit.getPluginManager().isPluginEnabled("ProtocolLib")) {
-            registerPacketListener();
+            new RaceBoostPacketBridge(plugin, this::isHoldingBoostItem, this::handleBoost);
         }
     }
 
-    private void registerPacketListener() {
-        ProtocolManager manager = ProtocolLibrary.getProtocolManager();
-        manager.addPacketListener(new PacketAdapter(plugin, ListenerPriority.LOW,
-                PacketType.Play.Client.USE_ITEM, PacketType.Play.Client.USE_ITEM_ON) {
-            @Override
-            public void onPacketReceiving(PacketEvent event) {
-                EnumWrappers.Hand hand = event.getPacket().getHands().readSafely(0);
-                if (hand != null && hand != EnumWrappers.Hand.MAIN_HAND) return;
-
-                Player player = event.getPlayer();
-                if (!isHoldingBoostItem(player)) return;
-
-                event.setCancelled(true);
-                Bukkit.getScheduler().runTask(plugin, () -> handleBoost(player));
-            }
-        });
-    }
-
-    /** Fallback only -- see the class javadoc. Never fires for a boost-item click when the packet listener above already handled (and cancelled) it. */
+    /** Fallback only - see the class javadoc. Never fires for a boost-item click when the packet listener above already handled (and cancelled) it. */
     @EventHandler(priority = EventPriority.LOW)
     public void onInteract(PlayerInteractEvent e) {
         if (e.getAction() != Action.RIGHT_CLICK_AIR && e.getAction() != Action.RIGHT_CLICK_BLOCK) return;
@@ -112,7 +94,7 @@ public final class RaceBoostListener implements Listener {
     private void handleBoost(Player player) {
         MarbleRunner runner = raceManager.getMyRunner(player.getUniqueId());
         if (runner == null) {
-            player.sendMessage(ChatColor.RED + "Your race has already finished -- no marble left to boost.");
+            player.sendMessage(ChatColor.RED + "Your race has already finished - no marble left to boost.");
             return;
         }
 
@@ -130,10 +112,10 @@ public final class RaceBoostListener implements Listener {
         int heldSlot = player.getInventory().getHeldItemSlot();
         if (overlay != null) {
             if (remaining <= 0) {
-                // Not overlay.clear() -- that resyncs the real slot, which
+                // Not overlay.clear() - that resyncs the real slot, which
                 // would reveal whatever's actually underneath (the
                 // player's marble, since a race never touches the real
-                // item there -- see RaceInventoryOverlay). Staying on the
+                // item there - see RaceInventoryOverlay). Staying on the
                 // fake-slot path with an empty item keeps the slot showing
                 // nothing while still tagged TAG_BOOST, so a stray click
                 // here still gets intercepted as "out of charges" instead

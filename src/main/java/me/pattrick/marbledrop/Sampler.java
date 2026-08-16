@@ -29,7 +29,7 @@ public class Sampler {
     /**
      * Same as {@link #main()}, but when preferredTeam is non-null, with
      * probability infusion.catalyst.team-bias-chance (MdConfig) the pick
-     * is filtered down to just that team's heads first -- a soft skew,
+     * is filtered down to just that team's heads first - a soft skew,
      * not a guarantee, and it falls back to the full uniform pool if the
      * coin flip fails or that team has no entries in heads.yml.
      */

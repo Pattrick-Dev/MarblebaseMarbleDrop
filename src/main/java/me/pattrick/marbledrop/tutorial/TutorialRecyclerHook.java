@@ -19,7 +19,7 @@ import org.bukkit.plugin.Plugin;
 /**
  * Runs at MONITOR priority, i.e. strictly after the real
  * MarbleRecyclerListener (HIGHEST) has already consumed the marble and
- * paid out dust. We don't touch that flow at all -- we just observe
+ * paid out dust. We don't touch that flow at all - we just observe
  * that a genuine recycle happened during the RECYCLER tutorial step,
  * and, uniquely for the tutorial, hand a copy of that marble back so
  * the player still has one for the race step.

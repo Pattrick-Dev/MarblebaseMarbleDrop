@@ -1,12 +1,5 @@
 package me.pattrick.marbledrop.tutorial;
 
-import com.comphenix.protocol.PacketType;
-import com.comphenix.protocol.ProtocolLibrary;
-import com.comphenix.protocol.ProtocolManager;
-import com.comphenix.protocol.events.PacketContainer;
-import com.comphenix.protocol.wrappers.WrappedDataValue;
-import com.comphenix.protocol.wrappers.WrappedDataWatcher;
-import com.comphenix.protocol.wrappers.WrappedWatchableObject;
 import com.sk89q.worldedit.IncompleteRegionException;
 import com.sk89q.worldedit.LocalSession;
 import com.sk89q.worldedit.WorldEdit;
@@ -18,7 +11,6 @@ import me.pattrick.marbledrop.progression.StationType;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.BlockFace;
 import org.bukkit.entity.Entity;
@@ -39,14 +31,14 @@ import java.util.UUID;
 /**
  * Drives the physical 3x3 item frame "what to craft" display for the
  * tutorial's CRAFT step, by faking the ITEM field of the admin's real,
- * permanently-empty item frames -- via a per-player ENTITY_METADATA
- * packet -- so two players on different recipes at the same physical spot
+ * permanently-empty item frames - via a per-player ENTITY_METADATA
+ * packet - so two players on different recipes at the same physical spot
  * each see their own recipe, with no stand-in entity involved at all.
  * <p>
  * An earlier version of this spawned a private {@code ItemDisplay} copy in
  * front of each real frame and hand-computed a rotation transform to match
  * the wall's facing. That math was wrong for east/west-facing walls --
- * items rendered rotated (see git history) -- and being a whole extra
+ * items rendered rotated (see git history) - and being a whole extra
  * entity, it could also double up against a real frame that still had
  * leftover content. Faking the real frame's own ITEM field instead means
  * the client renders it with vanilla's own item-frame code: rotation is
@@ -58,7 +50,7 @@ import java.util.UUID;
  * setupFromSelection) and invisible (vanilla's own "invisible item frame"
  * flag, hiding the wooden border for everyone); only the fake ITEM packet,
  * sent to one specific player, ever makes a frame appear to hold
- * something, and only for that viewer -- nobody else's view of the same
+ * something, and only for that viewer - nobody else's view of the same
  * entity is touched.
  * <p>
  * A repeating tick re-sends every active viewer's 9 fake packets, because
@@ -66,20 +58,26 @@ import java.util.UUID;
  * re-syncs to its true (empty) state on its own, silently dropping our
  * fake overrides until something re-asserts them.
  * <p>
- * Requires ProtocolLib -- {@link #isConfigured()} (and so
+ * Requires ProtocolLib - {@link #isConfigured()} (and so
  * {@code TutorialManager}'s fallback to {@code TutorialCraftGui}) treats a
  * server without it the same as craft frames simply not being registered.
  * <p>
  * Setup is one-shot: stand with a WorldEdit/FAWE selection around the 9
  * built (empty) frames and run /md tutorial setcraftframes.
+ * <p>
+ * The actual ProtocolLib calls live in TutorialCraftFramePackets, a
+ * separate class held here as a nullable field and only ever constructed
+ * once ProtocolLib is already confirmed present - see that class's
+ * javadoc for why this class itself must never contain ProtocolLib-
+ * referencing bytecode (it's constructed unconditionally in Main).
  */
 public final class TutorialCraftFrameManager {
 
     private final Plugin plugin;
     private final TutorialCraftFrameStore store;
 
-    // Null if ProtocolLib isn't installed -- see isConfigured().
-    private final ProtocolManager protocol;
+    // Null if ProtocolLib isn't installed - see isConfigured().
+    private final TutorialCraftFramePackets packets;
 
     // player UUID -> the recipe currently shown, so the heal tick knows what to re-send
     private final Map<UUID, StationType> displayedType = new HashMap<>();
@@ -89,19 +87,19 @@ public final class TutorialCraftFrameManager {
     public TutorialCraftFrameManager(Plugin plugin, TutorialCraftFrameStore store) {
         this.plugin = plugin;
         this.store = store;
-        this.protocol = Bukkit.getPluginManager().isPluginEnabled("ProtocolLib")
-                ? ProtocolLibrary.getProtocolManager()
+        this.packets = Bukkit.getPluginManager().isPluginEnabled("ProtocolLib")
+                ? new TutorialCraftFramePackets(plugin)
                 : null;
 
-        if (protocol == null) {
-            plugin.getLogger().info("[Tutorial] ProtocolLib not found -- the craft-frame item preview is disabled; "
+        if (packets == null) {
+            plugin.getLogger().info("[Tutorial] ProtocolLib not found - the craft-frame item preview is disabled; "
                     + "the tutorial's CRAFT step will fall back to TutorialCraftGui instead.");
         }
     }
 
     public void start() {
         stop();
-        if (protocol == null) return;
+        if (packets == null) return;
         healTask = Bukkit.getScheduler().runTaskTimer(plugin, this::healAll, 20L, 20L);
     }
 
@@ -115,7 +113,7 @@ public final class TutorialCraftFrameManager {
 
     /** False (TutorialManager falls back to TutorialCraftGui) if the frames aren't registered, or ProtocolLib isn't installed to drive them. */
     public boolean isConfigured() {
-        return protocol != null && store.isComplete();
+        return packets != null && store.isComplete();
     }
 
     /**
@@ -157,7 +155,7 @@ public final class TutorialCraftFrameManager {
         }
 
         if (frames.size() != TutorialCraftFrameStore.SLOT_COUNT) {
-            admin.sendMessage(ChatColor.RED + "Found " + frames.size() + " item frames in the selection -- need exactly 9.");
+            admin.sendMessage(ChatColor.RED + "Found " + frames.size() + " item frames in the selection - need exactly 9.");
             return;
         }
 
@@ -187,7 +185,7 @@ public final class TutorialCraftFrameManager {
             store.set(i, frame.getLocation());
             // Vanilla still renders a real frame's contained item (correctly
             // rotated, but shared by every viewer) even while the frame
-            // itself is invisible -- if this ever had an item left in it
+            // itself is invisible - if this ever had an item left in it
             // (e.g. a placeholder used while building), every player would
             // see it layered behind their own fake, recipe-specific item.
             // Clearing it here guarantees that can't happen regardless of
@@ -195,7 +193,7 @@ public final class TutorialCraftFrameManager {
             frame.setItem(null);
             // Invisible (vanilla's own "invisible item frame" flag, not a
             // per-player hideEntity trick) so the wooden border never shows
-            // to anyone -- only the fake ITEM packet is ever visible, and
+            // to anyone - only the fake ITEM packet is ever visible, and
             // only to the player currently on this recipe.
             frame.setVisible(false);
         }
@@ -238,18 +236,18 @@ public final class TutorialCraftFrameManager {
         ItemStack[] icons = StationRecipes.shapeIcons(plugin, type);
         for (int i = 0; i < TutorialCraftFrameStore.SLOT_COUNT; i++) {
             ItemFrame frame = realFrameAt(i);
-            if (frame != null) sendFakeItem(player, frame, icons[i]);
+            if (frame != null) packets.sendFakeItem(plugin, player, frame, icons[i]);
         }
     }
 
     /** Reverts all 9 frames back to their real (empty) content for this player. Call on step-advance, tutorial finish/reset/skip, and quit. */
     public void clearForPlayer(Player player) {
         StationType type = displayedType.remove(player.getUniqueId());
-        if (type == null) return; // never shown anything to this player -- nothing to revert
+        if (type == null) return; // never shown anything to this player - nothing to revert
 
         for (int i = 0; i < TutorialCraftFrameStore.SLOT_COUNT; i++) {
             ItemFrame frame = realFrameAt(i);
-            if (frame != null) sendFakeItem(player, frame, null);
+            if (frame != null) packets.sendFakeItem(plugin, player, frame, null);
         }
     }
 
@@ -278,54 +276,4 @@ public final class TutorialCraftFrameManager {
         return null;
     }
 
-    /**
-     * Sends a fake ENTITY_METADATA packet overriding just this one real
-     * frame's ITEM field for one player -- {@code fakeItem} null reverts
-     * it back to empty/AIR. Everyone else's view, and the frame's real
-     * server-side state, are untouched.
-     * <p>
-     * The field to overwrite is found by scanning the frame's own live
-     * data watcher for its single ItemStack-typed entry, rather than a
-     * hardcoded index -- an ItemFrame only ever has exactly one (the
-     * "Item" field; "Rotation" is a plain int we never touch, so these
-     * frames never need in-frame rotation), so this is unambiguous and
-     * doesn't depend on which numeric index happens to hold it.
-     * <p>
-     * The packet itself is built via getDataValueCollectionModifier()
-     * (List&lt;WrappedDataValue&gt;), NOT the older
-     * getWatchableCollectionModifier() (List&lt;WrappedWatchableObject&gt;)
-     * -- that legacy compatibility path mis-packs on this server version:
-     * it hands the packet's pack() method a live SynchedEntityData$DataItem
-     * where a DataValue snapshot is required, which throws a
-     * ClassCastException deep in the encoder and force-disconnects
-     * whoever it was being sent to. getDataValueCollectionModifier() is
-     * the modern format and packs correctly (RaceGlowPrivacy already
-     * relies on it for the same packet type).
-     */
-    private void sendFakeItem(Player player, ItemFrame frame, ItemStack fakeItem) {
-        WrappedDataWatcher watcher = WrappedDataWatcher.getEntityWatcher(frame);
-
-        WrappedWatchableObject itemEntry = null;
-        for (WrappedWatchableObject w : watcher.getWatchableObjects()) {
-            if (w.getValue() instanceof ItemStack) {
-                itemEntry = w;
-                break;
-            }
-        }
-        if (itemEntry == null) return; // shouldn't happen -- every ItemFrame has exactly one ItemStack-typed field
-
-        ItemStack value = (fakeItem != null) ? fakeItem : new ItemStack(Material.AIR);
-        WrappedDataValue fakeEntry = WrappedDataValue.fromWrappedValue(
-                itemEntry.getIndex(), itemEntry.getWatcherObject().getSerializer(), value);
-
-        PacketContainer packet = new PacketContainer(PacketType.Play.Server.ENTITY_METADATA);
-        packet.getIntegers().write(0, frame.getEntityId());
-        packet.getDataValueCollectionModifier().write(0, List.of(fakeEntry));
-
-        try {
-            protocol.sendServerPacket(player, packet, false);
-        } catch (Exception ex) {
-            plugin.getLogger().warning("[Tutorial] Couldn't show a craft-frame preview item: " + ex.getMessage());
-        }
-    }
 }

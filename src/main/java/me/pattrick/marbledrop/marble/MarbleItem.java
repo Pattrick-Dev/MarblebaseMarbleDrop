@@ -21,7 +21,7 @@ public final class MarbleItem {
         return isMarbleContainer(meta.getPersistentDataContainer());
     }
 
-    /** Same check as {@link #isMarble(ItemStack)}, but against a raw container -- e.g. a placed skull block's own PDC (see MarblePlacementListener). */
+    /** Same check as {@link #isMarble(ItemStack)}, but against a raw container - e.g. a placed skull block's own PDC (see MarblePlacementListener). */
     public static boolean isMarbleContainer(PersistentDataContainer pdc) {
         if (pdc == null) return false;
         return pdc.has(MarbleKeys.MARBLE_ID, PersistentDataType.STRING)
@@ -38,7 +38,7 @@ public final class MarbleItem {
         return readFromContainer(meta.getPersistentDataContainer());
     }
 
-    /** Same read as {@link #read(ItemStack)}, but off a raw container -- e.g. a placed skull block's own PDC (see MarblePlacementListener). */
+    /** Same read as {@link #read(ItemStack)}, but off a raw container - e.g. a placed skull block's own PDC (see MarblePlacementListener). */
     public static MarbleData readFromContainer(PersistentDataContainer pdc) {
         if (!isMarbleContainer(pdc)) return null;
 
@@ -94,7 +94,7 @@ public final class MarbleItem {
 
     /**
      * Same PDC fields {@link #write(ItemStack, MarbleData)} writes, but
-     * onto a raw container with no lore/ItemMeta involved -- e.g. a
+     * onto a raw container with no lore/ItemMeta involved - e.g. a
      * placed skull block's own PDC (see MarblePlacementListener), which
      * has no lore of its own to keep in sync.
      */

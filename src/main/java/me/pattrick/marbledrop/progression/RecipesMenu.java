@@ -13,12 +13,12 @@ import org.bukkit.plugin.Plugin;
 
 /**
  * Read-only preview of a single station recipe at a time, available any
- * time via /recipes -- Prev/Next arrows (top-left/top-right) cycle
+ * time via /recipes - Prev/Next arrows (top-left/top-right) cycle
  * through the three.
  * <p>
  * An earlier version crammed all three recipes side by side into one
  * screen. A chest inventory is always exactly 9 columns wide, though, and
- * three 3-wide grids already fill every column between them -- no amount
+ * three 3-wide grids already fill every column between them - no amount
  * of border/filler around the outside edges fixes two recipes'
  * ingredients literally touching in the middle. Showing one recipe per
  * page sidesteps the problem entirely: every recipe gets the whole
@@ -30,7 +30,7 @@ import org.bukkit.plugin.Plugin;
  * what's actually craftable.
  * <p>
  * Every click is cancelled by RecipesMenuListener, which also reads the
- * Prev/Next arrows' embedded target-page tag to flip pages -- this is a
+ * Prev/Next arrows' embedded target-page tag to flip pages - this is a
  * preview, not a real crafting grid, so nothing in it should ever be
  * takeable.
  */
@@ -67,7 +67,7 @@ public final class RecipesMenu {
         inv.setItem(4, StationItems.create(plugin, type));
         inv.setItem(8, navItem(Material.SPECTRAL_ARROW, ChatColor.YELLOW + "Next Recipe ->", Math.floorMod(i + 1, types.length)));
 
-        // Grid sits in rows 2-4 (of 0-5) and cols 3-5 (of 0-8) -- centered
+        // Grid sits in rows 2-4 (of 0-5) and cols 3-5 (of 0-8) - centered
         // on both axes, with a full spacer row above (row 1) and below
         // (row 5) mirroring the header row's own margin, and centered
         // under the header icon at col 4.

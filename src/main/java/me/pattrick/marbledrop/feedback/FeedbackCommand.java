@@ -22,7 +22,7 @@ import java.time.Duration;
  * marblebase.net) that the website's feedback form submits to, tagged
  * with source=minecraft. The endpoint requires a shared secret header
  * for minecraft-sourced submissions (the website's own form doesn't
- * send one, since it can't hold a secret safely in public JS) -- see
+ * send one, since it can't hold a secret safely in public JS) - see
  * the website-side patch notes for the corresponding check.
  * <p>
  * Runs the HTTP call off the main thread so a slow/failed network

@@ -9,7 +9,7 @@ public enum TaskTrigger {
     FISH_CAUGHT,
     WALK_DISTANCE_BLOCKS,
 
-    // Marble/racing-specific -- see MarbleRecyclerListener, InfusionService,
+    // Marble/racing-specific - see MarbleRecyclerListener, InfusionService,
     // RaceManager#onFinish, and RaceBoostListener for where these fire.
     RECYCLE_MARBLE,
     INFUSE_MARBLE,

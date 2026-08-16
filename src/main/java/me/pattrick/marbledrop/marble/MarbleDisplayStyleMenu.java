@@ -23,7 +23,7 @@ public final class MarbleDisplayStyleMenu {
 
     public static final int SLOT_BACK = 31;
 
-    // Two full rows of a 4-row (36-slot) inventory -- 8 + 8 = 16, one per
+    // Two full rows of a 4-row (36-slot) inventory - 8 + 8 = 16, one per
     // style, centered with an empty border column on both sides.
     private static final int[] STYLE_SLOTS = {
             10, 11, 12, 13, 14, 15, 16, 17,

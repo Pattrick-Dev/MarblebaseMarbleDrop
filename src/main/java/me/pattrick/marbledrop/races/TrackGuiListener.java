@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
  * editing (create/delete tracks, add/remove points, set watch spots).
  * TrackCommand already requires marbledrop.admin before ever opening the
  * list in the first place, so today this can only be reached by an
- * admin -- but onClick() re-checks it anyway, the same defense-in-depth
+ * admin - but onClick() re-checks it anyway, the same defense-in-depth
  * RaceSignListener already uses for its own admin-only sign actions.
  * Without it, ANY other code path that ever opened an inventory sharing
  * one of these title prefixes would hand a non-admin full track-editing
@@ -298,7 +298,7 @@ public final class TrackGuiListener implements Listener {
 
             p.sendMessage(ChatColor.GREEN + "Created track '" + trackId + "'.");
             TrackCreationKit.giveKit(buildInventory, visualizer, p, trackId);
-            p.sendMessage(ChatColor.GRAY + "Build kit given -- right-click to place points, undo, "
+            p.sendMessage(ChatColor.GRAY + "Build kit given - right-click to place points, undo, "
                     + "preview, set the watch spot, or finish.");
         });
     }

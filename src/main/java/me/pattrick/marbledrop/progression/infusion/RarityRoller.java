@@ -54,7 +54,7 @@ public class RarityRoller {
             }
         }
 
-        // Extra rerolls – take best result
+        // Extra rerolls - take best result
         for (int i = 0; i < extraRolls; i++) {
             MarbleRarity rolled = rollBase(effectiveValue);
             if (rolled.ordinal() > best.ordinal()) {
@@ -88,28 +88,28 @@ public class RarityRoller {
         int legendaryW;
 
         if (v < 150) {
-            // 50–149 typical "minimum" infusions: LEGENDARY is impossible here
+            // 50-149 typical "minimum" infusions: LEGENDARY is impossible here
             commonW = 7000;
             uncommonW = 2500;
             rareW = 500;
             epicW = 0;
             legendaryW = 0;
         } else if (v < 250) {
-            // 150–249: investing
+            // 150-249: investing
             commonW = 4500;
             uncommonW = 3500;
             rareW = 1800;
             epicW = 200;
             legendaryW = 0;
         } else if (v < 350) {
-            // 250–349: serious
+            // 250-349: serious
             commonW = 2000;
             uncommonW = 3500;
             rareW = 3500;
             epicW = 900;
             legendaryW = 100;
         } else if (v < 450) {
-            // 350–449: big spend
+            // 350-449: big spend
             commonW = 1000;
             uncommonW = 2500;
             rareW = 4000;

@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Shows a race ability item (Boost, Glow) in a player's hotbar via a raw
  * SET_SLOT packet instead of actually placing it in their real inventory.
- * The real slot is never touched -- RaceWatchManager no longer clears a
+ * The real slot is never touched - RaceWatchManager no longer clears a
  * racer's inventory at all when this is available, so there's nothing to
  * lose if the server crashes mid-race and nothing to restore afterward
  * either. Only the client's *display* of that one hotbar slot is
@@ -28,12 +28,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * Each overlaid slot is tagged (see TAG_BOOST/TAG_GLOW) so a listener can
  * ask "is the player's currently-held slot showing MY ability" rather than
- * just "is it showing some fake item" -- Boost and Glow live in different
+ * just "is it showing some fake item" - Boost and Glow live in different
  * slots per player (see RaceManager), so a plain boolean wouldn't be
  * enough to tell them apart.
  * <p>
  * SET_SLOT carries a "state id" the client uses to detect desync between
- * its predicted inventory state and the server's -- get it wrong and the
+ * its predicted inventory state and the server's - get it wrong and the
  * client can silently ignore or revert the fake item. Rather than
  * hardcoding a guess, this tracks the real state id the server last sent
  * that player (by watching the server's own outgoing SET_SLOT/
@@ -99,7 +99,7 @@ public final class RaceInventoryOverlay {
     /**
      * Re-sends every currently-tracked fake slot's last-shown item for this
      * player. Needed because cancelling a Bukkit inventory event (drop,
-     * shift-click, drag, ...) only stops the real-world effect -- it
+     * shift-click, drag, ...) only stops the real-world effect - it
      * doesn't stop the vanilla trailing packet the server sends right
      * after to correct the client's own optimistic prediction (the client
      * assumes the drop/move succeeded and updates its display before the
@@ -120,20 +120,20 @@ public final class RaceInventoryOverlay {
     }
 
     /**
-     * Overlays the player's entire real inventory -- armor, main inventory,
-     * hotbar, offhand -- as empty, so nothing real (their marble included)
+     * Overlays the player's entire real inventory - armor, main inventory,
+     * hotbar, offhand - as empty, so nothing real (their marble included)
      * shows through for the duration of a race. Call this once, before
      * show() lays the actual ability items on top of their designated
      * hotbar slots, so those end up as the last word for their slots.
      * Undone by clear()/clearAll()'s resync back to reality.
      */
     public void hideRealInventory(Player player) {
-        // An actual AIR stack, not Java null -- ProtocolLib's item
+        // An actual AIR stack, not Java null - ProtocolLib's item
         // converter (IgnoreNullConverter) passes a null straight through
         // unconverted instead of turning it into an empty NMS ItemStack,
         // and the packet's item field isn't nullable, so a raw null here
         // silently breaks encoding for the packet (past where our
-        // try/catch below can see it -- it fails on the network thread
+        // try/catch below can see it - it fails on the network thread
         // during the async write, not the synchronous send call).
         ItemStack empty = new ItemStack(Material.AIR);
         for (int protocolSlot = 5; protocolSlot <= 45; protocolSlot++) {
@@ -166,7 +166,7 @@ public final class RaceInventoryOverlay {
 
     private void sendFakeSlot(Player player, int hotbarSlot, ItemStack item) {
         // Container 0 (the player's own inventory) numbers the hotbar 36-44,
-        // not 0-8 -- Bukkit's PlayerInventory indices don't match the wire
+        // not 0-8 - Bukkit's PlayerInventory indices don't match the wire
         // protocol's slot indices for this container.
         sendRawSlot(player, 36 + hotbarSlot, item);
     }

@@ -21,7 +21,7 @@ public final class StationRecipes {
 
     private StationRecipes() {}
 
-    /** Single source of truth for each station's recipe key -- also used by TutorialCraftGui to look the recipe back up. */
+    /** Single source of truth for each station's recipe key - also used by TutorialCraftGui to look the recipe back up. */
     public static NamespacedKey keyFor(Plugin plugin, StationType type) {
         String name = switch (type) {
             case INFUSION_TABLE -> "infusion_table";

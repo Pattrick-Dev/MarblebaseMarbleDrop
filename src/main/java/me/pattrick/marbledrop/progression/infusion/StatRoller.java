@@ -27,7 +27,7 @@ public final class StatRoller {
     /**
      * Same roll as {@link #rollStats(MarbleRarity)}, but stats present in
      * statAffinity (weight 0-1) get an extra reroll-take-best chance
-     * proportional to their weight -- e.g. a Blaze Rod catalyst configured
+     * proportional to their weight - e.g. a Blaze Rod catalyst configured
      * for BOOST gives BOOST a chance to reroll-and-keep-the-better-result,
      * while every other stat rolls exactly as it always has. Pure upside:
      * a stat with affinity never rolls worse than an unbiased roll would.

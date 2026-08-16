@@ -134,7 +134,7 @@ public class Main extends JavaPlugin {
         // Checked once, early, since both track-building's kit tools below
         // and the race Boost/Glow features further down key off the same
         // RaceInventoryOverlay instance. Softdepend in plugin.yml, not a
-        // hard depend -- without it, track-building tools fall back to
+        // hard depend - without it, track-building tools fall back to
         // real inventory items and race Boost/Glow fall back to real
         // inventory items too (with RaceWatchManager's own real
         // clear-and-restore protecting those).
@@ -150,7 +150,7 @@ public class Main extends JavaPlugin {
 
         // Tracks who's building which track and, via inventoryOverlay,
         // hides their real inventory behind fake kit-tool items for the
-        // duration -- see TrackCreationKit.giveKit()/TrackBuildToolsListener.
+        // duration - see TrackCreationKit.giveKit()/TrackBuildToolsListener.
         // The real inventory is never touched, so there's nothing to save
         // or restore, on disk or otherwise.
         TrackBuildInventoryManager trackBuildInventory = new TrackBuildInventoryManager(inventoryOverlay);
@@ -164,7 +164,7 @@ public class Main extends JavaPlugin {
                 this
         );
 
-        // Build kit tools listener (point/undo/preview/watch/finish -- see TrackCreationKit)
+        // Build kit tools listener (point/undo/preview/watch/finish - see TrackCreationKit)
         getServer().getPluginManager().registerEvents(
                 new TrackBuildToolsListener(this, trackManager, trackVisualizer, trackBuildInventory),
                 this
@@ -172,6 +172,10 @@ public class Main extends JavaPlugin {
 
         // Race entry flow
         RaceManager raceManager = new RaceManager(trackManager, raceEngine, mdConfig);
+        // Handles giving a taken marble back on quit/kick (pre-race lobby)
+        // and flushing any queued offline returns on join - see RaceManager's
+        // returnMarbleToOwner()/onPlayerQuit()/onPlayerJoin().
+        getServer().getPluginManager().registerEvents(raceManager, this);
 
         // Watch manager (inventory safe)
         raceWatchManager = new RaceWatchManager(this, trackManager, raceEngine);
@@ -181,7 +185,7 @@ public class Main extends JavaPlugin {
         raceManager.setWatchManager(raceWatchManager);
         raceManager.setTaskManager(taskManager);
 
-        // ProtocolLib-backed features (see RaceGlowPrivacy) -- glowPrivacy
+        // ProtocolLib-backed features (see RaceGlowPrivacy) - glowPrivacy
         // itself doesn't need to exist without ProtocolLib; inventoryOverlay
         // was already constructed (or left null) above.
         RaceGlowPrivacy glowPrivacy = null;
@@ -190,11 +194,11 @@ public class Main extends JavaPlugin {
             raceWatchManager.setInventoryOverlay(inventoryOverlay);
             raceManager.setInventoryOverlay(inventoryOverlay);
         } else {
-            getLogger().info("ProtocolLib not found -- marble glow will be visible to everyone instead of just the racer who toggled it, "
+            getLogger().info("ProtocolLib not found - marble glow will be visible to everyone instead of just the racer who toggled it, "
                     + "and race items (Boost/Glow) will be real inventory items instead of packet overlays.");
         }
 
-        // Boost/Glow item click handlers -- must run before RaceWatchManager's
+        // Boost/Glow item click handlers - must run before RaceWatchManager's
         // own interact handler cancels everything while watching (see RaceBoostListener/RaceGlowListener).
         getServer().getPluginManager().registerEvents(new RaceBoostListener(this, raceManager, inventoryOverlay, taskManager), this);
         getServer().getPluginManager().registerEvents(new RaceGlowListener(this, raceManager, glowPrivacy, inventoryOverlay), this);
@@ -205,9 +209,9 @@ public class Main extends JavaPlugin {
                 this
         );
 
-        // Loadout picker (pre-race strategy -- click an already-joined track to open it)
+        // Loadout picker (pre-race strategy - click an already-joined track to open it)
         getServer().getPluginManager().registerEvents(
-                new RaceLoadoutGuiListener(trackManager, raceManager),
+                new RaceLoadoutGuiListener(raceManager),
                 this
         );
 
@@ -240,6 +244,7 @@ public class Main extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(new RaceMotdListener(scheduledRaceManager), this);
         getServer().getPluginManager().registerEvents(new RaceScheduleMenuListener(this, mdConfig), this);
+        getServer().getPluginManager().registerEvents(new RaceDailyTimesMenuListener(this, mdConfig, scheduledRaceManager), this);
 
         RaceCommand raceCommand = new RaceCommand(raceManager, trackManager, raceWatchManager, scheduledRaceManager, mdConfig);
 
@@ -281,7 +286,7 @@ public class Main extends JavaPlugin {
 
         // Constructed after upgradeAmbient (not before, like it used to
         // be) so /md upgrades remove can hand it the ambient cleanup
-        // callback -- same as MarbleRecyclerCommand/InfusionTableCommand
+        // callback - same as MarbleRecyclerCommand/InfusionTableCommand
         // already do for their own station types.
         UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(this, upgradeStations, upgradeAmbient);
 
@@ -317,7 +322,7 @@ public class Main extends JavaPlugin {
         craftFrameManager = new TutorialCraftFrameManager(this, craftFrameStore);
         craftFrameManager.start();
 
-        // Nullable -- see TutorialTabListPrivacy#createIfAvailable. Without
+        // Nullable - see TutorialTabListPrivacy#createIfAvailable. Without
         // ProtocolLib, hiding a tutorial-taker from others just falls back
         // to hideEntity's default behavior (their tab entry disappears too).
         TutorialTabListPrivacy tabListPrivacy = TutorialTabListPrivacy.createIfAvailable(this);
@@ -397,7 +402,8 @@ public class Main extends JavaPlugin {
                 raceCommand,
                 teamCommand,
                 tutorialCommand,
-                recipesCommand
+                recipesCommand,
+                scheduledRaceManager
         );
 
         CommandKitTabCompletion mdTabCompletion = new CommandKitTabCompletion(trackManager);

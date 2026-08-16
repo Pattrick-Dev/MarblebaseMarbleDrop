@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * The three craftable "station" blocks. Each wraps a vanilla block
  * (cauldron, smithing table, grindstone) that would otherwise behave
- * normally -- only a block placed from a StationItems-tagged ItemStack
+ * normally - only a block placed from a StationItems-tagged ItemStack
  * of the matching type is treated as a real station.
  */
 public enum StationType {

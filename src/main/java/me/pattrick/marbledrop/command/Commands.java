@@ -7,7 +7,7 @@ import org.bukkit.entity.Player;
 
 /**
  * Shared, standardized checks and messages for every command class in the
- * plugin -- before this, "not a player" and "no permission" each had 4-5
+ * plugin - before this, "not a player" and "no permission" each had 4-5
  * different wordings (some uncolored) scattered across the 13 command
  * classes, and usage-line color was split between yellow and red with no
  * pattern. One canonical message per concern, used everywhere.

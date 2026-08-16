@@ -11,14 +11,14 @@ import java.util.List;
 
 /**
  * The physical "build kit" handed to whoever creates (or resumes
- * building) a track: five right-click tools -- point, undo, preview
- * toggle, set watch, finish -- covering the whole build loop without
+ * building) a track: five right-click tools - point, undo, preview
+ * toggle, set watch, finish - covering the whole build loop without
  * ever touching TrackGui's editor menu.
  * <p>
  * With ProtocolLib (see TrackBuildInventoryManager), every tool is a
  * packet-only overlay in a fixed hotbar slot (see {@link Tool#hotbarSlot}):
  * nothing is really added to the player's inventory, so there's nothing
- * real to remove again on finish either -- ending the session just
+ * real to remove again on finish either - ending the session just
  * resyncs the client back to their untouched real inventory. Without
  * ProtocolLib, the same five tools are handed out as ordinary real
  * items instead, identified purely by material + exact display name

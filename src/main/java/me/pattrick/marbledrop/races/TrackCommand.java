@@ -60,7 +60,7 @@ public final class TrackCommand implements CommandExecutor {
 
                 player.sendMessage(ChatColor.GREEN + "Created track '" + id + "'.");
                 TrackCreationKit.giveKit(buildInventory, visualizer, player, id);
-                player.sendMessage(ChatColor.GRAY + "Build kit given -- right-click to place points, undo, "
+                player.sendMessage(ChatColor.GRAY + "Build kit given - right-click to place points, undo, "
                         + "preview, set the watch spot, or finish.");
                 return true;
             }

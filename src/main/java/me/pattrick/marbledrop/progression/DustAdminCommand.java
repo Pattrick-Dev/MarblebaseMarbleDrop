@@ -56,7 +56,7 @@ public final class DustAdminCommand implements CommandExecutor {
                 return true;
             }
 
-            // "take" is an alias for "remove" -- DustManager's own method is takeDust().
+            // "take" is an alias for "remove" - DustManager's own method is takeDust().
             case "remove", "take" -> {
                 if (amount == 0) {
                     sender.sendMessage(ChatColor.GRAY + "No change (amount was 0).");

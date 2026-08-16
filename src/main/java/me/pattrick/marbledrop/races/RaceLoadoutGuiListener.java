@@ -9,11 +9,9 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 
 public final class RaceLoadoutGuiListener implements Listener {
 
-    private final TrackManager tracks;
     private final RaceManager races;
 
-    public RaceLoadoutGuiListener(TrackManager tracks, RaceManager races) {
-        this.tracks = tracks;
+    public RaceLoadoutGuiListener(RaceManager races) {
         this.races = races;
     }
 
@@ -29,11 +27,6 @@ public final class RaceLoadoutGuiListener implements Listener {
 
         int slot = e.getRawSlot();
 
-        if (slot == RaceLoadoutGui.SLOT_BACK) {
-            RaceGui.open(p, tracks, races);
-            return;
-        }
-
         RaceLoadout chosen = switch (slot) {
             case RaceLoadoutGui.SLOT_AGGRESSIVE -> RaceLoadout.AGGRESSIVE;
             case RaceLoadoutGui.SLOT_BALANCED -> RaceLoadout.BALANCED;
@@ -46,6 +39,6 @@ public final class RaceLoadoutGuiListener implements Listener {
 
         p.playSound(p.getLocation(), Sound.UI_BUTTON_CLICK, 0.7f, 1.1f);
         p.sendMessage(ChatColor.AQUA + "Loadout set to " + ChatColor.YELLOW + chosen.label() + ChatColor.AQUA + " for '" + trackId + "'.");
-        RaceLoadoutGui.open(p, races, trackId);
+        p.closeInventory();
     }
 }

@@ -13,7 +13,7 @@ import java.util.List;
 /**
  * Builds/reads the PDC-tagged ItemStack handed to a real racer for the
  * duration of their race (see RaceBoostListener). Stack amount doubles as
- * the visible "charges remaining" count -- each successful boost consumes
+ * the visible "charges remaining" count - each successful boost consumes
  * one, so the player sees their remaining uses the same way they'd see
  * arrows or snowballs deplete, with no separate lore to keep in sync.
  */
@@ -31,7 +31,7 @@ public final class RaceBoostItem {
         meta.setDisplayName(ChatColor.GOLD + "" + ChatColor.BOLD + "Boost");
         meta.setLore(List.of(
                 ChatColor.GRAY + "Right-click to fire a speed burst!",
-                ChatColor.DARK_GRAY + "Consumes one charge -- time it well."
+                ChatColor.DARK_GRAY + "Consumes one charge - time it well."
         ));
         meta.getPersistentDataContainer().set(key(plugin), PersistentDataType.BYTE, (byte) 1);
         item.setItemMeta(meta);

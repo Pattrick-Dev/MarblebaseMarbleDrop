@@ -46,7 +46,7 @@ public final class UpgradeStationManager {
         return java.util.Collections.unmodifiableSet(stations);
     }
 
-    /** How many upgrade stations are currently registered -- see StationCommands.count(). */
+    /** How many upgrade stations are currently registered - see StationCommands.count(). */
     public int count() {
         return stations.size();
     }

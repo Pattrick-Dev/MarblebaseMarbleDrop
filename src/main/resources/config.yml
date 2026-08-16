@@ -3,7 +3,7 @@ debug:
 
 discord:
   webhook-url: ""             # paste a Discord channel webhook URL here to enable scheduled-race status posts; blank = disabled
-  update-interval-seconds: 20 # how often the countdown message is edited while a race is open (keep this reasonable -- Discord will rate-limit edits that are too frequent)
+  update-interval-seconds: 20 # how often the countdown message is edited while a race is open (keep this reasonable - Discord will rate-limit edits that are too frequent)
 
 holograms:
   name-visible-radius: 8.0
@@ -42,11 +42,16 @@ infusion:
 
     values:
       DIAMOND: 200
+      DIAMOND_BLOCK: 1800    # = 9 diamonds
       EMERALD: 180
+      EMERALD_BLOCK: 1620    # = 9 emeralds
       NETHERITE_INGOT: 800
+      NETHERITE_BLOCK: 7200  # = 9 netherite ingots
       NETHERITE_SCRAP: 300
       GOLD_INGOT: 90
+      GOLD_BLOCK: 810        # = 9 gold ingots
       IRON_INGOT: 45
+      IRON_BLOCK: 405        # = 9 iron ingots
       AMETHYST_SHARD: 70
       PRISMARINE_CRYSTALS: 60
       BLAZE_ROD: 85
@@ -61,7 +66,7 @@ infusion:
       LEGENDARY:  { min: 35, max: 120 }
 
     # Material catalysts give a higher chance (never a guarantee) of
-    # rolling higher on the listed stats -- see StatRoller. Materials left
+    # rolling higher on the listed stats - see StatRoller. Materials left
     # out here (DIAMOND, EMERALD, NETHERITE_*, etc.) still work as pure
     # rarity-value catalysts with no stat skew.
     stat-affinity:
@@ -102,12 +107,12 @@ races:
     ai-show-count: 4                   # AI racers for a pure showcase race when no one joins
 
     # The ONLY times a race actually runs (24h HH:mm, server's local time).
-    # Entry is always open -- the moment one race ends (or the plugin
+    # Entry is always open - the moment one race ends (or the plugin
     # starts), the next one opens immediately and stays joinable right up
     # until the next one of these times, then closes and runs. If no
     # eligible track happens to be free right then, it keeps retrying every
     # few seconds until one opens up. Empty list, or `enabled: false` above,
-    # turns scheduled races off entirely -- re-enabling requires
+    # turns scheduled races off entirely - re-enabling requires
     # /md race forcecycle or a restart to kick it back off.
     daily-times: ["12:00", "16:00", "20:00", "00:00"]
 

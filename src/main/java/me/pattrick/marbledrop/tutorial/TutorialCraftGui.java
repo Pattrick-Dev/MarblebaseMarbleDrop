@@ -15,7 +15,7 @@ import org.bukkit.plugin.Plugin;
 /**
  * Fallback preview of the CURRENT recipe's 3x3 layout, used only when the
  * server has no craft-frame display configured (see TutorialCraftFrameManager
- * -- that's the primary mechanism now). Pulls the same shapeIcons() data as
+ * - that's the primary mechanism now). Pulls the same shapeIcons() data as
  * the frame manager so both stay in sync with the real registered recipe.
  * <p>
  * A real Inventory is inherently per-player, unlike a shared in-world
@@ -23,7 +23,7 @@ import org.bukkit.plugin.Plugin;
  * different recipes at once each see their own correct layout.
  * <p>
  * Uses InventoryType.WORKBENCH so it visually matches a real crafting
- * table (slots 1-9 as the 3x3 matrix, slot 0 as the result) -- but every
+ * table (slots 1-9 as the 3x3 matrix, slot 0 as the result) - but every
  * click in it is cancelled (see TutorialCraftHook.onGuiClick), and
  * TutorialCraftHook explicitly ignores CraftItemEvents from this title,
  * since a WORKBENCH inventory populated with valid ingredients would
@@ -48,7 +48,7 @@ final class TutorialCraftGui {
     }
 
     /**
-     * Text-only alternative to open() -- used for every stage after the
+     * Text-only alternative to open() - used for every stage after the
      * first, since by then the player is likely still standing at (and
      * looking at) a real crafting table, and force-opening another
      * inventory would yank them out of it (see TutorialCraftHook).

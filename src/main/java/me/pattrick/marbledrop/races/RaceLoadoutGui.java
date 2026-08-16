@@ -26,7 +26,6 @@ public final class RaceLoadoutGui {
     public static final int SLOT_AGGRESSIVE = 11;
     public static final int SLOT_BALANCED = 13;
     public static final int SLOT_DEFENSIVE = 15;
-    public static final int SLOT_BACK = 22;
 
     public static String titleFor(String trackId) {
         return TITLE_PREFIX + trackId;
@@ -47,9 +46,6 @@ public final class RaceLoadoutGui {
         inv.setItem(SLOT_AGGRESSIVE, loadoutItem(RaceLoadout.AGGRESSIVE, Material.BLAZE_POWDER, current));
         inv.setItem(SLOT_BALANCED, loadoutItem(RaceLoadout.BALANCED, Material.IRON_INGOT, current));
         inv.setItem(SLOT_DEFENSIVE, loadoutItem(RaceLoadout.DEFENSIVE, Material.SHIELD, current));
-
-        inv.setItem(SLOT_BACK, item(Material.BARRIER, ChatColor.RED + "Back",
-                List.of(ChatColor.GRAY + "Return to the race menu")));
 
         p.openInventory(inv);
     }

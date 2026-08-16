@@ -44,9 +44,9 @@ public final class RaceWatchManager implements Listener {
     private final File file;
     private YamlConfiguration cfg;
 
-    // Nullable -- only set when ProtocolLib is installed (see Main). When
+    // Nullable - only set when ProtocolLib is installed (see Main). When
     // present, start()/stop() never touch a racer's real inventory at all
-    // (ability items are faked via packets instead -- see
+    // (ability items are faked via packets instead - see
     // RaceInventoryOverlay), so there's nothing to lose on a crash and
     // nothing to restore. When absent, this falls back to the original
     // real clear-and-restore behavior below.
@@ -82,7 +82,7 @@ public final class RaceWatchManager implements Listener {
         startAnchorTask();
     }
 
-    /** Wired in from Main.java only when ProtocolLib is installed -- see the field javadoc. */
+    /** Wired in from Main.java only when ProtocolLib is installed - see the field javadoc. */
     public void setInventoryOverlay(RaceInventoryOverlay inventoryOverlay) {
         this.inventoryOverlay = inventoryOverlay;
     }
@@ -211,8 +211,8 @@ public final class RaceWatchManager implements Listener {
         UUID id = p.getUniqueId();
 
         // This is the single choke point every "stop watching" path goes
-        // through -- a race actually finishing, a manual /md race unwatch,
-        // whatever -- so it's the right place to clear any fake ability
+        // through - a race actually finishing, a manual /md race unwatch,
+        // whatever - so it's the right place to clear any fake ability
         // items too, rather than relying on every caller to remember.
         if (inventoryOverlay != null) {
             inventoryOverlay.clearAll(p);
@@ -465,7 +465,7 @@ public final class RaceWatchManager implements Listener {
     @EventHandler(ignoreCancelled = true) public void onFood(FoodLevelChangeEvent e) { if (e.getEntity() instanceof Player p && isWatching(p)) e.setCancelled(true); }
 
     /**
-     * Any right-click (not just an ability-item one -- see
+     * Any right-click (not just an ability-item one - see
      * RaceBoostListener/RaceGlowListener, which intercept those before
      * this even runs) can trigger vanilla's forced held-slot resync
      * (documented on RaceBoostListener), so this reasserts too rather than
@@ -481,7 +481,7 @@ public final class RaceWatchManager implements Listener {
     /**
      * Cancelling one of these stops the real inventory effect (the item
      * doesn't actually leave), but the client already optimistically
-     * predicted it did and updated its own display -- the server's
+     * predicted it did and updated its own display - the server's
      * trailing correction packet for that prediction shows the real item
      * underneath (the player's marble), silently overwriting our fake
      * Boost/Glow overlay. reassertOverlaySoon() re-sends the overlay a
@@ -520,7 +520,7 @@ public final class RaceWatchManager implements Listener {
     }
 
     // A cancelled drop was observed sending not one but TWO real trailing
-    // correction packets -- one the same tick, one on the very next tick,
+    // correction packets - one the same tick, one on the very next tick,
     // right around when a single-tick-later reassert would run, beating it
     // about half the time. Rather than guess exactly how many rounds any
     // given cancelled action produces, reassert several times over the

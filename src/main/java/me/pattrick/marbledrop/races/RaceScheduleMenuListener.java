@@ -9,7 +9,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.plugin.Plugin;
 
 /**
- * Click handling for RaceScheduleMenu. Stateless -- every click re-reads
+ * Click handling for RaceScheduleMenu. Stateless - every click re-reads
  * the current value straight from MdConfig, writes the adjustment back to
  * config.yml, reloads MdConfig, and redraws, so there's no per-player
  * state to track (unlike menus tied to a specific block/marble).
@@ -35,6 +35,12 @@ public final class RaceScheduleMenuListener implements Listener {
 
         if (slot == RaceScheduleMenu.SLOT_CLOSE) {
             player.closeInventory();
+            return;
+        }
+
+        if (slot == RaceScheduleMenu.SLOT_DAILY_TIMES) {
+            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.6f, 1.1f);
+            RaceDailyTimesMenu.open(player, cfg);
             return;
         }
 

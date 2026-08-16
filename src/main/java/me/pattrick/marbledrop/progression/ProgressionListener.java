@@ -44,13 +44,13 @@ public final class ProgressionListener implements Listener {
     }
 
     /**
-     * Re-baselines the walk tracker on any teleport -- without this, the
+     * Re-baselines the walk tracker on any teleport - without this, the
      * NEXT PlayerMoveEvent after a teleport measures distance from the
      * pre-teleport location (lastLocation is only ever updated by
      * onMove(), never by the teleport itself), crediting the whole jump as
      * "walked". That's exploitable directly (teleport somewhere far, take
      * one step) and also fires constantly from the plugin's own teleports
-     * -- race starting grids, spectator/watch snapping, tutorial
+     * - race starting grids, spectator/watch snapping, tutorial
      * teleports, /spawn, ender pearls, anything. Snapping the baseline to
      * the destination here means only genuine steps after landing ever
      * count.

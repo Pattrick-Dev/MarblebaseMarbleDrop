@@ -47,7 +47,9 @@ public final class RaceCommand implements CommandExecutor {
                     Commands.usage(player, "/md race open <trackId>");
                     return true;
                 }
-                races.open(player, args[1].toLowerCase());
+                String trackId = args[1].toLowerCase();
+                if (isClaimedByScheduler(player, trackId)) return true;
+                races.open(player, trackId);
                 return true;
             }
 
@@ -57,7 +59,9 @@ public final class RaceCommand implements CommandExecutor {
                     Commands.usage(player, "/md race close <trackId>");
                     return true;
                 }
-                races.close(player, args[1].toLowerCase());
+                String trackId = args[1].toLowerCase();
+                if (isClaimedByScheduler(player, trackId)) return true;
+                races.close(player, trackId);
                 return true;
             }
 
@@ -67,7 +71,9 @@ public final class RaceCommand implements CommandExecutor {
                     Commands.usage(player, "/md race start <trackId>");
                     return true;
                 }
-                races.start(player, args[1].toLowerCase());
+                String trackId = args[1].toLowerCase();
+                if (isClaimedByScheduler(player, trackId)) return true;
+                races.start(player, trackId);
                 return true;
             }
 
@@ -104,7 +110,7 @@ public final class RaceCommand implements CommandExecutor {
                     return true;
                 }
 
-                // "test loadout <trackId>" -- opens the same loadout GUI a
+                // "test loadout <trackId>" - opens the same loadout GUI a
                 // real lobby entry uses (see RaceLoadoutGui); the pick is
                 // remembered as this admin's preference and runTestRace()
                 // reads it automatically, no lobby entry required.
@@ -141,10 +147,10 @@ public final class RaceCommand implements CommandExecutor {
                 String activeId = scheduledRaces.activeCycleTrackId();
 
                 if (openId != null) {
-                    player.sendMessage(ChatColor.GREEN + "A race on '" + openId + "' is open right now -- " +
+                    player.sendMessage(ChatColor.GREEN + "A race on '" + openId + "' is open right now - " +
                             ChatColor.AQUA + "/md join" + ChatColor.GREEN + "! (" + races.lobbyCount(openId) + " joined so far)");
                 } else if (activeId != null) {
-                    player.sendMessage(ChatColor.YELLOW + "A race on '" + activeId + "' is currently running -- " +
+                    player.sendMessage(ChatColor.YELLOW + "A race on '" + activeId + "' is currently running - " +
                             "check back once it finishes.");
                 } else {
                     player.sendMessage(ChatColor.YELLOW + "No scheduled race is open right now. Next one opens in about " +
@@ -157,7 +163,7 @@ public final class RaceCommand implements CommandExecutor {
                 String trackId = scheduledRaces.openTrackId();
                 if (trackId == null) {
                     if (scheduledRaces.activeCycleTrackId() != null) {
-                        player.sendMessage(ChatColor.RED + "A scheduled race is already running -- check back once it finishes.");
+                        player.sendMessage(ChatColor.RED + "A scheduled race is already running - check back once it finishes.");
                     } else {
                         player.sendMessage(ChatColor.RED + "No scheduled race is open right now.");
                         player.sendMessage(ChatColor.GRAY + "Next one opens in about " +
@@ -166,6 +172,14 @@ public final class RaceCommand implements CommandExecutor {
                     return true;
                 }
                 races.enter(player, trackId, player.getInventory().getItemInMainHand());
+                // enter() only actually adds a lobby entry on success (bad
+                // marble, full lobby, etc. all bail out early with just a
+                // chat message) - so hasEntry() here doubles as a success
+                // check, same as RaceGuiListener's own already-joined click
+                // opening this same picker.
+                if (races.hasEntry(trackId, player.getUniqueId())) {
+                    RaceLoadoutGui.open(player, races, trackId);
+                }
                 return true;
             }
 
@@ -205,6 +219,25 @@ public final class RaceCommand implements CommandExecutor {
                 return true;
             }
         }
+    }
+
+    /**
+     * Blocks the raw admin open/close/start commands from touching a track
+     * the scheduled race system currently has open-for-entry or actually
+     * running. Without this, e.g. /md race close on that track silently
+     * desyncs RaceManager's isOpen() from ScheduledRaceManager's own
+     * openTrackId (breaking /md join while the boss bar still claims it's
+     * open), and /md race start hijacks the scheduled lobby into an
+     * untracked race - joiners never get their scheduled Dust, and the
+     * scheduler still runs its own showcase race on top once its original
+     * close time arrives since it never saw its lobby get taken.
+     */
+    private boolean isClaimedByScheduler(Player player, String trackId) {
+        if (!trackId.equals(scheduledRaces.activeCycleTrackId())) return false;
+        player.sendMessage(ChatColor.RED + "'" + trackId + "' is currently in use by the scheduled race system.");
+        player.sendMessage(ChatColor.GRAY + "Use " + ChatColor.AQUA + "/md race forcecycle" + ChatColor.GRAY
+                + " or " + ChatColor.AQUA + "/md race purge" + ChatColor.GRAY + " instead, or wait for it to finish.");
+        return true;
     }
 
     private void usage(Player player) {

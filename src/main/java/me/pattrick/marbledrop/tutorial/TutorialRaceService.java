@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * tutorial races alike) in one shared list for repulsion/collision
  * physics. If two players run the tutorial race at the same moment on
  * the same track, their marbles can visually nudge each other since
- * they occupy the same space -- each race is still scored correctly
+ * they occupy the same space - each race is still scored correctly
  * per player, but it won't look fully isolated. Fine for a beta; worth
  * a dedicated tutorial-only track later if it becomes annoying.
  */
@@ -156,12 +156,12 @@ public final class TutorialRaceService {
                     // they're flight-disabled in survival mode without
                     // also already being back on solid ground (skipping
                     // the teleport risked leaving them mid-air over the
-                    // track with no flight -- fall damage/death).
+                    // track with no flight - fall damage/death).
                     watchManager.stop(player, true);
                     // Then redirect to the RACE checkpoint (a spot the
                     // tutorial actually controls) so they don't end up
                     // wherever they happened to be standing when /md race
-                    // was typed -- that's how players were ending up back
+                    // was typed - that's how players were ending up back
                     // in the recycler room. Same tick as the line above,
                     // so this is still a single safe teleport overall.
                     Location raceCheckpoint = locationStore.get(TutorialStep.RACE);
@@ -195,7 +195,7 @@ public final class TutorialRaceService {
             ItemStack aiHelmet = buildAiHelmet(racerNumber, aiHeads[i]);
 
             MarbleRunner aiRunner = raceManager.buildStatsRunner(track, aiSpawn, aiHelmet, aiData, () -> {
-                // AI finishing is purely cosmetic -- it doesn't affect the player's tutorial progress.
+                // AI finishing is purely cosmetic - it doesn't affect the player's tutorial progress.
                 tracker.recordFinish("AI Racer " + racerNumber);
                 if (player.isOnline()) maybeSendResults(player, tracker);
             });
@@ -219,7 +219,7 @@ public final class TutorialRaceService {
                 default -> ChatColor.WHITE;
             };
             player.sendMessage(medal + "" + (i + 1) + ". " + ChatColor.YELLOW + entry.name() +
-                    ChatColor.DARK_GRAY + " — " + ChatColor.GREEN + formatTime(entry.elapsedMs()));
+                    ChatColor.DARK_GRAY + "  -  " + ChatColor.GREEN + formatTime(entry.elapsedMs()));
         }
     }
 
@@ -275,7 +275,7 @@ public final class TutorialRaceService {
 
     /**
      * Builds an AI opponent's helmet. Kept as PLAYER_HEAD (same item type
-     * as real marbles) so the size/scale on the armor stand matches -- a
+     * as real marbles) so the size/scale on the armor stand matches - a
      * block material would render oversized in the helmet slot. Takes an
      * explicit head (see pickTwoDistinctHeads) rather than rolling its
      * own, so the two AI opponents can be guaranteed to differ; falls

@@ -9,7 +9,7 @@ import org.bukkit.World;
 /**
  * Selectable cosmetic particle effects a placed marble can show (see
  * MarbleDisplayMenu's style picker, MarbleKeys#PARTICLE_STYLE). Purely
- * visual -- none of these touch gameplay, stats, or races. Stored on the
+ * visual - none of these touch gameplay, stats, or races. Stored on the
  * block's PDC by enum name(), so reordering is safe but renaming a
  * constant will fall back existing marbles to RARITY_DUST (see byId()).
  */

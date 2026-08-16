@@ -14,11 +14,11 @@ import java.util.*;
  * Stores task progress in player PDC. No YAML. No DB.
  * <p>
  * The task pool (TaskCatalog) is large (hundreds of entries per type), so no
- * player is ever handed the whole thing at once -- each reset cycle picks a
+ * player is ever handed the whole thing at once - each reset cycle picks a
  * random subset (see DAILY_ACTIVE_COUNT/WEEKLY_ACTIVE_COUNT) and remembers
  * which ids it picked (K_DAILY_ASSIGNED/K_WEEKLY_ASSIGNED, a comma-joined id
  * list in PDC). increment()/claimAll() only ever touch that assigned
- * subset, never the full pool -- both for correctness (a player shouldn't
+ * subset, never the full pool - both for correctness (a player shouldn't
  * silently earn credit for a task they were never shown) and for cost (a
  * per-event linear scan over a handful of assigned tasks instead of the
  * whole catalog).
@@ -26,7 +26,7 @@ import java.util.*;
 public final class TaskManager {
 
     // How many tasks of each type a player has active at once, drawn fresh
-    // from the pool on every reset. Tune freely -- nothing else assumes a
+    // from the pool on every reset. Tune freely - nothing else assumes a
     // specific count, other than TasksMenu having 26 usable slots (27 minus
     // the reset-info clock), so keep dailyCount + weeklyCount comfortably
     // under that.
@@ -82,7 +82,7 @@ public final class TaskManager {
         this.zoneId = ZoneId.systemDefault();
     }
 
-    /** The full task pool, every type -- for admin/lookup use. Players only ever see getActiveTasks(). */
+    /** The full task pool, every type - for admin/lookup use. Players only ever see getActiveTasks(). */
     public List<TaskDefinition> getTasks() {
         return tasks;
     }
@@ -100,7 +100,7 @@ public final class TaskManager {
     }
 
     /**
-     * This player's currently-active tasks of one type -- a small random
+     * This player's currently-active tasks of one type - a small random
      * subset of the pool, picked at the last reset (see resetCycle()).
      */
     public List<TaskDefinition> getActiveTasks(Player player, TaskType type) {
@@ -117,7 +117,7 @@ public final class TaskManager {
         return out;
     }
 
-    /** Both types combined -- what TasksMenu shows. */
+    /** Both types combined - what TasksMenu shows. */
     public List<TaskDefinition> getActiveTasks(Player player) {
         List<TaskDefinition> out = new ArrayList<>(getActiveTasks(player, TaskType.DAILY));
         out.addAll(getActiveTasks(player, TaskType.WEEKLY));
@@ -141,7 +141,7 @@ public final class TaskManager {
         String weekStartStr = weekStart.toString();
 
         // Re-roll on a date mismatch (the normal case) OR a missing/blank
-        // assignment even when the date already matches -- covers a player
+        // assignment even when the date already matches - covers a player
         // who reset earlier today/this week under an older build, before
         // the assigned-task list existed at all. Without this, that player
         // would see nothing until the next natural reset, since the date
@@ -164,11 +164,11 @@ public final class TaskManager {
     /**
      * Picks a fresh random set of active task ids for this type from the
      * pool, stores the assignment, and zeroes progress/claimed/done for
-     * exactly those ids. Old assigned ids are left alone -- they're simply
+     * exactly those ids. Old assigned ids are left alone - they're simply
      * unreachable once the assignment string moves on, not worth the extra
      * bookkeeping to clean up.
      * <p>
-     * At most one task per trigger -- TaskCatalog generates several
+     * At most one task per trigger - TaskCatalog generates several
      * differently-worded tasks for the same (trigger, goal) (e.g. "Perform
      * 10 infusions" and "Produce 10 infused marbles" are both just
      * INFUSE_MARBLE x10), and a plain random pick over the whole pool could
@@ -299,7 +299,7 @@ public final class TaskManager {
 
     // ===== Task tracking (Action Bar) =====
 
-    /** Looks up any task by id, across the WHOLE pool (not just what's currently assigned) -- needed for GUI clicks and admin tooling. */
+    /** Looks up any task by id, across the WHOLE pool (not just what's currently assigned) - needed for GUI clicks and admin tooling. */
     public TaskDefinition getTaskById(String id) {
         if (id == null) return null;
         for (TaskDefinition t : tasks) {

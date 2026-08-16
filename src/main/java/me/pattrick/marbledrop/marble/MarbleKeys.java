@@ -24,13 +24,13 @@ public final class MarbleKeys {
     public static NamespacedKey XP;
     public static NamespacedKey LEVEL;
 
-    // Block-state only -- who placed this marble as a display, so only
+    // Block-state only - who placed this marble as a display, so only
     // they (or an admin) can break it back. Not part of MarbleData/the
     // item's own PDC; only ever read/written directly on a placed
-    // skull's PersistentDataContainer -- see MarblePlacementListener.
+    // skull's PersistentDataContainer - see MarblePlacementListener.
     public static NamespacedKey PLACED_BY;
 
-    // Block-state only -- a snapshot of the marble item's display name at
+    // Block-state only - a snapshot of the marble item's display name at
     // the moment it was placed. MarbleItem#write() has never touched
     // display name (only PDC + lore); it's set once wherever a marble is
     // first minted and normally just rides along on the ItemStack
@@ -38,18 +38,18 @@ public final class MarbleKeys {
     // ItemMeta field, so it has to be captured and restored explicitly.
     public static NamespacedKey PLACED_NAME;
 
-    // Block-state only -- per-placement display toggles (byte, 1/0),
+    // Block-state only - per-placement display toggles (byte, 1/0),
     // defaulting to enabled when absent. See MarbleDisplayMenu/
     // MarbleDisplayAmbient.
     public static NamespacedKey SHOW_HOLOGRAM;
     public static NamespacedKey SHOW_PARTICLES;
 
-    // Block-state only -- whether the hologram's " (RARITY)" suffix is
+    // Block-state only - whether the hologram's " (RARITY)" suffix is
     // shown, independent of SHOW_HOLOGRAM itself. See MarbleDisplayMenu/
     // MarbleDisplayAmbient#holoName.
     public static NamespacedKey SHOW_RARITY;
 
-    // Block-state only -- which MarbleParticleStyle (by enum name) a
+    // Block-state only - which MarbleParticleStyle (by enum name) a
     // placed marble shows when SHOW_PARTICLES is on. Absent/unrecognized
     // falls back to MarbleParticleStyle.RARITY_DUST.
     public static NamespacedKey PARTICLE_STYLE;

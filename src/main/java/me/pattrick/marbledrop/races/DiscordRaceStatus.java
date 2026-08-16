@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
 /**
  * Posts a race-open announcement to a Discord webhook (config: discord.webhook-url)
  * and edits that SAME message periodically with a live-ish countdown, instead of
- * spamming a new message every tick -- mirrors FeedbackCommand's proven pattern
+ * spamming a new message every tick - mirrors FeedbackCommand's proven pattern
  * (plain java.net.http.HttpClient, hand-built JSON, everything off the main thread).
  * No-op everywhere if webhook-url is blank (the default).
  */
@@ -31,7 +31,7 @@ public final class DiscordRaceStatus {
     private final HttpClient httpClient;
 
     // Written from the async HTTP callback, read from the main-thread
-    // repeating task -- volatile is enough since it's a plain read/write,
+    // repeating task - volatile is enough since it's a plain read/write,
     // no compound operations.
     private volatile String messageId;
 
@@ -50,7 +50,7 @@ public final class DiscordRaceStatus {
         return url != null && !url.isBlank();
     }
 
-    /** Called once a track opens for entries -- posts the initial message and starts the periodic edit. */
+    /** Called once a track opens for entries - posts the initial message and starts the periodic edit. */
     public void onOpen(String trackId) {
         if (!enabled()) return;
 
@@ -65,7 +65,7 @@ public final class DiscordRaceStatus {
         }, intervalTicks, intervalTicks);
     }
 
-    /** Called once the entry window closes and the race actually starts -- final edit, then stop updating. */
+    /** Called once the entry window closes and the race actually starts - final edit, then stop updating. */
     public void onClose(String trackId) {
         if (!enabled()) return;
         cancelTask();
@@ -77,7 +77,7 @@ public final class DiscordRaceStatus {
         }
     }
 
-    /** Called on plugin/manager shutdown -- stop updating without claiming the race "started". */
+    /** Called on plugin/manager shutdown - stop updating without claiming the race "started". */
     public void shutdown() {
         cancelTask();
         messageId = null;
@@ -94,8 +94,8 @@ public final class DiscordRaceStatus {
         long seconds = scheduledRaces.secondsUntilNextCycle();
         int joined = races.lobbyCount(trackId);
 
-        return "🏁 **Race open on `" + trackId + "`** -- starts in **"
-                + ScheduledRaceManager.formatDuration(seconds) + "** -- "
+        return "🏁 **Race open on `" + trackId + "`** - starts in **"
+                + ScheduledRaceManager.formatDuration(seconds) + "** - "
                 + joined + " player" + (joined == 1 ? "" : "s") + " joined\n"
                 + "Join in-game with `/md join`";
     }

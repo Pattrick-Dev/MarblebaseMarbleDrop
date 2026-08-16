@@ -21,26 +21,26 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Makes a marble's glowing-outline toggle (see RaceGlowListener) private to
  * the player who turned it on, instead of Entity#setGlowing()'s normal
- * shared-to-everyone behavior -- Bukkit has no per-viewer option for that
+ * shared-to-everyone behavior - Bukkit has no per-viewer option for that
  * flag, so this rewrites the actual entity-metadata packets.
  * <p>
  * The real entity DOES have the glowing flag set (MarbleRunner still just
- * calls Entity#setGlowing() -- see setGlowing()/isGlowing() there); this
+ * calls Entity#setGlowing() - see setGlowing()/isGlowing() there); this
  * only intercepts the outgoing packets telling OTHER players' clients
  * about it and strips the glowing bit back out before it reaches anyone
  * but the owner. That means it correctly covers every way a client learns
- * about the flag -- the initial toggle, and a new viewer entering render
- * distance of an already-glowing marble -- since both go through the same
+ * about the flag - the initial toggle, and a new viewer entering render
+ * distance of an already-glowing marble - since both go through the same
  * ENTITY_METADATA packet type, not just a single point-in-time send.
  * <p>
  * Requires ProtocolLib. Main only constructs this when ProtocolLib is
- * actually installed (see softdepend in plugin.yml) -- without it, glow
+ * actually installed (see softdepend in plugin.yml) - without it, glow
  * still works, just visible to everyone, same as before this existed.
  */
 public final class RaceGlowPrivacy {
 
     // Bit 0x40 in the shared entity-flags byte (metadata index 0) is
-    // GLOWING -- every entity type inherits this index from the base
+    // GLOWING - every entity type inherits this index from the base
     // Entity class, and it's the same bit the vanilla Glowing potion
     // effect sets. Stable across modern Minecraft versions.
     private static final int FLAGS_INDEX = 0;
@@ -88,7 +88,7 @@ public final class RaceGlowPrivacy {
         ownerByEntityId.put(entity.getEntityId(), owner);
     }
 
-    /** Stops filtering for this entity -- call when glow is turned back off (or the marble despawns). */
+    /** Stops filtering for this entity - call when glow is turned back off (or the marble despawns). */
     public void untrack(Entity entity) {
         int id = entity.getEntityId();
         trackedEntityIds.remove(id);

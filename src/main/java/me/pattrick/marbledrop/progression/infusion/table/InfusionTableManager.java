@@ -94,7 +94,7 @@ public final class InfusionTableManager {
     /**
      * A "private" table skips the usual per-block lock and animates only
      * for the player using it (see InfusionTableProcess) instead of
-     * broadcasting to everyone nearby -- lets more than one person use the
+     * broadcasting to everyone nearby - lets more than one person use the
      * exact same physical table at once without colliding. Nothing about
      * the actual infusion (dust/catalyst cost, marble rolled) changes;
      * this only affects the shared animation/lock, which is otherwise
@@ -143,7 +143,7 @@ public final class InfusionTableManager {
         return out;
     }
 
-    /** How many infusion tables are currently registered -- see StationCommands.count(). */
+    /** How many infusion tables are currently registered - see StationCommands.count(). */
     public int count() {
         return keys.size();
     }

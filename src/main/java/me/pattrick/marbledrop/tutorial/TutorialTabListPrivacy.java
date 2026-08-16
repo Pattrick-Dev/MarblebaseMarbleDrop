@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Keeps a tutorial-hidden player's name in the tab list even though
  * {@link TutorialVisibility} hides their actual in-world entity.
  * Bukkit's {@code Player#hideEntity}, when the target is another Player,
- * also removes that player's tab-list entry -- the right default outside
+ * also removes that player's tab-list entry - the right default outside
  * the tutorial (no "ghost" name with nothing visible behind it), but it
  * reads exactly like a disconnect here, which is worse for onboarding
  * than just not seeing them in the world.
@@ -35,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * to protect for that specific viewer, the same "filter one real packet"
  * approach RaceGlowPrivacy uses for glow visibility.
  * <p>
- * Requires ProtocolLib -- construct via {@link #createIfAvailable(Plugin)},
+ * Requires ProtocolLib - construct via {@link #createIfAvailable(Plugin)},
  * which returns null if it isn't installed; every caller treats null the
  * same as "just let hideEntity's default tab-removal happen."
  */
@@ -70,20 +70,20 @@ public final class TutorialTabListPrivacy {
         });
     }
 
-    /** Suppresses {@code hidden}'s tab-list removal for {@code viewer} -- call right before {@code viewer.hideEntity(plugin, hidden)}. */
+    /** Suppresses {@code hidden}'s tab-list removal for {@code viewer} - call right before {@code viewer.hideEntity(plugin, hidden)}. */
     public void keepListed(Player viewer, Player hidden) {
         keepListedFor.computeIfAbsent(viewer.getUniqueId(), id -> ConcurrentHashMap.newKeySet())
                 .add(hidden.getUniqueId());
     }
 
-    /** Stops protecting {@code hidden}'s tab entry for {@code viewer} -- call alongside {@code viewer.showEntity(plugin, hidden)}. */
+    /** Stops protecting {@code hidden}'s tab entry for {@code viewer} - call alongside {@code viewer.showEntity(plugin, hidden)}. */
     public void stopKeepingListed(Player viewer, Player hidden) {
         Set<UUID> keep = keepListedFor.get(viewer.getUniqueId());
         if (keep != null) keep.remove(hidden.getUniqueId());
     }
 
     /**
-     * Full cleanup for one player -- call on quit, both as a viewer (they're
+     * Full cleanup for one player - call on quit, both as a viewer (they're
      * gone, nothing left to protect for them) and as a previously-hidden
      * target (so a real disconnect's own PLAYER_INFO_REMOVE isn't
      * accidentally suppressed for whoever still had them protected).

@@ -21,9 +21,9 @@ public enum TutorialStep {
             50
     ),
     CRAFT(
-            Set.of(), // crafting has no /md command to gate -- see TutorialCraftHook
+            Set.of(), // crafting has no /md command to gate - see TutorialCraftHook
             "Learn the Recipes",
-            "Open a crafting table and craft the station shown -- the next recipe's ingredients appear once you're done. Each is taken back once crafted; you'll get real ones later.",
+            "Open a crafting table and craft the station shown - the next recipe's ingredients appear once you're done. Each is taken back once crafted; you'll get real ones later.",
             0
     ),
     INFUSION(

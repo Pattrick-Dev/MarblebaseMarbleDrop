@@ -217,7 +217,7 @@ public final class MdConfig {
      * Dust for a given 0-indexed finish place, tapered off from baseDust by
      * races.scheduled.place-dust-percentages (e.g. [100, 50, 25] pays 1st
      * place in full, 2nd half, 3rd a quarter). Places beyond the configured
-     * list earn nothing -- this is what stops one player snowballing further
+     * list earn nothing - this is what stops one player snowballing further
      * ahead every race just by always placing 1st.
      */
     public int scheduledRaceDustForPlace(int baseDust, int placeIndex) {

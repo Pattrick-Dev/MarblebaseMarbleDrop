@@ -14,7 +14,7 @@ import java.io.IOException;
  * display (slot 0-8, row-major, top-left to bottom-right as viewed from
  * in front of the frames), persisted to tutorial-craft-frames.yml.
  * Populated in one shot via /md tutorial setcraftframes from a
- * WorldEdit/FAWE selection -- see TutorialCraftFrameManager.setupFromSelection.
+ * WorldEdit/FAWE selection - see TutorialCraftFrameManager.setupFromSelection.
  */
 public final class TutorialCraftFrameStore {
 

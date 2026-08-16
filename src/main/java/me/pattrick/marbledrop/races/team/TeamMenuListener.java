@@ -67,7 +67,7 @@ public final class TeamMenuListener implements Listener {
     private void handleMemberClick(Player p, int slot, ClickType ct) {
         String name = mgr.getMemberName(p, slot);
 
-        // Slot not yet named — prompt for name regardless of click type
+        // Slot not yet named  -  prompt for name regardless of click type
         if (name.isEmpty()) {
             promptChat(p, new Pending(State.MEMBER_NAME, slot),
                     ChatColor.YELLOW + "Type athlete " + (slot + 1) + " name (max 24 chars), or 'cancel':");

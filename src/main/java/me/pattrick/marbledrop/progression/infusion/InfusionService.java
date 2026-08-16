@@ -66,7 +66,7 @@ public final class InfusionService {
 
         if (player.getInventory().firstEmpty() == -1) {
             player.getWorld().dropItemNaturally(player.getLocation(), result);
-            player.sendMessage(ChatColor.GRAY + "Your inventory is full — the infused marble dropped at your feet.");
+            player.sendMessage(ChatColor.GRAY + "Your inventory is full  -  the infused marble dropped at your feet.");
         } else {
             player.getInventory().addItem(result);
         }
@@ -79,7 +79,7 @@ public final class InfusionService {
 
     /**
      * Produce the infused marble ItemStack, soft-skewed by the given
-     * catalyst (rarity value/bias, stat affinity, team bias -- see
+     * catalyst (rarity value/bias, stat affinity, team bias - see
      * CatalystProfile). Pass CatalystProfile.EMPTY (or null) for no catalyst.
      *
      * Returns null if failed (and refunds dust if dust was taken).

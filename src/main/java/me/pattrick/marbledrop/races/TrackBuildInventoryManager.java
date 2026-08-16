@@ -12,12 +12,12 @@ import java.util.UUID;
 /**
  * Tracks who's currently in track "build mode" and which track they're
  * building, and hides their real inventory behind a packet-only overlay
- * for the duration -- see RaceInventoryOverlay, the same mechanism
+ * for the duration - see RaceInventoryOverlay, the same mechanism
  * already used to fake the race Boost/Glow items.
  * <p>
  * The real inventory is never touched: not cleared, not read, not
  * written anywhere. There is nothing to save, nothing to persist to
- * disk, and nothing that can ever be lost -- logging out, crashing, or
+ * disk, and nothing that can ever be lost - logging out, crashing, or
  * the server restarting mid-build all just mean the overlay quietly
  * stops applying to that connection; the player's actual inventory was
  * sitting there untouched the entire time and is exactly what they see
@@ -25,7 +25,7 @@ import java.util.UUID;
  * <p>
  * Requires ProtocolLib. Without it (overlay == null), build mode falls
  * back to handing out real kit items alongside whatever's already in the
- * player's inventory -- no hiding, but also nothing to lose, the same
+ * player's inventory - no hiding, but also nothing to lose, the same
  * softly-optional pattern as RaceBoostListener/RaceGlowListener.
  */
 public final class TrackBuildInventoryManager implements Listener {
@@ -39,7 +39,7 @@ public final class TrackBuildInventoryManager implements Listener {
         this.overlay = overlay;
     }
 
-    /** Nullable -- see the class javadoc. Null means ProtocolLib isn't installed and kit tools fall back to real items. */
+    /** Nullable - see the class javadoc. Null means ProtocolLib isn't installed and kit tools fall back to real items. */
     public RaceInventoryOverlay overlay() {
         return overlay;
     }
@@ -55,7 +55,7 @@ public final class TrackBuildInventoryManager implements Listener {
 
     /**
      * Marks {@code p} as building {@code trackId} and, if ProtocolLib is
-     * available, hides their real inventory behind the overlay -- a
+     * available, hides their real inventory behind the overlay - a
      * no-op on the hide step if they were already building something
      * (switching tracks mid-session, or topping up a lost tool, doesn't
      * need a second hide).

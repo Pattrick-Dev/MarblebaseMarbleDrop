@@ -15,11 +15,11 @@ import org.bukkit.persistence.PersistentDataType;
 import java.util.List;
 
 /**
- * Per-marble display customization -- right-click your own placed marble
+ * Per-marble display customization - right-click your own placed marble
  * to toggle whether THAT specific one shows a hologram and/or particles
  * (see MarbleDisplayAmbient, MarbleDisplayMenuListener). Settings live
  * directly on the block's own PersistentDataContainer
- * (SHOW_HOLOGRAM/SHOW_PARTICLES), not a separate registry -- the block is
+ * (SHOW_HOLOGRAM/SHOW_PARTICLES), not a separate registry - the block is
  * already the natural per-marble storage, same as PLACED_BY/PLACED_NAME.
  * Both default to enabled when absent (a marble placed before this
  * existed, or freshly placed, has neither key set yet).

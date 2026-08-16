@@ -173,7 +173,7 @@ public class CommandKitTabCompletion implements TabCompleter {
       List<String> dustAdminSubs = new ArrayList<>();
       dustAdminSubs.add("give");
       dustAdminSubs.add("remove");
-      dustAdminSubs.add("take"); // alias for remove -- see DustAdminCommand
+      dustAdminSubs.add("take"); // alias for remove - see DustAdminCommand
       dustAdminSubs.add("set");
 
       return filterStartsWith(dustAdminSubs, args[2]);

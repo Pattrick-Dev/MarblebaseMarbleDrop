@@ -2,6 +2,7 @@ package me.pattrick.marbledrop;
 
 import me.pattrick.marbledrop.command.Commands;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationCommand;
+import me.pattrick.marbledrop.races.ScheduledRaceManager;
 import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
@@ -20,7 +21,7 @@ import java.io.File;
 
 /**
  * Routes /md, /tasks, and /recipes to their per-feature CommandExecutor.
- * Pure dispatch -- every actual check (player-only, permission) lives in
+ * Pure dispatch - every actual check (player-only, permission) lives in
  * the target command itself now, not duplicated here. An earlier version
  * re-checked "is this sender a player" before delegating to nearly every
  * route, even though the target command almost always re-checked it too;
@@ -45,6 +46,7 @@ public class CommandKit implements CommandExecutor {
     private final CommandExecutor teamCommand;
     private final CommandExecutor tutorialCommand;
     private final CommandExecutor recipesCommand;
+    private final ScheduledRaceManager scheduledRaceManager;
 
     private final File filePath;
     private FileConfiguration config;
@@ -63,7 +65,8 @@ public class CommandKit implements CommandExecutor {
             CommandExecutor raceCommand,
             CommandExecutor teamCommand,
             CommandExecutor tutorialCommand,
-            CommandExecutor recipesCommand
+            CommandExecutor recipesCommand,
+            ScheduledRaceManager scheduledRaceManager
     ) {
 
         this.plugin = plugin;
@@ -81,6 +84,7 @@ public class CommandKit implements CommandExecutor {
         this.teamCommand = teamCommand;
         this.tutorialCommand = tutorialCommand;
         this.recipesCommand = recipesCommand;
+        this.scheduledRaceManager = scheduledRaceManager;
 
         this.filePath = new File(plugin.getDataFolder(), "config.yml");
         this.config = YamlConfiguration.loadConfiguration(this.filePath);
@@ -124,7 +128,15 @@ public class CommandKit implements CommandExecutor {
             }
 
             case "team" -> {
-                return teamCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
+                // Temporarily disabled - the re-issue button in this GUI
+                // (TeamMenuListener#handleMemberClick, SHIFT_LEFT branch)
+                // hands out a fresh marble without reclaiming the
+                // previously issued one, so it's an unlimited free-marble
+                // exploit right now. Re-enable once that's fixed.
+                if (sender instanceof Player p) {
+                    p.sendMessage(ChatColor.RED + "/md team is temporarily disabled.");
+                }
+                return true;
             }
 
             case "race", "races" -> {
@@ -179,6 +191,12 @@ public class CommandKit implements CommandExecutor {
                 if (mdConfig != null) mdConfig.reload();
                 this.config = YamlConfiguration.loadConfiguration(this.filePath);
 
+                // If a daily-time just got added that's sooner than whatever
+                // the currently-open scheduled race window is counting down
+                // to, pull it in to match instead of leaving it stuck
+                // counting down to the stale time - see the method javadoc.
+                if (scheduledRaceManager != null) scheduledRaceManager.onConfigReloaded();
+
                 sender.sendMessage(ChatColor.GREEN + "MarbleDrop config reloaded.");
                 return true;
             }
@@ -200,7 +218,7 @@ public class CommandKit implements CommandExecutor {
             }
 
             // Deliberately silent (no message) on failure, unlike every
-            // other subcommand here -- this is a raw PDC inspector for
+            // other subcommand here - this is a raw PDC inspector for
             // devs, not something worth announcing the existence of to
             // whoever's poking at commands they don't have.
             case "pdc" -> {

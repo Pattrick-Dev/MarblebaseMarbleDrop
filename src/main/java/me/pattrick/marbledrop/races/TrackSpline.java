@@ -16,7 +16,7 @@ import java.util.List;
  * Used both to answer, for a given world (x, z), "how far along the track
  * is that" (see project()), and as the centerline MarbleRunner's forward
  * progress is measured against and its lateral clearance is sampled from
- * (see isWallAt()/measureClearance()/measureWidthAt() below) -- forward
+ * (see isWallAt()/measureClearance()/measureWidthAt() below) - forward
  * progress itself never depends on any of this, only cosmetic placement
  * does, so a marble can never physically wedge against real geometry.
  */
@@ -29,7 +29,7 @@ public final class TrackSpline {
 
     public static final double MARBLE_RADIUS = 0.18; // roughly how much visual space a marble occupies, for grid spacing/separation
 
-    // How far above a sampled point to check for solid blocks -- two heights
+    // How far above a sampled point to check for solid blocks - two heights
     // to catch typical wall heights without being tripped up by ankle-high
     // lips in the track.
     private static final double WALL_SCAN_HEIGHT_LOW = 0.30;
@@ -62,6 +62,9 @@ public final class TrackSpline {
     // Catmull-Rom evaluation
     // --------------------------------------------------------------
 
+    // Centripetal (alpha=0.5), not uniform - see evaluateCatmullRom() for why.
+    private static final double CATMULL_ROM_ALPHA = 0.5;
+
     private static List<Location> evaluateCatmullRom(List<Location> raw) {
         int n = raw.size();
 
@@ -80,11 +83,28 @@ public final class TrackSpline {
             Location p2 = padded.get(k + 2);
             Location p3 = padded.get(k + 3);
 
+            // Knot spacing from actual inter-point distance (raised to
+            // CATMULL_ROM_ALPHA), not a fixed 0..1 per segment - uniform
+            // parameterization assumes every segment takes the same "time"
+            // to traverse regardless of how far apart the real waypoints
+            // are, which is what let the curve overshoot past a waypoint
+            // and swing back on itself whenever waypoints ended up unevenly
+            // spaced (exactly what walking-and-placing them produces) -
+            // reads in-race as a marble zipping out to a point and back
+            // instead of rolling straight through it. Centripetal spacing
+            // (this) is the standard fix: it's guaranteed cusp/loop-free
+            // for any point placement.
+            double t0 = 0;
+            double t1 = t0 + Math.pow(p0.distance(p1), CATMULL_ROM_ALPHA);
+            double t2 = t1 + Math.pow(p1.distance(p2), CATMULL_ROM_ALPHA);
+            double t3 = t2 + Math.pow(p2.distance(p3), CATMULL_ROM_ALPHA);
+
             boolean lastSegment = (k == n - 2);
             int steps = lastSegment ? SUBDIVISIONS_PER_SEGMENT + 1 : SUBDIVISIONS_PER_SEGMENT;
             for (int s = 0; s < steps; s++) {
-                double t = (double) s / SUBDIVISIONS_PER_SEGMENT;
-                dense.add(catmullRomPoint(p0, p1, p2, p3, t));
+                double frac = (double) s / SUBDIVISIONS_PER_SEGMENT;
+                double t = t1 + frac * (t2 - t1);
+                dense.add(catmullRomPoint(p0, p1, p2, p3, t0, t1, t2, t3, t));
             }
         }
         return dense;
@@ -97,19 +117,31 @@ public final class TrackSpline {
         return new Location(to.getWorld(), x, y, z);
     }
 
-    private static Location catmullRomPoint(Location p0, Location p1, Location p2, Location p3, double t) {
-        double t2 = t * t, t3 = t2 * t;
-        double x = catmullRom1D(p0.getX(), p1.getX(), p2.getX(), p3.getX(), t, t2, t3);
-        double y = catmullRom1D(p0.getY(), p1.getY(), p2.getY(), p3.getY(), t, t2, t3);
-        double z = catmullRom1D(p0.getZ(), p1.getZ(), p2.getZ(), p3.getZ(), t, t2, t3);
+    /** Barry-Goldman recursive interpolation for non-uniform (centripetal) Catmull-Rom, evaluated per axis. */
+    private static Location catmullRomPoint(Location p0, Location p1, Location p2, Location p3,
+                                              double t0, double t1, double t2, double t3, double t) {
+        double x = catmullRom1D(p0.getX(), p1.getX(), p2.getX(), p3.getX(), t0, t1, t2, t3, t);
+        double y = catmullRom1D(p0.getY(), p1.getY(), p2.getY(), p3.getY(), t0, t1, t2, t3, t);
+        double z = catmullRom1D(p0.getZ(), p1.getZ(), p2.getZ(), p3.getZ(), t0, t1, t2, t3, t);
         return new Location(p1.getWorld(), x, y, z);
     }
 
-    private static double catmullRom1D(double p0, double p1, double p2, double p3, double t, double t2, double t3) {
-        return 0.5 * ((2 * p1)
-                + (-p0 + p2) * t
-                + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2
-                + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+    private static double catmullRom1D(double p0, double p1, double p2, double p3,
+                                        double t0, double t1, double t2, double t3, double t) {
+        double a1 = lerp1D(p0, p1, t0, t1, t);
+        double a2 = lerp1D(p1, p2, t1, t2, t);
+        double a3 = lerp1D(p2, p3, t2, t3, t);
+        double b1 = lerp1D(a1, a2, t0, t2, t);
+        double b2 = lerp1D(a2, a3, t1, t3, t);
+        return lerp1D(b1, b2, t1, t2, t);
+    }
+
+    // Guards ta==tb (coincident source points, or a degenerate padded
+    // segment) by just holding v0 instead of dividing by ~0.
+    private static double lerp1D(double v0, double v1, double ta, double tb, double t) {
+        double denom = tb - ta;
+        if (denom < 1e-9) return v0;
+        return v0 + (v1 - v0) * (t - ta) / denom;
     }
 
     // --------------------------------------------------------------
@@ -203,8 +235,8 @@ public final class TrackSpline {
     /**
      * Evenly spaced starting-grid positions for `count` racers at the start of
      * this spline (s = 0), fanned out across `usableWidth` (centered on the
-     * centerline) and staggered into further-back rows -- offset behind the
-     * start line along the reverse tangent, not along the spline itself -- once
+     * centerline) and staggered into further-back rows - offset behind the
+     * start line along the reverse tangent, not along the spline itself - once
      * a row is full, so racers never spawn overlapping and jamming each other.
      */
     public List<Location> startingGrid(int count, double usableWidth, double spacing) {
@@ -233,7 +265,7 @@ public final class TrackSpline {
         return out;
     }
 
-    /** True if a solid block sits at (x, z) near floorY -- real Minecraft geometry, not a simulated collider. */
+    /** True if a solid block sits at (x, z) near floorY - real Minecraft geometry, not a simulated collider. */
     public static boolean isWallAt(World world, double x, double floorY, double z) {
         if (world == null) return false;
         int bx = (int) Math.floor(x);
@@ -313,7 +345,7 @@ public final class TrackSpline {
         }
 
         if (hintIdx >= 0 && bestDistSq > REPROJECT_THRESHOLD * REPROJECT_THRESHOLD) {
-            return project(x, z, -1); // fell outside the search window -- fall back to a full scan once
+            return project(x, z, -1); // fell outside the search window - fall back to a full scan once
         }
         return bestS;
     }
