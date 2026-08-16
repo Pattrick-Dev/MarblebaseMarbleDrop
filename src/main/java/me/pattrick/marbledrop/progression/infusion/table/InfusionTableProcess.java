@@ -470,7 +470,17 @@ public final class InfusionTableProcess {
                                 .append(rarityComp)
                                 .append(Component.text(" marble!", NamedTextColor.GRAY));
 
-                Bukkit.broadcast(msg);
+                // Bukkit.broadcast() only reaches players holding
+                // bukkit.broadcast.user - true by default, but silently
+                // scoped down by some permissions setups, which made this
+                // look like it was only ever reaching the finder. Looping
+                // over online players directly (same as
+                // ScheduledRaceManager/RaceManager's own broadcasts)
+                // guarantees everyone actually sees it.
+                for (Player viewer : Bukkit.getOnlinePlayers()) {
+                    viewer.sendMessage(msg);
+                }
+                Bukkit.getConsoleSender().sendMessage(msg);
             }
 
             private void finish(boolean giveItem) {

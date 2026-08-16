@@ -39,6 +39,7 @@ import me.pattrick.marbledrop.tutorial.TutorialRecyclerHook;
 import me.pattrick.marbledrop.tutorial.TutorialTabListPrivacy;
 import me.pattrick.marbledrop.tutorial.TutorialTasksHandler;
 import me.pattrick.marbledrop.tutorial.TutorialUpgradeHook;
+import me.pattrick.marbledrop.update.UpdateChecker;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -47,6 +48,9 @@ import java.io.IOException;
 public class Main extends JavaPlugin {
 
     private MdConfig mdConfig;
+
+    // update checker
+    private UpdateChecker updateChecker;
 
     // racing
     private TrackVisualizer trackVisualizer;
@@ -98,6 +102,11 @@ public class Main extends JavaPlugin {
         // -------------------- Config --------------------
         saveDefaultConfig();
         mdConfig = new MdConfig(this);
+
+        // -------------------- Update checker --------------------
+        updateChecker = new UpdateChecker(this, mdConfig, getFile().getName());
+        getServer().getPluginManager().registerEvents(updateChecker, this);
+        updateChecker.start();
 
         // -------------------- Init marble keys --------------------
         MarbleKeys.init(this);
@@ -403,7 +412,8 @@ public class Main extends JavaPlugin {
                 teamCommand,
                 tutorialCommand,
                 recipesCommand,
-                scheduledRaceManager
+                scheduledRaceManager,
+                updateChecker
         );
 
         CommandKitTabCompletion mdTabCompletion = new CommandKitTabCompletion(trackManager);
@@ -454,6 +464,11 @@ public class Main extends JavaPlugin {
 
     @Override
     public void onDisable() {
+
+        if (updateChecker != null) {
+            updateChecker.stop();
+            updateChecker = null;
+        }
 
         if (tutorialPoller != null) {
             tutorialPoller.stop();

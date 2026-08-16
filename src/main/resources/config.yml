@@ -1,6 +1,11 @@
 debug:
   enabled: false
 
+update-checker:
+  enabled: true               # check GitHub Releases for a newer build than this one, and stage it for the next restart
+  check-interval-hours: 6     # how often to check
+  notify-ops: true            # tell online ops in chat once an update has been downloaded and staged
+
 discord:
   webhook-url: ""             # paste a Discord channel webhook URL here to enable scheduled-race status posts; blank = disabled
   update-interval-seconds: 20 # how often the countdown message is edited while a race is open (keep this reasonable - Discord will rate-limit edits that are too frequent)

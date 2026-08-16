@@ -1,6 +1,6 @@
 name: MarbleBaseMD
 main: me.pattrick.marbledrop.Main
-version: 1.0
+version: ${project.version}
 api-version: "26.2"
 softdepend: [WorldEdit, FastAsyncWorldEdit, ProtocolLib]
 commands:

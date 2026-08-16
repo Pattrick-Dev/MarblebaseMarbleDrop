@@ -3,6 +3,7 @@ package me.pattrick.marbledrop;
 import me.pattrick.marbledrop.command.Commands;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationCommand;
 import me.pattrick.marbledrop.races.ScheduledRaceManager;
+import me.pattrick.marbledrop.update.UpdateChecker;
 import org.bukkit.ChatColor;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
@@ -47,6 +48,7 @@ public class CommandKit implements CommandExecutor {
     private final CommandExecutor tutorialCommand;
     private final CommandExecutor recipesCommand;
     private final ScheduledRaceManager scheduledRaceManager;
+    private final UpdateChecker updateChecker;
 
     private final File filePath;
     private FileConfiguration config;
@@ -66,7 +68,8 @@ public class CommandKit implements CommandExecutor {
             CommandExecutor teamCommand,
             CommandExecutor tutorialCommand,
             CommandExecutor recipesCommand,
-            ScheduledRaceManager scheduledRaceManager
+            ScheduledRaceManager scheduledRaceManager,
+            UpdateChecker updateChecker
     ) {
 
         this.plugin = plugin;
@@ -85,6 +88,7 @@ public class CommandKit implements CommandExecutor {
         this.tutorialCommand = tutorialCommand;
         this.recipesCommand = recipesCommand;
         this.scheduledRaceManager = scheduledRaceManager;
+        this.updateChecker = updateChecker;
 
         this.filePath = new File(plugin.getDataFolder(), "config.yml");
         this.config = YamlConfiguration.loadConfiguration(this.filePath);
@@ -196,8 +200,20 @@ public class CommandKit implements CommandExecutor {
                 // to, pull it in to match instead of leaving it stuck
                 // counting down to the stale time - see the method javadoc.
                 if (scheduledRaceManager != null) scheduledRaceManager.onConfigReloaded();
+                if (updateChecker != null) updateChecker.onConfigReloaded();
 
                 sender.sendMessage(ChatColor.GREEN + "MarbleDrop config reloaded.");
+                return true;
+            }
+
+            case "update" -> {
+                if (!Commands.requireAdmin(sender)) return true;
+                if (updateChecker == null) {
+                    sender.sendMessage(ChatColor.RED + "Update checker isn't available.");
+                    return true;
+                }
+                sender.sendMessage(ChatColor.GRAY + "Checking GitHub for a newer version...");
+                updateChecker.checkNowFor(sender);
                 return true;
             }
 
@@ -277,6 +293,7 @@ public class CommandKit implements CommandExecutor {
                     ChatColor.DARK_GREEN + "/md team\n" +
                     ChatColor.DARK_GREEN + "/md tutorial\n" +
                     ChatColor.DARK_GREEN + "/md reload\n" +
+                    ChatColor.DARK_GREEN + "/md update\n" +
                     ChatColor.DARK_GREEN + "/md debug\n" +
                     ChatColor.DARK_GREEN + "/md pdc");
         } else {

@@ -133,6 +133,7 @@ public class CommandKitTabCompletion implements TabCompleter {
         base.add("recycle");
 
         base.add("reload");
+        base.add("update");
         base.add("debug");
         base.add("pdc");
       }

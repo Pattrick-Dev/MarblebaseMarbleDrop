@@ -26,6 +26,10 @@ public final class MdConfig {
     // ---- cached values ----
     private boolean debugEnabled;
 
+    private boolean updateCheckerEnabled;
+    private int updateCheckerIntervalHours;
+    private boolean updateCheckerNotifyOps;
+
     private String discordWebhookUrl;
     private int discordUpdateIntervalSeconds;
 
@@ -74,6 +78,10 @@ public final class MdConfig {
         FileConfiguration c = plugin.getConfig();
 
         debugEnabled = c.getBoolean("debug.enabled", false);
+
+        updateCheckerEnabled = c.getBoolean("update-checker.enabled", true);
+        updateCheckerIntervalHours = Math.max(1, c.getInt("update-checker.check-interval-hours", 6));
+        updateCheckerNotifyOps = c.getBoolean("update-checker.notify-ops", true);
 
         discordWebhookUrl = c.getString("discord.webhook-url", "");
         discordUpdateIntervalSeconds = c.getInt("discord.update-interval-seconds", 20);
@@ -202,6 +210,10 @@ public final class MdConfig {
 
     // ---- getters ----
     public boolean debugEnabled() { return debugEnabled; }
+
+    public boolean updateCheckerEnabled() { return updateCheckerEnabled; }
+    public int updateCheckerIntervalHours() { return updateCheckerIntervalHours; }
+    public boolean updateCheckerNotifyOps() { return updateCheckerNotifyOps; }
 
     public String discordWebhookUrl() { return discordWebhookUrl; }
     public int discordUpdateIntervalSeconds() { return discordUpdateIntervalSeconds; }
