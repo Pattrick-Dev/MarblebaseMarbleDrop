@@ -88,15 +88,16 @@ public final class InfusionTableMenu {
                 ? (ChatColor.DARK_GRAY + "Nothing")
                 : (ChatColor.YELLOW + "" + cat.getAmount() + " " + prettyName(cat));
 
-        int cappedValue = Math.min(profile.rarityValue(), CatalystProfile.MAX_RARITY_VALUE);
+        double cappedValue = Math.min(profile.rarityValue(), CatalystProfile.MAX_RARITY_VALUE);
+        long roundedCappedValue = Math.round(cappedValue);
 
         List<String> infoLore = new ArrayList<>(List.of(
                 ChatColor.GRAY + "Dust Balance: " + ChatColor.YELLOW + balance,
                 ChatColor.GRAY + "Dust Amount: " + ChatColor.YELLOW + dustAmount,
                 "",
                 ChatColor.GRAY + "Catalyst: " + catName,
-                ChatColor.GRAY + "Catalyst Value: " + ChatColor.YELLOW + cappedValue
-                        + ChatColor.GRAY + " / " + ChatColor.YELLOW + CatalystProfile.MAX_RARITY_VALUE + ChatColor.GRAY + " cap",
+                ChatColor.GRAY + "Catalyst Value: " + ChatColor.YELLOW + CatalystProfile.format(cappedValue)
+                        + ChatColor.GRAY + " / " + ChatColor.YELLOW + CatalystProfile.format(CatalystProfile.MAX_RARITY_VALUE),
                 ChatColor.GRAY + "Will Consume: " + willConsume
         ));
 
@@ -116,7 +117,7 @@ public final class InfusionTableMenu {
         }
 
         infoLore.add("");
-        infoLore.add(ChatColor.GRAY + "Total Value: " + ChatColor.GOLD + (dustAmount + cappedValue));
+        infoLore.add(ChatColor.GRAY + "Total Value: " + ChatColor.GOLD + (dustAmount + roundedCappedValue));
         infoLore.add("");
         infoLore.add(ChatColor.DARK_GRAY + "Put a crafting material in the");
         infoLore.add(ChatColor.DARK_GRAY + "center slot to boost the infusion");

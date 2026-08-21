@@ -58,9 +58,9 @@ public final class MdConfig {
     private int scheduledRaceAiShowCount;
     private List<LocalTime> scheduledRaceDailyTimes = List.of();
 
-    private int catalystDefaultPerItem;
+    private double catalystDefaultPerItem;
     private double catalystTeamBiasChance;
-    private final EnumMap<Material, Integer> catalystMaterialValues = new EnumMap<>(Material.class);
+    private final EnumMap<Material, Double> catalystMaterialValues = new EnumMap<>(Material.class);
     private final EnumMap<Material, EnumSet<MarbleStat>> catalystStatAffinity = new EnumMap<>(Material.class);
 
     public MdConfig(JavaPlugin plugin) {
@@ -128,7 +128,7 @@ public final class MdConfig {
         animBobSpeed = c.getDouble("infusion.animation.bob.speed", 0.22);
         animStartingTurns = c.getDouble("infusion.animation.spin.starting-turns", 7.0);
 
-        catalystDefaultPerItem = c.getInt("infusion.catalyst.default-per-item", 10);
+        catalystDefaultPerItem = c.getDouble("infusion.catalyst.default-per-item", 1.0);
         catalystTeamBiasChance = c.getDouble("infusion.catalyst.team-bias-chance", 0.5);
 
         // material values
@@ -142,7 +142,7 @@ public final class MdConfig {
                     plugin.getLogger().warning("[Config] Unknown material in infusion.catalyst.values: " + key);
                     continue;
                 }
-                int v = valuesSec.getInt(key, catalystDefaultPerItem);
+                double v = valuesSec.getDouble(key, catalystDefaultPerItem);
                 catalystMaterialValues.put(mat, v);
             }
         }
@@ -224,9 +224,9 @@ public int infusionAnimRevealEarlyTicks() { return animRevealEarlyTicks; }
     public double infusionAnimBobSpeed() { return animBobSpeed; }
     public double infusionAnimStartingTurns() { return animStartingTurns; }
 
-    public int catalystDefaultPerItem() { return catalystDefaultPerItem; }
+    public double catalystDefaultPerItem() { return catalystDefaultPerItem; }
 
-    public int catalystMaterialValue(Material mat) {
+    public double catalystMaterialValue(Material mat) {
         if (mat == null) return 0;
         return catalystMaterialValues.getOrDefault(mat, catalystDefaultPerItem);
     }

@@ -26,7 +26,7 @@ import java.util.Map;
  * can never spend more than the cap can actually use.
  */
 public record CatalystProfile(
-        int rarityValue,
+        double rarityValue,
         Map<MarbleStat, Double> statAffinity
 ) {
 
@@ -41,7 +41,7 @@ public record CatalystProfile(
      * this to refuse placing a catalyst worth more than the cap, so
      * players don't waste an expensive item for no extra benefit.
      */
-    public static final int MAX_RARITY_VALUE = 150;
+    public static final double MAX_RARITY_VALUE = 150;
 
     public static CatalystProfile of(ItemStack item) {
         if (item == null || item.getType().isAir()) return EMPTY;
@@ -53,8 +53,12 @@ public record CatalystProfile(
 
         // Value scales with the whole stack - InfusionTableMenu#confirm
         // consumes the entire stack placed in the slot (not just 1 item),
-        // so this has to match what actually gets spent.
-        int perItem = cfg != null ? cfg.catalystMaterialValue(item.getType()) : 10;
+        // so this has to match what actually gets spent. Every material has
+        // a value (config.yml's default-per-item is the floor for anything
+        // not individually listed there) - values are deliberately fine
+        // grained (decimals) so junk materials can be priced far enough
+        // below useful ones that stacking them never approaches the cap.
+        double perItem = cfg != null ? cfg.catalystMaterialValue(item.getType()) : 1;
 
         Map<MarbleStat, Double> affinity = new EnumMap<>(MarbleStat.class);
         if (cfg != null) {
@@ -79,12 +83,17 @@ public record CatalystProfile(
             return "Marbles can't be used as catalysts.";
         }
 
-        int raw = of(item).rarityValue();
+        double raw = of(item).rarityValue();
         if (raw > MAX_RARITY_VALUE) {
-            return "That stack is worth " + raw + ", but the cap is "
-                    + MAX_RARITY_VALUE + " - the extra value would be wasted. Use fewer items or a cheaper material.";
+            return "That stack is worth " + format(raw) + ", but the cap is "
+                    + format(MAX_RARITY_VALUE) + " - the extra value would be wasted. Use fewer items or a cheaper material.";
         }
 
         return null;
+    }
+
+    /** Trims a decimal value to at most 1 decimal place, dropping it entirely when whole (e.g. 12.5, but 12 not 12.0). */
+    public static String format(double value) {
+        return (value == Math.rint(value)) ? String.valueOf((long) value) : String.format(java.util.Locale.ROOT, "%.1f", value);
     }
 }

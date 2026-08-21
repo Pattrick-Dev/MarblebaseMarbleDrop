@@ -101,12 +101,14 @@ public final class InfusionService {
         int cap = cfgInt("infusion.daily-cap", 0);
         boolean bypass = player.isOp() || player.hasPermission(PERM_BYPASS_INFUSION_LIMIT);
 
-        if (cap > 0 && !bypass) {
-            int used = getInfusionsUsedToday(player);
-            if (used >= cap) {
-                player.sendMessage(ChatColor.RED + "You have reached your daily infusion limit (" + cap + ").");
-                return null;
-            }
+        // Tracked regardless of cap/bypass - RarityRoller uses this to taper the
+        // top band's odds down on repeated same-day hits (see below), which is
+        // independent of whether the hard daily cap is even enabled.
+        int usedToday = getInfusionsUsedToday(player);
+
+        if (cap > 0 && !bypass && usedToday >= cap) {
+            player.sendMessage(ChatColor.RED + "You have reached your daily infusion limit (" + cap + ").");
+            return null;
         }
 
         // Take dust AFTER cap check
@@ -123,10 +125,10 @@ public final class InfusionService {
         // and/or sustained attunement can push past what a catalyst alone gives.
         // (InfusionTableListener already refuses to let an over-cap stack sit in
         // the slot at all - this clamp is a defense-in-depth backstop.)
-        int catalystContribution = Math.min(Math.max(0, catalyst.rarityValue()), CatalystProfile.MAX_RARITY_VALUE);
+        int catalystContribution = (int) Math.round(Math.min(Math.max(0, catalyst.rarityValue()), CatalystProfile.MAX_RARITY_VALUE));
         int effective = amount + attunement + catalystContribution;
 
-        MarbleRarity rarity = RarityRoller.roll(effective);
+        MarbleRarity rarity = RarityRoller.roll(effective, usedToday);
 
         // Update attunement (hidden pity)
         int newAttunement = attunement;
@@ -211,9 +213,11 @@ public final class InfusionService {
             taskManager.increment(player, TaskTrigger.INFUSE_MARBLE, 1);
         }
 
-        // increment daily infusion count ONLY on success (and do not increment for bypass users)
+        // Always increment on success (even for bypass/unlimited-cap players) - the
+        // top-band taper above depends on this regardless of whether the hard cap
+        // is enforced. Only show the "X/Y" message when the cap is actually active.
+        incrementInfusionsUsedToday(player);
         if (cap > 0 && !bypass) {
-            incrementInfusionsUsedToday(player);
             int usedNow = getInfusionsUsedToday(player);
             player.sendMessage(ChatColor.GRAY + "Infusions today: " + ChatColor.YELLOW + usedNow + ChatColor.GRAY + "/" + ChatColor.YELLOW + cap);
         }
