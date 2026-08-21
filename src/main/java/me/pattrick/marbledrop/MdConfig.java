@@ -1,6 +1,5 @@
 package me.pattrick.marbledrop;
 
-import me.pattrick.marbledrop.marble.MarbleRarity;
 import me.pattrick.marbledrop.marble.MarbleStat;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -18,8 +17,6 @@ import java.util.Locale;
 import java.util.Map;
 
 public final class MdConfig {
-
-    public record Range(int min, int max) {}
 
     private final JavaPlugin plugin;
 
@@ -61,11 +58,9 @@ public final class MdConfig {
     private int scheduledRaceAiShowCount;
     private List<LocalTime> scheduledRaceDailyTimes = List.of();
 
-    private boolean catalystMarbleStatBased;
     private int catalystDefaultPerItem;
     private double catalystTeamBiasChance;
     private final EnumMap<Material, Integer> catalystMaterialValues = new EnumMap<>(Material.class);
-    private final EnumMap<MarbleRarity, Range> marbleValueRange = new EnumMap<>(MarbleRarity.class);
     private final EnumMap<Material, EnumSet<MarbleStat>> catalystStatAffinity = new EnumMap<>(Material.class);
 
     public MdConfig(JavaPlugin plugin) {
@@ -133,7 +128,6 @@ public final class MdConfig {
         animBobSpeed = c.getDouble("infusion.animation.bob.speed", 0.22);
         animStartingTurns = c.getDouble("infusion.animation.spin.starting-turns", 7.0);
 
-        catalystMarbleStatBased = c.getBoolean("infusion.catalyst.marble-stat-based", true);
         catalystDefaultPerItem = c.getInt("infusion.catalyst.default-per-item", 10);
         catalystTeamBiasChance = c.getDouble("infusion.catalyst.team-bias-chance", 0.5);
 
@@ -151,34 +145,6 @@ public final class MdConfig {
                 int v = valuesSec.getInt(key, catalystDefaultPerItem);
                 catalystMaterialValues.put(mat, v);
             }
-        }
-
-        // rarity ranges
-        marbleValueRange.clear();
-        ConfigurationSection rangeSec = c.getConfigurationSection("infusion.catalyst.marble-value-range");
-        if (rangeSec != null) {
-            for (String key : rangeSec.getKeys(false)) {
-                MarbleRarity rarity = parseRarity(key);
-                if (rarity == null) {
-                    plugin.getLogger().warning("[Config] Unknown rarity in infusion.catalyst.marble-value-range: " + key);
-                    continue;
-                }
-                ConfigurationSection r = rangeSec.getConfigurationSection(key);
-                if (r == null) continue;
-
-                int min = r.getInt("min", defaultMin(rarity));
-                int max = r.getInt("max", defaultMax(rarity));
-                if (max < min) {
-                    plugin.getLogger().warning("[Config] marble-value-range " + key + " has max < min. Swapping.");
-                    int t = min; min = max; max = t;
-                }
-                marbleValueRange.put(rarity, new Range(min, max));
-            }
-        }
-
-        // ensure defaults exist even if config omits them
-        for (MarbleRarity r : MarbleRarity.values()) {
-            marbleValueRange.putIfAbsent(r, new Range(defaultMin(r), defaultMax(r)));
         }
 
         // stat affinity (which stats a material catalyst biases upward)
@@ -258,17 +224,11 @@ public int infusionAnimRevealEarlyTicks() { return animRevealEarlyTicks; }
     public double infusionAnimBobSpeed() { return animBobSpeed; }
     public double infusionAnimStartingTurns() { return animStartingTurns; }
 
-    public boolean catalystMarbleStatBased() { return catalystMarbleStatBased; }
     public int catalystDefaultPerItem() { return catalystDefaultPerItem; }
 
     public int catalystMaterialValue(Material mat) {
         if (mat == null) return 0;
         return catalystMaterialValues.getOrDefault(mat, catalystDefaultPerItem);
-    }
-
-    public Range marbleCatalystRange(MarbleRarity rarity) {
-        if (rarity == null) rarity = MarbleRarity.COMMON;
-        return marbleValueRange.getOrDefault(rarity, new Range(defaultMin(rarity), defaultMax(rarity)));
     }
 
     public double catalystTeamBiasChance() { return catalystTeamBiasChance; }
@@ -286,32 +246,4 @@ public int infusionAnimRevealEarlyTicks() { return animRevealEarlyTicks; }
         return ChatColor.translateAlternateColorCodes('&', s);
     }
 
-    private MarbleRarity parseRarity(String s) {
-        if (s == null) return null;
-        try {
-            return MarbleRarity.valueOf(s.trim().toUpperCase(Locale.ROOT));
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private int defaultMin(MarbleRarity r) {
-        return switch (r) {
-            case COMMON -> 8;
-            case UNCOMMON -> 12;
-            case RARE -> 18;
-            case EPIC -> 25;
-            case LEGENDARY -> 35;
-        };
-    }
-
-    private int defaultMax(MarbleRarity r) {
-        return switch (r) {
-            case COMMON -> 25;
-            case UNCOMMON -> 40;
-            case RARE -> 60;
-            case EPIC -> 85;
-            case LEGENDARY -> 120;
-        };
-    }
 }

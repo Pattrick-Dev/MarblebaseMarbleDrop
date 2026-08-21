@@ -17,62 +17,6 @@ public class RarityRoller {
     }
 
     /**
-     * Roll with optional marble catalyst rarity bias.
-     * Uses weighted odds + limited rerolls + small soft floor.
-     */
-    public static MarbleRarity roll(int effectiveValue, MarbleRarity catalystRarity) {
-        MarbleRarity best = rollBase(effectiveValue);
-
-        if (catalystRarity == null) {
-            return best;
-        }
-
-        // Catalyst should help, but not turn LEGENDARY into "common"
-        int extraRolls;
-        double floorChance;
-
-        switch (catalystRarity) {
-            case UNCOMMON -> {
-                extraRolls = 1;
-                floorChance = 0.20;
-            }
-            case RARE -> {
-                extraRolls = 1;
-                floorChance = 0.30;
-            }
-            case EPIC -> {
-                extraRolls = 2;
-                floorChance = 0.40;
-            }
-            case LEGENDARY -> {
-                extraRolls = 2;
-                floorChance = 0.50;
-            }
-            default -> {
-                extraRolls = 0;
-                floorChance = 0.0;
-            }
-        }
-
-        // Extra rerolls - take best result
-        for (int i = 0; i < extraRolls; i++) {
-            MarbleRarity rolled = rollBase(effectiveValue);
-            if (rolled.ordinal() > best.ordinal()) {
-                best = rolled;
-            }
-        }
-
-        // Soft rarity floor (small nudge, not a guarantee)
-        if (best.ordinal() < catalystRarity.ordinal()) {
-            if (RANDOM.nextDouble() < floorChance) {
-                best = catalystRarity;
-            }
-        }
-
-        return best;
-    }
-
-    /**
      * Core rarity roll logic (weighted, banded).
      * Weights are in basis points: 10000 = 100%
      */

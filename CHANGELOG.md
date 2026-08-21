@@ -18,8 +18,9 @@
 
 ## Infusion
 
-- Catalysts now actually influence what you get: a marble catalyst nudges the result toward its own team and stats, and material catalysts can boost specific stats.
-- The infusion table now shows what a catalyst will bias toward before you use it.
+- Marbles can no longer be used as catalysts - only crafting materials.
+- Catalysts now have a capped value shown right in the infusion table, so you always know exactly how much a catalyst (or stack of them) is worth before you use it - stacks worth more than the cap are refused instead of wasting the extra.
+- Rebalanced catalyst values across the board so catalysts can no longer buy the best odds outright.
 
 ## Tasks
 

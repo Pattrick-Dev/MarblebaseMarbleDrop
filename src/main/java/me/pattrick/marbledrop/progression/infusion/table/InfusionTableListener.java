@@ -1,6 +1,7 @@
 package me.pattrick.marbledrop.progression.infusion.table;
 
 import me.pattrick.marbledrop.progression.DustManager;
+import me.pattrick.marbledrop.progression.infusion.CatalystProfile;
 import me.pattrick.marbledrop.progression.infusion.InfusionService;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -89,7 +90,10 @@ public final class InfusionTableListener implements Listener {
 
                 Bukkit.getScheduler().runTask(
                         org.bukkit.plugin.java.JavaPlugin.getProvidingPlugin(getClass()),
-                        () -> menu.draw(player, top)
+                        () -> {
+                            enforceCatalystSlot(player, top);
+                            menu.draw(player, top);
+                        }
                 );
             }
             return;
@@ -103,7 +107,10 @@ public final class InfusionTableListener implements Listener {
             // Let the click happen, then redraw next tick so info updates
             Bukkit.getScheduler().runTask(
                     org.bukkit.plugin.java.JavaPlugin.getProvidingPlugin(getClass()),
-                    () -> menu.draw(player, top)
+                    () -> {
+                        enforceCatalystSlot(player, top);
+                        menu.draw(player, top);
+                    }
             );
             return;
         }
@@ -145,8 +152,32 @@ public final class InfusionTableListener implements Listener {
         Inventory top = e.getView().getTopInventory();
         Bukkit.getScheduler().runTask(
                 org.bukkit.plugin.java.JavaPlugin.getProvidingPlugin(getClass()),
-                () -> menu.draw(player, top)
+                () -> {
+                    enforceCatalystSlot(player, top);
+                    menu.draw(player, top);
+                }
         );
+    }
+
+    /**
+     * Bounces the catalyst slot's item back to the player (or drops it if
+     * their inventory is full) and clears the slot if it isn't a valid
+     * catalyst - see CatalystProfile#invalidReason. Runs post-tick, after
+     * the item has already landed in the slot, matching the existing
+     * redraw pattern used everywhere else in this listener.
+     */
+    private void enforceCatalystSlot(Player player, Inventory top) {
+        ItemStack cat = top.getItem(InfusionTableMenu.SLOT_CATALYST);
+        String reason = CatalystProfile.invalidReason(cat);
+        if (reason == null) return;
+
+        top.setItem(InfusionTableMenu.SLOT_CATALYST, new ItemStack(Material.AIR));
+        if (player.getInventory().firstEmpty() == -1) {
+            player.getWorld().dropItemNaturally(player.getLocation(), cat);
+        } else {
+            player.getInventory().addItem(cat);
+        }
+        player.sendMessage(ChatColor.RED + reason);
     }
 
     @EventHandler

@@ -118,10 +118,15 @@ public final class InfusionService {
         Integer stored = player.getPersistentDataContainer().get(K_ATTUNEMENT, PersistentDataType.INTEGER);
         int attunement = stored != null ? Math.max(0, stored) : 0;
 
-        int effective = amount + attunement + Math.max(0, catalyst.rarityValue());
+        // Catalyst contribution is capped (see CatalystProfile#MAX_RARITY_VALUE) so
+        // no catalyst stack can buy the top rarity band outright - only real dust
+        // and/or sustained attunement can push past what a catalyst alone gives.
+        // (InfusionTableListener already refuses to let an over-cap stack sit in
+        // the slot at all - this clamp is a defense-in-depth backstop.)
+        int catalystContribution = Math.min(Math.max(0, catalyst.rarityValue()), CatalystProfile.MAX_RARITY_VALUE);
+        int effective = amount + attunement + catalystContribution;
 
-        // Roll rarity (biased if catalyst marble rarity present)
-        MarbleRarity rarity = RarityRoller.roll(effective, catalyst.rarityBias());
+        MarbleRarity rarity = RarityRoller.roll(effective);
 
         // Update attunement (hidden pity)
         int newAttunement = attunement;
@@ -132,13 +137,17 @@ public final class InfusionService {
             case EPIC -> newAttunement = Math.max(0, newAttunement - Math.round(amount * 0.60f));
             case LEGENDARY -> newAttunement = Math.max(0, newAttunement - Math.round(amount * 0.90f));
         }
-        newAttunement = Math.min(newAttunement, 25000);
+        // Capped so attunement alone (no catalyst, min dust) can carry a player up
+        // to but never past RarityRoller's top band threshold (450) - sustained play
+        // ramps you up over about a week of normal infusing, it can't compound past
+        // that into a permanent guaranteed-top-band state.
+        newAttunement = Math.min(newAttunement, 400);
         player.getPersistentDataContainer().set(K_ATTUNEMENT, PersistentDataType.INTEGER, newAttunement);
 
         // Create marble head using your proven working database
         ItemStack item;
         try {
-            item = HeadDatabase.getMarbleHead(player.getDisplayName(), catalyst.teamBias());
+            item = HeadDatabase.getMarbleHead(player.getDisplayName());
         } catch (Exception ex) {
             dust.addDust(player, amount); // refund
             player.sendMessage(ChatColor.RED + "Infusion failed creating a marble head. Refunded dust.");
@@ -212,8 +221,7 @@ public final class InfusionService {
         player.sendMessage(ChatColor.GRAY + "Infusion value: "
                 + ChatColor.YELLOW + effective
                 + ChatColor.GRAY + " (" + amount + " dust"
-                + (catalyst.rarityValue() > 0 ? (" + " + catalyst.rarityValue() + " catalyst") : "")
-                + (catalyst.rarityBias() != null ? (ChatColor.GRAY + " + " + rarityColor(catalyst.rarityBias()) + catalyst.rarityBias().name() + ChatColor.GRAY + " marble") : "")
+                + (catalystContribution > 0 ? (" + " + catalystContribution + " catalyst") : "")
                 + ChatColor.GRAY + ")");
 
         return item;

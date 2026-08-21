@@ -88,21 +88,23 @@ public final class InfusionTableMenu {
                 ? (ChatColor.DARK_GRAY + "Nothing")
                 : (ChatColor.YELLOW + "" + cat.getAmount() + " " + prettyName(cat));
 
+        int cappedValue = Math.min(profile.rarityValue(), CatalystProfile.MAX_RARITY_VALUE);
+
         List<String> infoLore = new ArrayList<>(List.of(
                 ChatColor.GRAY + "Dust Balance: " + ChatColor.YELLOW + balance,
                 ChatColor.GRAY + "Dust Amount: " + ChatColor.YELLOW + dustAmount,
                 "",
                 ChatColor.GRAY + "Catalyst: " + catName,
-                ChatColor.GRAY + "Catalyst Value: " + ChatColor.YELLOW + profile.rarityValue(),
+                ChatColor.GRAY + "Catalyst Value: " + ChatColor.YELLOW + cappedValue
+                        + ChatColor.GRAY + " / " + ChatColor.YELLOW + CatalystProfile.MAX_RARITY_VALUE + ChatColor.GRAY + " cap",
                 ChatColor.GRAY + "Will Consume: " + willConsume
         ));
 
-        // Marble catalysts now carry an entry for all 5 stats (a ranked
-        // highest-to-lowest ladder, see CatalystProfile#rankedAffinity) --
-        // its weakest stat sits at weight 0 (no bias) rather than being
-        // absent, so this has to filter zero-weight entries out and sort
-        // by weight to show the catalyst's actual best-to-worst priority,
-        // not just "every stat it happens to have."
+        // Material catalysts can carry an entry for each stat they're
+        // configured to boost (infusion.catalyst.stat-affinity in
+        // config.yml) - filter out anything at weight 0 and sort by
+        // weight so this shows the catalyst's actual best-to-worst
+        // priority, not just "every stat it happens to have."
         String stats = profile.statAffinity().entrySet().stream()
                 .filter(e -> e.getValue() > 0)
                 .sorted(Map.Entry.<MarbleStat, Double>comparingByValue().reversed())
@@ -112,15 +114,13 @@ public final class InfusionTableMenu {
             infoLore.add(ChatColor.GRAY + "Higher chance to boost (best first):");
             infoLore.add(ChatColor.AQUA + "  " + stats);
         }
-        if (profile.teamBias() != null && !profile.teamBias().isBlank()) {
-            infoLore.add(ChatColor.GRAY + "Higher chance of team: " + ChatColor.LIGHT_PURPLE + profile.teamBias());
-        }
 
         infoLore.add("");
-        infoLore.add(ChatColor.GRAY + "Total Value: " + ChatColor.GOLD + (dustAmount + profile.rarityValue()));
+        infoLore.add(ChatColor.GRAY + "Total Value: " + ChatColor.GOLD + (dustAmount + cappedValue));
         infoLore.add("");
-        infoLore.add(ChatColor.DARK_GRAY + "Put any item in the center slot");
-        infoLore.add(ChatColor.DARK_GRAY + "to boost the infusion outcome.");
+        infoLore.add(ChatColor.DARK_GRAY + "Put a crafting material in the");
+        infoLore.add(ChatColor.DARK_GRAY + "center slot to boost the infusion");
+        infoLore.add(ChatColor.DARK_GRAY + "(marbles can't be used as catalysts).");
         infoLore.add(ChatColor.DARK_GRAY + "Close menu to get items back.");
 
         inv.setItem(SLOT_INFO, button(Material.BOOK, ChatColor.LIGHT_PURPLE + "Infusion Details", infoLore));
@@ -176,15 +176,10 @@ public final class InfusionTableMenu {
             return;
         }
 
-        // Only consume 1 catalyst item AFTER infusion succeeds
+        // Consume the whole catalyst stack AFTER infusion succeeds - its value
+        // (CatalystProfile#of) was computed off the full stack, so all of it is spent.
         if (catalyst != null && !catalyst.getType().isAir()) {
-            int amt = catalyst.getAmount();
-            if (amt <= 1) {
-                inv.setItem(SLOT_CATALYST, new ItemStack(Material.AIR));
-            } else {
-                catalyst.setAmount(amt - 1);
-                inv.setItem(SLOT_CATALYST, catalyst);
-            }
+            inv.setItem(SLOT_CATALYST, new ItemStack(Material.AIR));
         }
 
         player.closeInventory();

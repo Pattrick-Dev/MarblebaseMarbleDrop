@@ -41,34 +41,32 @@ infusion:
       starting-turns: 7.0
 
   catalyst:
-    marble-stat-based: true
     default-per-item: 10
-    team-bias-chance: 0.5  # chance a marble catalyst's team filters the pick to just that team (soft bias, not a guarantee)
 
+    # Only crafting materials can be used as catalysts - marbles cannot
+    # (see CatalystProfile). Every value below is per single item (only 1
+    # is ever consumed per infusion, regardless of stack size) and is
+    # additionally hard-capped at CatalystProfile.MAX_RARITY_VALUE (150) -
+    # a catalyst can meaningfully nudge an infusion, but never buy the
+    # top rarity band outright the way materials used to when this table
+    # went as high as 7200.
     values:
-      DIAMOND: 200
-      DIAMOND_BLOCK: 1800    # = 9 diamonds
-      EMERALD: 180
-      EMERALD_BLOCK: 1620    # = 9 emeralds
-      NETHERITE_INGOT: 800
-      NETHERITE_BLOCK: 7200  # = 9 netherite ingots
-      NETHERITE_SCRAP: 300
-      GOLD_INGOT: 90
-      GOLD_BLOCK: 810        # = 9 gold ingots
-      IRON_INGOT: 45
-      IRON_BLOCK: 405        # = 9 iron ingots
-      AMETHYST_SHARD: 70
-      PRISMARINE_CRYSTALS: 60
-      BLAZE_ROD: 85
-      ENDER_PEARL: 75
-      SHULKER_SHELL: 250
-
-    marble-value-range:
-      COMMON:     { min: 8,  max: 25 }
-      UNCOMMON:   { min: 12, max: 40 }
-      RARE:       { min: 18, max: 60 }
-      EPIC:       { min: 25, max: 85 }
-      LEGENDARY:  { min: 35, max: 120 }
+      DIAMOND: 40
+      DIAMOND_BLOCK: 140      # = 9 diamonds
+      EMERALD: 35
+      EMERALD_BLOCK: 125      # = 9 emeralds
+      NETHERITE_INGOT: 100
+      NETHERITE_BLOCK: 150    # = 9 netherite ingots (capped)
+      NETHERITE_SCRAP: 55
+      GOLD_INGOT: 20
+      GOLD_BLOCK: 75          # = 9 gold ingots
+      IRON_INGOT: 15
+      IRON_BLOCK: 60          # = 9 iron ingots
+      AMETHYST_SHARD: 18
+      PRISMARINE_CRYSTALS: 16
+      BLAZE_ROD: 20
+      ENDER_PEARL: 18
+      SHULKER_SHELL: 65
 
     # Material catalysts give a higher chance (never a guarantee) of
     # rolling higher on the listed stats - see StatRoller. Materials left
