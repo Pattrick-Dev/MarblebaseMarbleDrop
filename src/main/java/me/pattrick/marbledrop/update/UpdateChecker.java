@@ -74,6 +74,16 @@ public final class UpdateChecker implements Listener {
         this.jarFileName = jarFileName;
     }
 
+    /** The version currently running (plugin.yml's version, filtered from pom.xml at build time). See /md version. */
+    public String runningVersion() {
+        return plugin.getDescription().getVersion();
+    }
+
+    /** Non-null once a newer jar has been downloaded and staged for the next restart - see /md version. */
+    public String stagedVersion() {
+        return stagedVersion;
+    }
+
     /** (Re)arms the periodic check per current config - safe to call again after a config reload. */
     public void start() {
         stop();

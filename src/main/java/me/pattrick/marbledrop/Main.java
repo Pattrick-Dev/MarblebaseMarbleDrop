@@ -294,7 +294,7 @@ public class Main extends JavaPlugin {
         upgradeAmbient.start();
 
         // Constructed after upgradeAmbient (not before, like it used to
-        // be) so /md upgrades remove can hand it the ambient cleanup
+        // be) so /station upgrade remove can hand it the ambient cleanup
         // callback - same as MarbleRecyclerCommand/InfusionTableCommand
         // already do for their own station types.
         UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(this, upgradeStations, upgradeAmbient);
@@ -397,7 +397,10 @@ public class Main extends JavaPlugin {
         DustAdminCommand dustAdminCommand = new DustAdminCommand(dustManager);
         RecipesCommand recipesCommand = new RecipesCommand(this);
 
-        // -------------------- Register ONLY /md (router) --------------------
+        // -------------------- Command router --------------------
+        // One CommandKit instance handles every top-level command (md,
+        // race, tutorial, team, dust, station, tasks, recipes) - see its
+        // javadoc for why there are this many now.
         CommandKit md = new CommandKit(
                 this,
                 mdConfig,
@@ -419,25 +422,17 @@ public class Main extends JavaPlugin {
 
         CommandKitTabCompletion mdTabCompletion = new CommandKitTabCompletion(trackManager);
 
-        if (getCommand("md") != null) {
-            getCommand("md").setExecutor(md);
-            getCommand("md").setTabCompleter(mdTabCompletion);
-        } else {
-            getLogger().severe("Command 'md' is not defined in plugin.yml!");
-        }
-
-        if (getCommand("tasks") != null) {
-            getCommand("tasks").setExecutor(md);
-            getCommand("tasks").setTabCompleter(mdTabCompletion);
-        } else {
-            getLogger().severe("Command 'tasks' is not defined in plugin.yml!");
-        }
-
-        if (getCommand("recipes") != null) {
-            getCommand("recipes").setExecutor(md);
-            getCommand("recipes").setTabCompleter(mdTabCompletion);
-        } else {
-            getLogger().severe("Command 'recipes' is not defined in plugin.yml!");
+        // One shared CommandKit instance/tab-completer behind every one of
+        // these top-level commands - CommandKit.onCommand switches on
+        // cmd.getName() to tell them apart. Each needs its own plugin.yml
+        // commands: entry (Bukkit requires that to route it here at all).
+        for (String commandName : new String[]{"md", "race", "tutorial", "team", "dust", "station", "tasks", "recipes"}) {
+            if (getCommand(commandName) != null) {
+                getCommand(commandName).setExecutor(md);
+                getCommand(commandName).setTabCompleter(mdTabCompletion);
+            } else {
+                getLogger().severe("Command '" + commandName + "' is not defined in plugin.yml!");
+            }
         }
 
         // -------------------- Feedback --------------------

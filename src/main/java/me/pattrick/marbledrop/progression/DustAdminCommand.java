@@ -20,7 +20,7 @@ public final class DustAdminCommand implements CommandExecutor {
         if (!Commands.requireAdmin(sender)) return true;
 
         if (args.length != 3) {
-            Commands.usage(sender, "/md dust admin <give|remove|set> <player> <amount>");
+            Commands.usage(sender, "/dust admin <give|remove|set> <player> <amount>");
             return true;
         }
 
@@ -106,7 +106,7 @@ public final class DustAdminCommand implements CommandExecutor {
             }
 
             default -> {
-                Commands.usage(sender, "/md dust admin <give|remove|set> <player> <amount>");
+                Commands.usage(sender, "/dust admin <give|remove|set> <player> <amount>");
                 return true;
             }
         }

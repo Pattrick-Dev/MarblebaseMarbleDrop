@@ -806,7 +806,7 @@ public final class MarbleRunner {
         return stand != null && stand.isValid() ? stand.getLocation() : null;
     }
 
-    /** Force-despawns this runner's marble without firing its finish listener - used by /md race purge. */
+    /** Force-despawns this runner's marble without firing its finish listener - used by /race purge. */
     void despawn() {
         if (stand != null && stand.isValid()) stand.remove();
     }

@@ -384,7 +384,7 @@ races:
     # eligible track happens to be free right then, it keeps retrying every
     # few seconds until one opens up. Empty list, or `enabled: false` above,
     # turns scheduled races off entirely - re-enabling requires
-    # /md race forcecycle or a restart to kick it back off.
+    # /race forcecycle or a restart to kick it back off.
     daily-times: ["12:00", "16:00", "20:00", "00:00"]
 
 recycler:

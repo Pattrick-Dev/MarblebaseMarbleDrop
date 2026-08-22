@@ -21,7 +21,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 
 /**
- * Routes /md, /tasks, and /recipes to their per-feature CommandExecutor.
+ * Routes every MarbleDrop command to its per-feature CommandExecutor.
  * Pure dispatch - every actual check (player-only, permission) lives in
  * the target command itself now, not duplicated here. An earlier version
  * re-checked "is this sender a player" before delegating to nearly every
@@ -29,6 +29,19 @@ import java.io.File;
  * worse, that router-level check ran BEFORE commands like
  * DustAdminCommand/TasksAdminCommand, which were written to work from
  * console, silently blocking them from ever being reached that way.
+ * <p>
+ * One instance of this class is registered as the executor for EVERY
+ * top-level command it handles (md, race, tutorial, team, dust, station,
+ * tasks, recipes - see Main) - {@link #onCommand} tells them apart via
+ * {@code cmd.getName()}, not via args[0]. This replaced an earlier design
+ * where everything lived under a single "/md <sub>" command; player-facing
+ * features (race, tutorial, team, dust) and the station admin tools got
+ * promoted to their own top-level commands for a shorter, more natural feel
+ * ("/race join" instead of "/md join") - "/md" itself now only covers
+ * genuinely administrative/meta stuff (reload, version, update, debug, pdc)
+ * plus track building, which is 100% admin-only anyway. This was a clean
+ * break - the old "/md race"/"/md join"/"/md table" etc. forms are gone,
+ * not aliased.
  */
 public class CommandKit implements CommandExecutor {
 
@@ -103,20 +116,89 @@ public class CommandKit implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
+        String name = cmd.getName().toLowerCase();
 
-        if (cmd.getName().equalsIgnoreCase("tasks")) {
-            return handleTasks(sender, cmd, label, args);
+        switch (name) {
+
+            case "tasks" -> {
+                return handleTasks(sender, cmd, label, args);
+            }
+
+            case "recipes" -> {
+                return recipesCommand.onCommand(sender, cmd, label, args);
+            }
+
+            case "race" -> {
+                return raceCommand.onCommand(sender, cmd, label, args);
+            }
+
+            case "tutorial" -> {
+                return tutorialCommand.onCommand(sender, cmd, label, args);
+            }
+
+            case "team" -> {
+                // Temporarily disabled - the re-issue button in this GUI
+                // (TeamMenuListener#handleMemberClick, SHIFT_LEFT branch)
+                // hands out a fresh marble without reclaiming the
+                // previously issued one, so it's an unlimited free-marble
+                // exploit right now. Re-enable once that's fixed.
+                if (sender instanceof Player p) {
+                    p.sendMessage(ChatColor.RED + "/team is temporarily disabled.");
+                }
+                return true;
+            }
+
+            case "dust" -> {
+                return handleDust(sender, cmd, label, args);
+            }
+
+            case "station" -> {
+                return handleStation(sender, cmd, label, args);
+            }
+
+            case "md" -> {
+                return handleMd(sender, cmd, label, args);
+            }
+
+            default -> {
+                sender.sendMessage(ChatColor.RED + "Use: /md");
+                return true;
+            }
         }
+    }
 
-        if (cmd.getName().equalsIgnoreCase("recipes")) {
-            return recipesCommand.onCommand(sender, cmd, label, args);
+    private boolean handleDust(CommandSender sender, Command cmd, String label, String[] args) {
+        if (args.length >= 1 && args[0].equalsIgnoreCase("admin")) {
+            return dustAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
         }
+        return dustCommand.onCommand(sender, cmd, label, args);
+    }
 
-        if (!cmd.getName().equalsIgnoreCase("md")) {
-            sender.sendMessage(ChatColor.RED + "Use: /md");
+    /** /station <table|recycler|upgrade> <give|remove|count> - a thin dispatcher over the 3 existing station commands, which already share their actual give/remove/count logic via StationCommands. */
+    private boolean handleStation(CommandSender sender, Command cmd, String label, String[] args) {
+        if (!Commands.requireAdmin(sender)) return true;
+
+        if (args.length == 0) {
+            Commands.usage(sender, "/station <table|recycler|upgrade> <give|remove|count>");
             return true;
         }
 
+        String type = args[0].toLowerCase();
+        String[] rest = shiftArgs(args, 1);
+
+        return switch (type) {
+            case "table" -> infusionTableCommand.onCommand(sender, cmd, label, rest);
+            case "recycler" -> marbleRecyclerCommand.onCommand(sender, cmd, label, rest);
+            case "upgrade" -> upgradeStationCommand.onCommand(sender, cmd, label, rest);
+            default -> {
+                sender.sendMessage(ChatColor.RED + "Unknown station type '" + type + "'. Use table, recycler, or upgrade.");
+                yield true;
+            }
+        };
+    }
+
+    /** Everything still under /md: admin/meta tools (reload, version, update, debug, pdc) plus track building, which stays here since it's 100% admin-only anyway. */
+    private boolean handleMd(CommandSender sender, Command cmd, String label, String[] args) {
         if (args.length == 0) {
             if (sender instanceof Player p) sendHelp(p);
             else sender.sendMessage("Use /md help");
@@ -130,57 +212,6 @@ public class CommandKit implements CommandExecutor {
             case "track" -> {
                 return trackCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
             }
-
-            case "team" -> {
-                // Temporarily disabled - the re-issue button in this GUI
-                // (TeamMenuListener#handleMemberClick, SHIFT_LEFT branch)
-                // hands out a fresh marble without reclaiming the
-                // previously issued one, so it's an unlimited free-marble
-                // exploit right now. Re-enable once that's fixed.
-                if (sender instanceof Player p) {
-                    p.sendMessage(ChatColor.RED + "/md team is temporarily disabled.");
-                }
-                return true;
-            }
-
-            case "race", "races" -> {
-                return raceCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-            }
-
-            // thin alias for "/md race join"
-            case "join" -> {
-                return raceCommand.onCommand(sender, cmd, label, new String[]{"join"});
-            }
-
-            // thin alias for "/md race leave"
-            case "leave" -> {
-                return raceCommand.onCommand(sender, cmd, label, new String[]{"leave"});
-            }
-
-            case "tutorial" -> {
-                return tutorialCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-            }
-
-            case "table", "infusiontable" -> {
-                return infusionTableCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-            }
-
-            case "recycler", "recycle" -> {
-                return marbleRecyclerCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-            }
-
-            case "upgrade", "upgrades" -> {
-                return upgradeStationCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-            }
-
-            case "dust" -> {
-                if (args.length >= 2 && args[1].equalsIgnoreCase("admin")) {
-                    return dustAdminCommand.onCommand(sender, cmd, label, shiftArgs(args, 2));
-                }
-                return dustCommand.onCommand(sender, cmd, label, shiftArgs(args, 1));
-            }
-
-            // ---------------- CORE / ADMIN ----------------
 
             case "help" -> {
                 if (sender instanceof Player p) sendHelp(p);
@@ -203,6 +234,17 @@ public class CommandKit implements CommandExecutor {
                 if (updateChecker != null) updateChecker.onConfigReloaded();
 
                 sender.sendMessage(ChatColor.GREEN + "MarbleDrop config reloaded.");
+                return true;
+            }
+
+            case "version" -> {
+                String running = updateChecker != null ? updateChecker.runningVersion() : plugin.getDescription().getVersion();
+                sender.sendMessage(ChatColor.GREEN + "MarbleDrop " + ChatColor.YELLOW + "v" + running);
+
+                String staged = updateChecker != null ? updateChecker.stagedVersion() : null;
+                if (staged != null) {
+                    sender.sendMessage(ChatColor.GRAY + "v" + staged + " is staged - restart the server to apply it.");
+                }
                 return true;
             }
 
@@ -280,31 +322,28 @@ public class CommandKit implements CommandExecutor {
 
         if (admin) {
             player.sendMessage(ChatColor.GREEN + "MarbleDrop Admin Commands\n" +
-                    ChatColor.DARK_GREEN + "/md table\n" +
-                    ChatColor.DARK_GREEN + "/md dust\n" +
+                    ChatColor.DARK_GREEN + "/race\n" +
+                    ChatColor.DARK_GREEN + "/tutorial\n" +
+                    ChatColor.DARK_GREEN + "/team\n" +
+                    ChatColor.DARK_GREEN + "/dust\n" +
+                    ChatColor.DARK_GREEN + "/station\n" +
                     ChatColor.DARK_GREEN + "/tasks\n" +
                     ChatColor.DARK_GREEN + "/recipes\n" +
-                    ChatColor.DARK_GREEN + "/md recycler\n" +
-                    ChatColor.DARK_GREEN + "/md upgrade\n" +
                     ChatColor.DARK_GREEN + "/md track\n" +
-                    ChatColor.DARK_GREEN + "/md race\n" +
-                    ChatColor.DARK_GREEN + "/md join\n" +
-                    ChatColor.DARK_GREEN + "/md leave\n" +
-                    ChatColor.DARK_GREEN + "/md team\n" +
-                    ChatColor.DARK_GREEN + "/md tutorial\n" +
+                    ChatColor.DARK_GREEN + "/md version\n" +
                     ChatColor.DARK_GREEN + "/md reload\n" +
                     ChatColor.DARK_GREEN + "/md update\n" +
                     ChatColor.DARK_GREEN + "/md debug\n" +
                     ChatColor.DARK_GREEN + "/md pdc");
         } else {
             player.sendMessage(ChatColor.GREEN + "MarbleDrop Commands\n" +
-                    ChatColor.DARK_GREEN + "/md dust\n" +
+                    ChatColor.DARK_GREEN + "/race\n" +
+                    ChatColor.DARK_GREEN + "/tutorial\n" +
+                    ChatColor.DARK_GREEN + "/team\n" +
+                    ChatColor.DARK_GREEN + "/dust\n" +
                     ChatColor.DARK_GREEN + "/tasks\n" +
                     ChatColor.DARK_GREEN + "/recipes\n" +
-                    ChatColor.DARK_GREEN + "/md race\n" +
-                    ChatColor.DARK_GREEN + "/md join\n" +
-                    ChatColor.DARK_GREEN + "/md leave\n" +
-                    ChatColor.DARK_GREEN + "/md team\n");
+                    ChatColor.DARK_GREEN + "/md version\n");
         }
     }
 }

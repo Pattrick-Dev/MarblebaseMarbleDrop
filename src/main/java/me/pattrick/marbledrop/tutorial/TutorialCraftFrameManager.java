@@ -63,7 +63,7 @@ import java.util.UUID;
  * server without it the same as craft frames simply not being registered.
  * <p>
  * Setup is one-shot: stand with a WorldEdit/FAWE selection around the 9
- * built (empty) frames and run /md tutorial setcraftframes.
+ * built (empty) frames and run /tutorial setcraftframes.
  * <p>
  * The actual ProtocolLib calls live in TutorialCraftFramePackets, a
  * separate class held here as a nullable field and only ever constructed

@@ -85,7 +85,7 @@ public final class RaceManager implements Listener {
 
     // playerId -> last-picked RaceLoadout, across all tracks. Doubles as
     // the fallback getLoadout() reads when there's no real lobby entry to
-    // check - which is what lets /md race test respect a loadout picked
+    // check - which is what lets /race test respect a loadout picked
     // through the same GUI a real lobby entry uses, without needing a
     // lobby entry of its own.
     private final Map<UUID, RaceLoadout> loadoutPreference = new HashMap<>();
@@ -335,7 +335,7 @@ public final class RaceManager implements Listener {
         boostCharges.put(playerId, Math.max(0, charges));
     }
 
-    /** The track this player currently has an entry in (first match), or null if none - so /md leave doesn't need a trackId argument. */
+    /** The track this player currently has an entry in (first match), or null if none - so /race leave doesn't need a trackId argument. */
     public String findTrackIdForPlayer(UUID playerId) {
         if (playerId == null) return null;
         for (Map.Entry<String, List<RaceEntry>> e : lobby.entrySet()) {
@@ -346,7 +346,7 @@ public final class RaceManager implements Listener {
         return null;
     }
 
-    /** Force-removes every currently active marble runner without firing finish callbacks - see /md race purge. */
+    /** Force-removes every currently active marble runner without firing finish callbacks - see /race purge. */
     public void purgeAllRunners() {
         engine.purgeAll();
         activeRunnerByOwner.clear();
@@ -377,7 +377,7 @@ public final class RaceManager implements Listener {
 
         if (opener != null) {
             opener.sendMessage(ChatColor.GREEN + "Track '" + trackId + "' is now OPEN for entries.");
-            opener.sendMessage(ChatColor.GRAY + "Players can join via " + ChatColor.AQUA + "/md race");
+            opener.sendMessage(ChatColor.GRAY + "Players can join via " + ChatColor.AQUA + "/race");
         }
         return true;
     }
@@ -434,7 +434,7 @@ public final class RaceManager implements Listener {
     /**
      * This player's effective loadout for a track: their actual lobby
      * entry's choice if they have one there, otherwise their last-picked
-     * preference (see setLoadout()) - which is also how /md race test
+     * preference (see setLoadout()) - which is also how /race test
      * picks up a loadout chosen through the same GUI without needing a
      * real lobby entry to hang it on. Defaults to BALANCED if neither
      * exists yet.
@@ -448,7 +448,7 @@ public final class RaceManager implements Listener {
 
     /**
      * Sets this player's chosen loadout - both their preference (used as
-     * the getLoadout() fallback, and by /md race test) and their real
+     * the getLoadout() fallback, and by /race test) and their real
      * lobby entry for this track, if they have one.
      */
     public void setLoadout(String trackId, UUID playerId, RaceLoadout loadout) {
@@ -478,7 +478,7 @@ public final class RaceManager implements Listener {
         // ✅ NEW: must be open to join (this is the “tracks open so players can join” rule)
         if (!isOpen(trackId)) {
             player.sendMessage(ChatColor.RED + "That track is not open for entries.");
-            player.sendMessage(ChatColor.GRAY + "Wait for an admin to open it, then use " + ChatColor.AQUA + "/md race");
+            player.sendMessage(ChatColor.GRAY + "Wait for an admin to open it, then use " + ChatColor.AQUA + "/race");
             return;
         }
 
@@ -524,7 +524,7 @@ public final class RaceManager implements Listener {
         // one entry per player per track
         for (RaceEntry e : list) {
             if (e.owner.equals(player.getUniqueId())) {
-                player.sendMessage(ChatColor.RED + "You are already entered on this track. Right-click it in /md race to leave.");
+                player.sendMessage(ChatColor.RED + "You are already entered on this track. Right-click it in /race to leave.");
                 return;
             }
         }
@@ -536,8 +536,8 @@ public final class RaceManager implements Listener {
 
         RaceEntry newEntry = new RaceEntry(player.getUniqueId(), marbleId, helmet, data, marbleDisplayName);
         // New entries default to BALANCED (see the RaceEntry field itself) --
-        // apply this player's remembered loadout preference (set via /md race
-        // or /md race test loadout) instead, so it doesn't silently reset to
+        // apply this player's remembered loadout preference (set via /race
+        // or /race test loadout) instead, so it doesn't silently reset to
         // BALANCED every time they join a new race, scheduled or otherwise.
         newEntry.loadout = loadoutPreference.getOrDefault(player.getUniqueId(), RaceLoadout.BALANCED);
         list.add(newEntry);
@@ -562,7 +562,7 @@ public final class RaceManager implements Listener {
         player.sendMessage(ChatColor.GREEN + "Entered your marble into track '" + trackId + "'.");
         player.sendMessage(ChatColor.GRAY + "Entries: " + list.size() + "/" + MAX_ENTRIES_PER_TRACK);
         player.sendMessage(ChatColor.GRAY + "Loadout: " + ChatColor.YELLOW + newEntry.loadout.label()
-                + ChatColor.GRAY + " (change it with " + ChatColor.AQUA + "/md race" + ChatColor.GRAY + ")");
+                + ChatColor.GRAY + " (change it with " + ChatColor.AQUA + "/race" + ChatColor.GRAY + ")");
     }
 
     public void leave(Player player, String trackId) {
@@ -700,7 +700,7 @@ public final class RaceManager implements Listener {
 
         // Spawn every marble on its real starting-grid spot right away,
         // held motionless, so players actually see the grid lined up
-        // instead of marbles popping into motion the instant /md race
+        // instead of marbles popping into motion the instant /race
         // start is typed. They're released together once the countdown
         // below finishes.
         int n = list.size();
@@ -1041,13 +1041,13 @@ public final class RaceManager implements Listener {
             return;
         }
         if (trackId == null || trackId.isBlank()) {
-            admin.sendMessage(ChatColor.RED + "Usage: /md race test <trackId> [aiCount] [noself]");
+            admin.sendMessage(ChatColor.RED + "Usage: /race test <trackId> [aiCount] [noself]");
             return;
         }
         trackId = trackId.toLowerCase();
 
         // Loadout comes from the same GUI a real lobby entry uses (see
-        // getLoadout()/RaceLoadoutGui) - open it with /md race test
+        // getLoadout()/RaceLoadoutGui) - open it with /race test
         // loadout <trackId> to set one before running the test.
         RaceLoadout loadout = getLoadout(trackId, admin.getUniqueId());
 

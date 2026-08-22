@@ -14,7 +14,7 @@ import java.util.Map;
 /**
  * Stores one teleport checkpoint Location per TutorialStep, plus a single
  * tutorial race track id, persisted to tutorial-locations.yml. Set in-game
- * via /md tutorial setlocation <step> / clearlocation / setrace <trackId>.
+ * via /tutorial setlocation <step> / clearlocation / setrace <trackId>.
  * <p>
  * Coordinates are kept as raw (world name, x/y/z/yaw/pitch) data and the
  * {@link World} is only resolved on demand in {@link #get}/{@link

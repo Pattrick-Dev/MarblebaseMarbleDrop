@@ -26,7 +26,7 @@ public final class MarbleRecyclerCommand implements CommandExecutor {
         if (!Commands.requireAdmin(player)) return true;
 
         if (args.length == 0) {
-            Commands.usage(player, "/md recycler give|remove|count");
+            Commands.usage(player, "/station recycler give|remove|count");
             return true;
         }
 
@@ -47,7 +47,7 @@ public final class MarbleRecyclerCommand implements CommandExecutor {
             }
 
             default -> {
-                Commands.usage(player, "/md recycler give|remove|count");
+                Commands.usage(player, "/station recycler give|remove|count");
                 return true;
             }
         }

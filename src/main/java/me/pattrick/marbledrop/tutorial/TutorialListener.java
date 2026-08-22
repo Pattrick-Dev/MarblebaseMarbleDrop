@@ -11,8 +11,8 @@ import org.bukkit.plugin.Plugin;
 
 /**
  * Restores tutorial state on relog if a player is already mid-tutorial
- * (they start it themselves with /md tutorial start - see TutorialCommand),
- * and gates /md subcommands (plus the standalone /tasks command) so only
+ * (they start it themselves with /tutorial start - see TutorialCommand),
+ * and gates the race/tutorial/station/tasks top-level commands so only
  * the current step's command can be used once they have.
  * <p>
  * TASKS and RACE are fully custom mini-experiences (a spawned sheep to
@@ -80,12 +80,19 @@ public final class TutorialListener implements Listener {
 
         String sub;
         if (label.equals("tasks")) {
-            sub = "tasks"; // standalone top-level command, no "md" prefix
+            sub = "tasks"; // standalone top-level command
+        } else if (label.equals("race") || label.equals("races")) {
+            sub = "race"; // standalone top-level command (was "/md race")
+        } else if (label.equals("tutorial")) {
+            sub = "tutorial"; // standalone top-level command (was "/md tutorial") - always in ALWAYS_ALLOWED below anyway
+        } else if (label.equals("station")) {
+            if (parts.length < 2) return; // bare /station, nothing to gate on
+            sub = parts[1].toLowerCase(); // the station type arg (table/recycler/upgrade) - matches TutorialStep's existing keywords directly
         } else if (label.equals("md") || label.equals("marbledrop")) {
             if (parts.length < 2) return; // bare /md opens help, fine
             sub = parts[1].toLowerCase();
         } else {
-            return; // not our command, leave chat/other plugins alone
+            return; // not our command (including "team"/"dust", which nothing gates on) - leave chat/other plugins alone
         }
 
         if (ALWAYS_ALLOWED.contains(sub)) return;
@@ -95,7 +102,7 @@ public final class TutorialListener implements Listener {
         // while their own account happens to be mid-tutorial - this gate
         // exists to onboard regular players, not to sandbox admins away from
         // their own admin tools. It deliberately does NOT cover the bare
-        // "try this step" form (/md race, /md race gui|menu, /tasks) --
+        // "try this step" form (/race, /race gui|menu, /tasks) --
         // that's the one case an admin testing the tutorial itself still
         // needs routed into the tutorial's own mini-experience below, same
         // as any other player.
@@ -129,18 +136,24 @@ public final class TutorialListener implements Listener {
         // INFUSION / UPGRADE / RECYCLER: let the real command through untouched.
     }
 
-    /** The arg right after the subcommand keyword - parts[2] for "/md race open", parts[1] for the standalone "/tasks admin". */
+    /** The arg right after the subcommand keyword - parts[1] for "/race open" or "/tasks admin", parts[2] for "/station table give". */
     private String actionArg(String label, String[] parts) {
         if (label.equals("tasks")) {
             return parts.length >= 2 ? parts[1] : null;
         }
+        if (label.equals("race") || label.equals("races")) {
+            return parts.length >= 2 ? parts[1] : null;
+        }
+        // "station" and the remaining "md"-prefixed forms both have one
+        // extra segment (the station type, or "md" itself) before the
+        // actual action - parts[2] either way.
         return parts.length >= 3 ? parts[2] : null;
     }
 
     /** True for subcommands past the bare/GUI form of "race" or "tasks" - real admin actions, not "try this step". */
     private boolean isRealManagementSubcommand(String sub, String action) {
         if (sub.equals("race") || sub.equals("races")) {
-            if (action == null) return false; // bare "/md race"
+            if (action == null) return false; // bare "/race"
             String a = action.toLowerCase();
             return !(a.equals("gui") || a.equals("menu"));
         }

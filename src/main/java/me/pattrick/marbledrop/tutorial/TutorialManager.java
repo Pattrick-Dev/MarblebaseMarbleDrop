@@ -244,7 +244,7 @@ public final class TutorialManager {
 
     // ---------------- Admin controls ----------------
 
-    /** Wipes tutorial progress back to a fresh, unstarted state. Does NOT re-enter/auto-start it - the player runs /md tutorial start themselves when ready. */
+    /** Wipes tutorial progress back to a fresh, unstarted state. Does NOT re-enter/auto-start it - the player runs /tutorial start themselves when ready. */
     public void reset(Player player) {
         boolean wasActive = isActive(player);
         removeBossBar(player);

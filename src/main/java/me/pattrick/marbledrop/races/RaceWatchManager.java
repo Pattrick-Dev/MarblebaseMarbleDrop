@@ -211,7 +211,7 @@ public final class RaceWatchManager implements Listener {
         UUID id = p.getUniqueId();
 
         // This is the single choke point every "stop watching" path goes
-        // through - a race actually finishing, a manual /md race unwatch,
+        // through - a race actually finishing, a manual /race unwatch,
         // whatever - so it's the right place to clear any fake ability
         // items too, rather than relying on every caller to remember.
         if (inventoryOverlay != null) {
