@@ -168,7 +168,6 @@ public final class DiscordRaceStatus {
                 + "\"description\":" + jsonString(description) + ","
                 + "\"color\":" + color + ","
                 + "\"fields\":" + fieldsJson + ","
-                + "\"footer\":{\"text\":\"MarbleDrop\"},"
                 + "\"timestamp\":" + jsonString(Instant.now().toString())
                 + "}]}";
     }
