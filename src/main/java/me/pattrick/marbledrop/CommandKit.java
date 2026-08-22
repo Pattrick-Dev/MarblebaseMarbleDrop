@@ -1,6 +1,8 @@
 package me.pattrick.marbledrop;
 
 import me.pattrick.marbledrop.command.Commands;
+import me.pattrick.marbledrop.progression.infusion.heads.GeyserSkullSync;
+import me.pattrick.marbledrop.progression.infusion.heads.HeadPool;
 import me.pattrick.marbledrop.progression.upgrades.UpgradeStationCommand;
 import me.pattrick.marbledrop.races.ScheduledRaceManager;
 import me.pattrick.marbledrop.update.UpdateChecker;
@@ -62,6 +64,7 @@ public class CommandKit implements CommandExecutor {
     private final CommandExecutor recipesCommand;
     private final ScheduledRaceManager scheduledRaceManager;
     private final UpdateChecker updateChecker;
+    private final HeadPool headPool;
 
     private final File filePath;
     private FileConfiguration config;
@@ -82,7 +85,8 @@ public class CommandKit implements CommandExecutor {
             CommandExecutor tutorialCommand,
             CommandExecutor recipesCommand,
             ScheduledRaceManager scheduledRaceManager,
-            UpdateChecker updateChecker
+            UpdateChecker updateChecker,
+            HeadPool headPool
     ) {
 
         this.plugin = plugin;
@@ -102,6 +106,7 @@ public class CommandKit implements CommandExecutor {
         this.recipesCommand = recipesCommand;
         this.scheduledRaceManager = scheduledRaceManager;
         this.updateChecker = updateChecker;
+        this.headPool = headPool;
 
         this.filePath = new File(plugin.getDataFolder(), "config.yml");
         this.config = YamlConfiguration.loadConfiguration(this.filePath);
@@ -231,7 +236,6 @@ public class CommandKit implements CommandExecutor {
                 // to, pull it in to match instead of leaving it stuck
                 // counting down to the stale time - see the method javadoc.
                 if (scheduledRaceManager != null) scheduledRaceManager.onConfigReloaded();
-                if (updateChecker != null) updateChecker.onConfigReloaded();
 
                 sender.sendMessage(ChatColor.GREEN + "MarbleDrop config reloaded.");
                 return true;
@@ -256,6 +260,21 @@ public class CommandKit implements CommandExecutor {
                 }
                 sender.sendMessage(ChatColor.GRAY + "Checking GitHub for a newer version...");
                 updateChecker.checkNowFor(sender);
+                return true;
+            }
+
+            // Regenerates plugins/Geyser-Spigot/custom_skulls.json from
+            // heads.yml on demand - e.g. after adding a new marble head
+            // without a full /md reload, or if Geyser was installed after
+            // MarbleDrop already started. Geyser only reads the file at
+            // its OWN startup, so this alone won't push new textures to
+            // already-connected Bedrock players - a Geyser restart is
+            // still needed for it to take effect.
+            case "geysersync" -> {
+                if (!Commands.requireAdmin(sender)) return true;
+                GeyserSkullSync.sync(plugin, headPool);
+                sender.sendMessage(ChatColor.GREEN + "Synced marble head textures to Geyser's custom_skulls.json "
+                        + ChatColor.GRAY + "(restart/reload Geyser to apply).");
                 return true;
             }
 
@@ -333,6 +352,7 @@ public class CommandKit implements CommandExecutor {
                     ChatColor.DARK_GREEN + "/md version\n" +
                     ChatColor.DARK_GREEN + "/md reload\n" +
                     ChatColor.DARK_GREEN + "/md update\n" +
+                    ChatColor.DARK_GREEN + "/md geysersync\n" +
                     ChatColor.DARK_GREEN + "/md debug\n" +
                     ChatColor.DARK_GREEN + "/md pdc");
         } else {

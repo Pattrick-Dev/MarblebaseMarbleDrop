@@ -3,6 +3,7 @@ main: me.pattrick.marbledrop.Main
 version: ${project.version}
 api-version: "26.2"
 softdepend: [WorldEdit, FastAsyncWorldEdit, ProtocolLib]
+loadbefore: [Geyser-Spigot]
 commands:
    md:
       description: Admin/core MarbleDrop commands

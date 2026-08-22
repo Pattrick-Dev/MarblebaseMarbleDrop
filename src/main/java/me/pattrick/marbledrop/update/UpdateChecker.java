@@ -9,7 +9,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,11 +23,14 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Periodically checks the GitHub repo's latest Release against the version
- * this jar was built as (plugin.yml's version, filtered from pom.xml at
- * build time by the release workflow - see .github/workflows/release.yml).
- * When the release is newer, downloads its jar straight into Bukkit's own
- * update folder ({@link org.bukkit.Server#getUpdateFolderFile()}, normally
+ * Checks the GitHub repo's latest Release against the version this jar was
+ * built as (plugin.yml's version, filtered from pom.xml at build time by
+ * the release workflow - see .github/workflows/release.yml) whenever an op
+ * logs in, rather than on a timer - an op joining is already the moment
+ * someone able to act on it is around, so there's no point polling GitHub
+ * while no op is online to see/restart for it. When the release is newer,
+ * downloads its jar straight into Bukkit's own update folder
+ * ({@link org.bukkit.Server#getUpdateFolderFile()}, normally
  * plugins/update/) under this jar's own file name - Paper's plugin loader
  * automatically swaps it in on the NEXT server restart on its own. This
  * class never touches the currently-running jar or classloader and never
@@ -61,12 +63,10 @@ public final class UpdateChecker implements Listener {
             .build();
 
     // Non-null once a newer jar has actually been downloaded and staged for
-    // the next restart - lets a background tick avoid re-downloading (and
-    // re-announcing) the same release every interval, and lets a
-    // just-joined op still be told about it (see onPlayerJoin()).
+    // the next restart - lets an op who joins after it's already staged
+    // (by an earlier op's join) skip straight to the "already staged"
+    // notice instead of re-checking GitHub (see onPlayerJoin()).
     private volatile String stagedVersion;
-
-    private BukkitTask task;
 
     public UpdateChecker(JavaPlugin plugin, MdConfig config, String jarFileName) {
         this.plugin = plugin;
@@ -84,48 +84,12 @@ public final class UpdateChecker implements Listener {
         return stagedVersion;
     }
 
-    /** (Re)arms the periodic check per current config - safe to call again after a config reload. */
-    public void start() {
-        stop();
-        if (!config.updateCheckerEnabled()) return;
-
-        long intervalTicks = config.updateCheckerIntervalHours() * 3600L * 20L;
-        // ~10s after enable, so this never competes with everything else onEnable() is doing.
-        task = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::checkNow, 200L, intervalTicks);
-    }
-
-    public void stop() {
-        if (task != null) {
-            task.cancel();
-            task = null;
-        }
-    }
-
-    /** See CommandKit's /md reload - re-reads enabled/interval and re-arms (or disarms) accordingly. */
-    public void onConfigReloaded() {
-        start();
-    }
-
     /** Manual trigger - see /md update. Runs off-thread and reports back to the sender when done. */
     public void checkNowFor(CommandSender sender) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             Result result = doCheck();
             Bukkit.getScheduler().runTask(plugin, () -> report(sender, result));
         });
-    }
-
-    private void checkNow() {
-        Result result = doCheck();
-        if (result.error() != null) {
-            plugin.getLogger().warning("[UpdateChecker] Check failed: " + result.error());
-        } else if (result.justStaged()) {
-            plugin.getLogger().info("[UpdateChecker] Staged v" + result.remoteVersion()
-                    + " - it'll apply on the next server restart.");
-            if (config.updateCheckerNotifyOps()) {
-                Bukkit.getScheduler().runTask(plugin, () -> notifyOnlineOps(result.remoteVersion()));
-            }
-        }
-        // alreadyStaged / upToDate: nothing new to report on a background tick.
     }
 
     private record Result(boolean justStaged, boolean alreadyStaged, boolean upToDate, String remoteVersion, String error) {}
@@ -213,14 +177,37 @@ public final class UpdateChecker implements Listener {
         }
     }
 
-    /** So an op who logs in after an update was staged while they were offline still finds out. */
+    /**
+     * Runs the update check whenever an op logs in - this is the ONLY
+     * trigger now (see class javadoc for why there's no timer). If a newer
+     * release was already staged by an earlier op's join, this skips
+     * straight to notifying instead of hitting GitHub again.
+     */
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent e) {
-        if (stagedVersion == null || !config.updateCheckerNotifyOps()) return;
+        if (!config.updateCheckerEnabled()) return;
         Player p = e.getPlayer();
-        if (p.isOp()) {
-            p.sendMessage(ChatColor.GREEN + "[MarbleDrop] Update v" + stagedVersion + " is staged - restart the server to apply it.");
+        if (!p.isOp()) return;
+
+        if (stagedVersion != null) {
+            if (config.updateCheckerNotifyOps()) {
+                p.sendMessage(ChatColor.GREEN + "[MarbleDrop] Update v" + stagedVersion + " is staged - restart the server to apply it.");
+            }
+            return;
         }
+
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            Result result = doCheck();
+            if (result.error() != null) {
+                plugin.getLogger().warning("[UpdateChecker] Check failed: " + result.error());
+            } else if (result.justStaged()) {
+                plugin.getLogger().info("[UpdateChecker] Staged v" + result.remoteVersion()
+                        + " - it'll apply on the next server restart.");
+                if (config.updateCheckerNotifyOps()) {
+                    Bukkit.getScheduler().runTask(plugin, () -> notifyOnlineOps(result.remoteVersion()));
+                }
+            }
+        });
     }
 
     /**

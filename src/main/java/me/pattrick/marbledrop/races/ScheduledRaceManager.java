@@ -32,8 +32,8 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -41,7 +41,8 @@ import java.util.UUID;
 
 /**
  * Runs a server race at each of {@link MdConfig#scheduledRaceDailyTimes()}
- * (fixed clock times, server-local) - races happen ONLY at those specific
+ * (fixed clock times, interpreted in {@link MdConfig#scheduledRaceTimeZone()},
+ * NOT the host machine's timezone) - races happen ONLY at those specific
  * times, never on any kind of recurring interval. The entry window for a
  * race is always open: the moment one race concludes (or the plugin starts),
  * the next one opens immediately and stays open right up until the next
@@ -310,16 +311,16 @@ public final class ScheduledRaceManager implements Listener {
         nextTask = Bukkit.getScheduler().runTaskLater(plugin, this::runCycle, REOPEN_DELAY_TICKS);
     }
 
-    /** Milliseconds until the soonest configured daily-time, rolling over to tomorrow if every one of today's has already passed. Long.MAX_VALUE if none are configured. */
+    /** Milliseconds until the soonest configured daily-time (in {@link MdConfig#scheduledRaceTimeZone()}), rolling over to tomorrow if every one of today's has already passed. Long.MAX_VALUE if none are configured. */
     private long millisUntilNextDailyTime() {
         List<LocalTime> times = config.scheduledRaceDailyTimes();
         if (times.isEmpty()) return Long.MAX_VALUE;
 
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime soonest = null;
+        ZonedDateTime now = ZonedDateTime.now(config.scheduledRaceTimeZone());
+        ZonedDateTime soonest = null;
 
         for (LocalTime t : times) {
-            LocalDateTime candidate = LocalDateTime.of(now.toLocalDate(), t);
+            ZonedDateTime candidate = ZonedDateTime.of(now.toLocalDate(), t, now.getZone());
             if (!candidate.isAfter(now)) {
                 candidate = candidate.plusDays(1);
             }

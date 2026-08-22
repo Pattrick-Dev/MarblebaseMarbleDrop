@@ -7,6 +7,7 @@ import me.pattrick.marbledrop.marble.MarbleDisplayAmbient;
 import me.pattrick.marbledrop.marble.MarbleDisplayMenuListener;
 import me.pattrick.marbledrop.progression.*;
 import me.pattrick.marbledrop.progression.infusion.InfusionService;
+import me.pattrick.marbledrop.progression.infusion.heads.GeyserSkullSync;
 import me.pattrick.marbledrop.progression.infusion.heads.HeadPool;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableAmbient;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableCommand;
@@ -106,7 +107,6 @@ public class Main extends JavaPlugin {
         // -------------------- Update checker --------------------
         updateChecker = new UpdateChecker(this, mdConfig, getFile().getName());
         getServer().getPluginManager().registerEvents(updateChecker, this);
-        updateChecker.start();
 
         // -------------------- Init marble keys --------------------
         MarbleKeys.init(this);
@@ -239,6 +239,7 @@ public class Main extends JavaPlugin {
         // -------------------- Load heads pool --------------------
         HeadPool headPool = new HeadPool(this);
         headPool.load();
+        GeyserSkullSync.sync(this, headPool);
 
         // -------------------- Scheduled server races --------------------
         // Needs raceManager/raceWatchManager/raceEngine (racing section above)
@@ -417,7 +418,8 @@ public class Main extends JavaPlugin {
                 tutorialCommand,
                 recipesCommand,
                 scheduledRaceManager,
-                updateChecker
+                updateChecker,
+                headPool
         );
 
         CommandKitTabCompletion mdTabCompletion = new CommandKitTabCompletion(trackManager);
@@ -461,10 +463,7 @@ public class Main extends JavaPlugin {
     @Override
     public void onDisable() {
 
-        if (updateChecker != null) {
-            updateChecker.stop();
-            updateChecker = null;
-        }
+        updateChecker = null;
 
         if (tutorialPoller != null) {
             tutorialPoller.stop();

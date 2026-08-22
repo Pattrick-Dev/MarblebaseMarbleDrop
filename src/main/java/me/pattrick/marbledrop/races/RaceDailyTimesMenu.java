@@ -55,7 +55,7 @@ public final class RaceDailyTimesMenu {
         inv.setItem(SLOT_ADD, item(Material.LIME_DYE, ChatColor.GREEN + "Add a Time",
                 List.of(
                         ChatColor.GRAY + "Click, then type a time in chat.",
-                        ChatColor.GRAY + "Format: HH:mm, 24-hour, server-local.",
+                        ChatColor.GRAY + "Format: HH:mm, 24-hour, " + cfg.scheduledRaceTimeZone().getId() + ".",
                         ChatColor.GRAY + "Example: 14:30"
                 )));
         inv.setItem(SLOT_BACK, item(Material.ARROW, ChatColor.YELLOW + "Back", List.of()));
