@@ -11,6 +11,9 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -19,8 +22,15 @@ import java.util.function.Predicate;
  * own class for the same reason TrackBuildToolsPacketBridge is - see that
  * class's javadoc. Only ever constructed from an already-confirmed
  * "ProtocolLib is present" branch.
+ * <p>
+ * pendingThisTick guards against the same double-fire TrackBuildToolsPacketBridge
+ * documents in full: a single physical click against a block sends both
+ * USE_ITEM_ON and USE_ITEM, and without this guard handleBoost ran twice
+ * per click - silently burning two charges and triggering two boosts.
  */
 final class RaceBoostPacketBridge {
+
+    private final Set<UUID> pendingThisTick = ConcurrentHashMap.newKeySet();
 
     RaceBoostPacketBridge(Plugin plugin, Predicate<Player> isHoldingBoostItem, Consumer<Player> handleBoost) {
         ProtocolManager manager = ProtocolLibrary.getProtocolManager();
@@ -35,7 +45,13 @@ final class RaceBoostPacketBridge {
                 if (!isHoldingBoostItem.test(player)) return;
 
                 event.setCancelled(true);
-                Bukkit.getScheduler().runTask(plugin, () -> handleBoost.accept(player));
+
+                UUID id = player.getUniqueId();
+                if (!pendingThisTick.add(id)) return; // already queued from this same click's other packet
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    pendingThisTick.remove(id);
+                    handleBoost.accept(player);
+                });
             }
         });
     }

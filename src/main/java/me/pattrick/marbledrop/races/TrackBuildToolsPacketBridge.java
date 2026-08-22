@@ -11,6 +11,9 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 /**
@@ -30,8 +33,25 @@ import java.util.function.BiConsumer;
  * item). The Point Tool needs to know which block was targeted; onUse
  * (bound to TrackBuildToolsListener#handle) re-raycasts server-side
  * rather than parsing that out of the raw packet.
+ * <p>
+ * A single physical right-click at a block sends BOTH of the packet types
+ * listened for here - the vanilla client always sends USE_ITEM_ON first,
+ * and (for a non-block item like these tools, since nothing consumed the
+ * block interaction) immediately follows it with USE_ITEM for the same
+ * click. Bukkit's own PlayerInteractEvent construction collapses that
+ * pair into a single event; reading the raw packets bypasses that
+ * collapsing, so without the pendingThisTick guard below onUse fired
+ * twice per click - see git history, this was exactly the "track tools
+ * fire twice" bug.
  */
 final class TrackBuildToolsPacketBridge {
+
+    // Player UUIDs with an onUse call already scheduled for later this tick
+    // - the second packet of the USE_ITEM_ON+USE_ITEM pair for the same
+    // click hits this and is dropped instead of scheduling a duplicate.
+    // ConcurrentHashMap-backed since packet listeners can run off the main
+    // thread (see RaceGlowPacketBridge).
+    private final Set<UUID> pendingThisTick = ConcurrentHashMap.newKeySet();
 
     TrackBuildToolsPacketBridge(Plugin plugin, RaceInventoryOverlay overlay,
                                  BiConsumer<Player, TrackCreationKit.Tool> onUse) {
@@ -49,7 +69,13 @@ final class TrackBuildToolsPacketBridge {
                 if (tool == null || !overlay.isFakeSlot(player, heldSlot, tool.tag)) return;
 
                 event.setCancelled(true);
-                Bukkit.getScheduler().runTask(plugin, () -> onUse.accept(player, tool));
+
+                UUID id = player.getUniqueId();
+                if (!pendingThisTick.add(id)) return; // already queued from this same click's other packet
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    pendingThisTick.remove(id);
+                    onUse.accept(player, tool);
+                });
             }
         });
     }
