@@ -9,6 +9,7 @@ import me.pattrick.marbledrop.marble.MarbleStats;
 import me.pattrick.marbledrop.progression.DustManager;
 import me.pattrick.marbledrop.progression.infusion.heads.HeadEntry;
 import me.pattrick.marbledrop.progression.infusion.heads.HeadPool;
+import me.pattrick.marbledrop.tutorial.TutorialManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -124,6 +125,12 @@ public final class ScheduledRaceManager implements Listener {
     // No-op everywhere unless discord.webhook-url is configured - see DiscordRaceStatus.
     private final DiscordRaceStatus discord;
 
+    // Set post-construction (see Main) since TutorialManager is wired up
+    // slightly later - null-safe everywhere it's read. Gates the countdown
+    // boss bar so a player mid-tutorial doesn't see/get pulled toward a
+    // scheduled race before they've unlocked full access.
+    private TutorialManager tutorialManager;
+
     public ScheduledRaceManager(Plugin plugin, MdConfig config, TrackManager tracks, RaceManager races,
                                  RaceWatchManager watch, MarbleRaceEngine engine, DustManager dustManager,
                                  HeadPool headPool) {
@@ -138,6 +145,10 @@ public final class ScheduledRaceManager implements Listener {
         this.discord = new DiscordRaceStatus(plugin, config, this, races);
 
         races.setOutcomeListener(this::onRaceFinished);
+    }
+
+    public void setTutorialManager(TutorialManager tutorialManager) {
+        this.tutorialManager = tutorialManager;
     }
 
     public void start() {
@@ -782,7 +793,9 @@ public final class ScheduledRaceManager implements Listener {
         entryWindowEndsAtMillis = System.currentTimeMillis() + windowMs;
 
         countdownBar = Bukkit.createBossBar(" ", BarColor.YELLOW, BarStyle.SOLID);
-        for (Player p : Bukkit.getOnlinePlayers()) countdownBar.addPlayer(p);
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            if (canSeeCountdownBar(p)) countdownBar.addPlayer(p);
+        }
         countdownBar.setVisible(true);
         updateBossBarTitle(trackId, windowMs);
 
@@ -818,11 +831,23 @@ public final class ScheduledRaceManager implements Listener {
         }
     }
 
-    /** So a player who logs in mid-countdown still sees the boss bar. */
+    /** So a player who logs in mid-countdown still sees the boss bar - unless they still owe us a tutorial. */
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent e) {
-        if (countdownBar != null) {
+        if (countdownBar != null && canSeeCountdownBar(e.getPlayer())) {
             countdownBar.addPlayer(e.getPlayer());
+        }
+    }
+
+    /** Hidden until a player has completed the tutorial - see TutorialManager#finish, which calls onTutorialFinished below the moment that flips. */
+    private boolean canSeeCountdownBar(Player player) {
+        return tutorialManager == null || tutorialManager.hasCompleted(player);
+    }
+
+    /** Called by TutorialManager the moment a player finishes - adds them to the entry-window boss bar immediately if one's currently running, instead of making them wait for the next one. */
+    public void onTutorialFinished(Player player) {
+        if (countdownBar != null) {
+            countdownBar.addPlayer(player);
         }
     }
 

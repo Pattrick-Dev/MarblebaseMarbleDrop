@@ -4,8 +4,10 @@ import me.pattrick.marbledrop.MdConfig;
 import me.pattrick.marbledrop.SilentGive;
 import me.pattrick.marbledrop.progression.DustManager;
 import me.pattrick.marbledrop.progression.StationType;
+import me.pattrick.marbledrop.races.ScheduledRaceManager;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -44,6 +46,7 @@ public final class TutorialManager {
     private final TutorialLocationStore locationStore;
     private final TutorialCraftFrameManager craftFrames;
     private final TutorialTabListPrivacy tabPrivacy;
+    private final ScheduledRaceManager scheduledRaceManager;
 
     private final NamespacedKey K_ACTIVE;
     private final NamespacedKey K_STEP;
@@ -70,13 +73,15 @@ public final class TutorialManager {
     };
 
     public TutorialManager(Plugin plugin, DustManager dustManager, MdConfig config, TutorialLocationStore locationStore,
-                            TutorialCraftFrameManager craftFrames, TutorialTabListPrivacy tabPrivacy) {
+                            TutorialCraftFrameManager craftFrames, TutorialTabListPrivacy tabPrivacy,
+                            ScheduledRaceManager scheduledRaceManager) {
         this.plugin = plugin;
         this.dustManager = dustManager;
         this.config = config;
         this.locationStore = locationStore;
         this.craftFrames = craftFrames;
         this.tabPrivacy = tabPrivacy;
+        this.scheduledRaceManager = scheduledRaceManager;
         this.K_ACTIVE = new NamespacedKey(plugin, "tutorial_active");
         this.K_STEP = new NamespacedKey(plugin, "tutorial_step");
         this.K_DONE = new NamespacedKey(plugin, "tutorial_done");
@@ -203,6 +208,13 @@ public final class TutorialManager {
         setActive(player, false);
         player.getPersistentDataContainer().set(K_DONE, PersistentDataType.BYTE, (byte) 1);
 
+        // Undo the Creative->Adventure swap from enterStep() now that
+        // they've got "full access" - Adventure was only ever a tutorial
+        // safety rail, not where a finished player should be left standing.
+        if (player.getGameMode() == GameMode.ADVENTURE) {
+            player.setGameMode(GameMode.SURVIVAL);
+        }
+
         infusionBaselineCount.remove(player.getUniqueId());
         upgradeBaselineTotal.remove(player.getUniqueId());
         craftedInStep.remove(player.getUniqueId());
@@ -212,6 +224,12 @@ public final class TutorialManager {
         TutorialVisibility.exit(plugin, player, this, tabPrivacy);
 
         dustManager.addDust(player, TutorialStep.COMPLETE.rewardDust());
+
+        // Scheduled races' entry-window boss bar is hidden from anyone who
+        // hasn't finished the tutorial yet (see ScheduledRaceManager) - now
+        // that they have, drop them straight into whichever window's
+        // currently running instead of making them wait for the next one.
+        scheduledRaceManager.onTutorialFinished(player);
 
         Location postLoc = locationStore.getPostTutorialLocation();
         if (postLoc != null) {
@@ -261,6 +279,15 @@ public final class TutorialManager {
     private void enterStep(Player player, TutorialStep step) {
         int stepNumber = step.ordinal() + 1;
         int total = TutorialStep.totalSteps();
+
+        // The tutorial hands out real ingredients/dust and expects normal
+        // survival restrictions (can't just pull items from a creative
+        // inventory) - if an admin/staff member starts it while still in
+        // Creative (e.g. from building), drop them to Adventure so the
+        // rest of the flow behaves the same as it would for a real player.
+        if (player.getGameMode() == GameMode.CREATIVE) {
+            player.setGameMode(GameMode.ADVENTURE);
+        }
 
         // Safety net: never leave a station GUI open across a room change.
         // The upgrade GUI is normally closed the moment a real upgrade is

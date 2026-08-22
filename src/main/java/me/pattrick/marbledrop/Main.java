@@ -336,7 +336,8 @@ public class Main extends JavaPlugin {
         // to hideEntity's default behavior (their tab entry disappears too).
         TutorialTabListPrivacy tabListPrivacy = TutorialTabListPrivacy.createIfAvailable(this);
 
-        tutorialManager = new TutorialManager(this, dustManager, mdConfig, tutorialLocations, craftFrameManager, tabListPrivacy);
+        tutorialManager = new TutorialManager(this, dustManager, mdConfig, tutorialLocations, craftFrameManager, tabListPrivacy, scheduledRaceManager);
+        scheduledRaceManager.setTutorialManager(tutorialManager);
 
         TutorialTasksHandler tutorialTasksHandler = new TutorialTasksHandler(this, tutorialManager);
         getServer().getPluginManager().registerEvents(tutorialTasksHandler, this);

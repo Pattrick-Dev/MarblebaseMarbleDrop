@@ -15,14 +15,31 @@ import java.util.Map;
  * Stores one teleport checkpoint Location per TutorialStep, plus a single
  * tutorial race track id, persisted to tutorial-locations.yml. Set in-game
  * via /md tutorial setlocation <step> / clearlocation / setrace <trackId>.
+ * <p>
+ * Coordinates are kept as raw (world name, x/y/z/yaw/pitch) data and the
+ * {@link World} is only resolved on demand in {@link #get}/{@link
+ * #getPostTutorialLocation} - NOT once at load() time. A world created by
+ * another plugin (Multiverse, etc.) isn't guaranteed to be loaded yet when
+ * this plugin enables; resolving eagerly at boot meant a checkpoint whose
+ * world loaded a moment too late was silently dropped for the rest of that
+ * server session (see git history - this is exactly what happened on the
+ * live server: "world"/"spawn-world" were both valid, just not necessarily
+ * loaded before this ran). Resolving lazily, at the moment a player is
+ * actually about to be teleported, sidesteps that boot-order race entirely.
  */
 public final class TutorialLocationStore {
 
     private final Plugin plugin;
     private final File file;
-    private final Map<TutorialStep, Location> locations = new EnumMap<>(TutorialStep.class);
+    private final Map<TutorialStep, RawLocation> locations = new EnumMap<>(TutorialStep.class);
     private String raceTrackId;
-    private Location postTutorialLocation;
+    private RawLocation postTutorialLocation;
+
+    private record RawLocation(String world, double x, double y, double z, float yaw, float pitch) {
+        static RawLocation of(Location loc) {
+            return new RawLocation(loc.getWorld().getName(), loc.getX(), loc.getY(), loc.getZ(), loc.getYaw(), loc.getPitch());
+        }
+    }
 
     public TutorialLocationStore(Plugin plugin) {
         this.plugin = plugin;
@@ -31,7 +48,7 @@ public final class TutorialLocationStore {
     }
 
     public Location get(TutorialStep step) {
-        return locations.get(step);
+        return resolve(locations.get(step), "Tutorial location for " + step.name());
     }
 
     public boolean has(TutorialStep step) {
@@ -39,7 +56,7 @@ public final class TutorialLocationStore {
     }
 
     public void set(TutorialStep step, Location location) {
-        locations.put(step, location.clone());
+        locations.put(step, RawLocation.of(location));
         save();
     }
 
@@ -58,12 +75,24 @@ public final class TutorialLocationStore {
     }
 
     public Location getPostTutorialLocation() {
-        return postTutorialLocation;
+        return resolve(postTutorialLocation, "Post-tutorial location");
     }
 
     public void setPostTutorialLocation(Location location) {
-        this.postTutorialLocation = location.clone();
+        this.postTutorialLocation = RawLocation.of(location);
         save();
+    }
+
+    /** Null (with a warning) if the raw entry is unset or its world isn't currently loaded. */
+    private Location resolve(RawLocation raw, String logLabel) {
+        if (raw == null) return null;
+
+        World world = Bukkit.getWorld(raw.world());
+        if (world == null) {
+            plugin.getLogger().warning(logLabel + " references world '" + raw.world() + "', which isn't currently loaded - skipping.");
+            return null;
+        }
+        return new Location(world, raw.x(), raw.y(), raw.z(), raw.yaw(), raw.pitch());
     }
 
     private void load() {
@@ -73,42 +102,25 @@ public final class TutorialLocationStore {
         this.raceTrackId = yml.getString("race-track-id", null);
 
         if (yml.contains("post-tutorial.world")) {
-            String worldName = yml.getString("post-tutorial.world");
-            World world = worldName != null ? Bukkit.getWorld(worldName) : null;
-            if (world != null) {
-                this.postTutorialLocation = new Location(
-                        world,
-                        yml.getDouble("post-tutorial.x"),
-                        yml.getDouble("post-tutorial.y"),
-                        yml.getDouble("post-tutorial.z"),
-                        (float) yml.getDouble("post-tutorial.yaw"),
-                        (float) yml.getDouble("post-tutorial.pitch")
-                );
-            } else {
-                plugin.getLogger().warning("Post-tutorial location references missing world '" + worldName + "', skipping.");
-            }
+            this.postTutorialLocation = readRaw(yml, "post-tutorial");
         }
 
         for (TutorialStep step : TutorialStep.values()) {
             String path = step.name();
             if (!yml.contains(path + ".world")) continue;
-
-            String worldName = yml.getString(path + ".world");
-            World world = worldName != null ? Bukkit.getWorld(worldName) : null;
-            if (world == null) {
-                plugin.getLogger().warning("Tutorial location for " + path +
-                        " references missing world '" + worldName + "', skipping.");
-                continue;
-            }
-
-            double x = yml.getDouble(path + ".x");
-            double y = yml.getDouble(path + ".y");
-            double z = yml.getDouble(path + ".z");
-            float yaw = (float) yml.getDouble(path + ".yaw");
-            float pitch = (float) yml.getDouble(path + ".pitch");
-
-            locations.put(step, new Location(world, x, y, z, yaw, pitch));
+            locations.put(step, readRaw(yml, path));
         }
+    }
+
+    private RawLocation readRaw(YamlConfiguration yml, String path) {
+        return new RawLocation(
+                yml.getString(path + ".world"),
+                yml.getDouble(path + ".x"),
+                yml.getDouble(path + ".y"),
+                yml.getDouble(path + ".z"),
+                (float) yml.getDouble(path + ".yaw"),
+                (float) yml.getDouble(path + ".pitch")
+        );
     }
 
     private void save() {
@@ -119,24 +131,11 @@ public final class TutorialLocationStore {
         }
 
         if (postTutorialLocation != null) {
-            yml.set("post-tutorial.world", postTutorialLocation.getWorld().getName());
-            yml.set("post-tutorial.x", postTutorialLocation.getX());
-            yml.set("post-tutorial.y", postTutorialLocation.getY());
-            yml.set("post-tutorial.z", postTutorialLocation.getZ());
-            yml.set("post-tutorial.yaw", (double) postTutorialLocation.getYaw());
-            yml.set("post-tutorial.pitch", (double) postTutorialLocation.getPitch());
+            writeRaw(yml, "post-tutorial", postTutorialLocation);
         }
 
-        for (Map.Entry<TutorialStep, Location> entry : locations.entrySet()) {
-            String path = entry.getKey().name();
-            Location loc = entry.getValue();
-
-            yml.set(path + ".world", loc.getWorld().getName());
-            yml.set(path + ".x", loc.getX());
-            yml.set(path + ".y", loc.getY());
-            yml.set(path + ".z", loc.getZ());
-            yml.set(path + ".yaw", (double) loc.getYaw());
-            yml.set(path + ".pitch", (double) loc.getPitch());
+        for (Map.Entry<TutorialStep, RawLocation> entry : locations.entrySet()) {
+            writeRaw(yml, entry.getKey().name(), entry.getValue());
         }
 
         try {
@@ -145,5 +144,14 @@ public final class TutorialLocationStore {
         } catch (IOException e) {
             plugin.getLogger().severe("Failed to save tutorial-locations.yml: " + e.getMessage());
         }
+    }
+
+    private void writeRaw(YamlConfiguration yml, String path, RawLocation loc) {
+        yml.set(path + ".world", loc.world());
+        yml.set(path + ".x", loc.x());
+        yml.set(path + ".y", loc.y());
+        yml.set(path + ".z", loc.z());
+        yml.set(path + ".yaw", (double) loc.yaw());
+        yml.set(path + ".pitch", (double) loc.pitch());
     }
 }
