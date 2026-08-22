@@ -17,8 +17,8 @@ import org.bukkit.plugin.Plugin;
 import java.util.Set;
 
 /**
- * Crafting has no /md command to gate/intercept the way TASKS ("/tasks")
- * and RACE ("/md race") do - it happens entirely through the vanilla
+ * Crafting has no command to gate/intercept the way TASKS ("/tasks")
+ * and RACE ("/race") do - it happens entirely through the vanilla
  * crafting-table UI. This is the CRAFT step's only completion path,
  * observing (MONITOR, after anything else) for a genuine station item
  * coming out of the crafting grid, analogous to TutorialRecyclerHook.

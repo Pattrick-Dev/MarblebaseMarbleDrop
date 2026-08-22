@@ -28,7 +28,7 @@ public final class UpgradeStationCommand implements CommandExecutor {
         if (!Commands.requireAdmin(player)) return true;
 
         if (args.length == 0) {
-            Commands.usage(player, "/md upgrades give|remove|count");
+            Commands.usage(player, "/station upgrade give|remove|count");
             return true;
         }
 
@@ -49,7 +49,7 @@ public final class UpgradeStationCommand implements CommandExecutor {
             }
 
             default -> {
-                Commands.usage(player, "/md upgrades give|remove|count");
+                Commands.usage(player, "/station upgrade give|remove|count");
                 return true;
             }
         }

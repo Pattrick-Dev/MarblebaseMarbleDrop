@@ -63,7 +63,7 @@ public final class MarbleRaceEngine {
         Bukkit.getScheduler().runTaskLater(plugin, task, delayTicks);
     }
 
-    /** Force-removes every active runner without firing their finish callbacks - see /md race purge. */
+    /** Force-removes every active runner without firing their finish callbacks - see /race purge. */
     public void purgeAll() {
         for (MarbleRunner r : runners) r.despawn();
         runners.clear();

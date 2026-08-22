@@ -13,7 +13,7 @@ import java.io.IOException;
  * Stores the 9 real-world locations of the admin's built 3x3 item frame
  * display (slot 0-8, row-major, top-left to bottom-right as viewed from
  * in front of the frames), persisted to tutorial-craft-frames.yml.
- * Populated in one shot via /md tutorial setcraftframes from a
+ * Populated in one shot via /tutorial setcraftframes from a
  * WorldEdit/FAWE selection - see TutorialCraftFrameManager.setupFromSelection.
  * <p>
  * Coordinates are kept as raw (world name, x/y/z) data and the {@link World}

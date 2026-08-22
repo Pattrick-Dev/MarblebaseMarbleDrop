@@ -8,6 +8,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -24,7 +25,6 @@ public final class MdConfig {
     private boolean debugEnabled;
 
     private boolean updateCheckerEnabled;
-    private int updateCheckerIntervalHours;
     private boolean updateCheckerNotifyOps;
 
     private String discordWebhookUrl;
@@ -57,6 +57,7 @@ public final class MdConfig {
     private int scheduledRaceAiFillCount;
     private int scheduledRaceAiShowCount;
     private List<LocalTime> scheduledRaceDailyTimes = List.of();
+    private ZoneId scheduledRaceTimeZone = ZoneId.of("America/New_York");
 
     private double catalystDefaultPerItem;
     private double catalystTeamBiasChance;
@@ -75,7 +76,6 @@ public final class MdConfig {
         debugEnabled = c.getBoolean("debug.enabled", false);
 
         updateCheckerEnabled = c.getBoolean("update-checker.enabled", true);
-        updateCheckerIntervalHours = Math.max(1, c.getInt("update-checker.check-interval-hours", 6));
         updateCheckerNotifyOps = c.getBoolean("update-checker.notify-ops", true);
 
         discordWebhookUrl = c.getString("discord.webhook-url", "");
@@ -117,6 +117,14 @@ public final class MdConfig {
             }
         }
         scheduledRaceDailyTimes = dailyTimes;
+
+        String tzRaw = c.getString("races.scheduled.timezone", "America/New_York");
+        try {
+            scheduledRaceTimeZone = ZoneId.of(tzRaw.trim());
+        } catch (Exception ex) {
+            plugin.getLogger().warning("[Config] Unrecognized races.scheduled.timezone: '" + tzRaw + "' - falling back to America/New_York");
+            scheduledRaceTimeZone = ZoneId.of("America/New_York");
+        }
 
         infusionDailyCap = c.getInt("infusion.daily-cap", 5);
 
@@ -178,7 +186,6 @@ public final class MdConfig {
     public boolean debugEnabled() { return debugEnabled; }
 
     public boolean updateCheckerEnabled() { return updateCheckerEnabled; }
-    public int updateCheckerIntervalHours() { return updateCheckerIntervalHours; }
     public boolean updateCheckerNotifyOps() { return updateCheckerNotifyOps; }
 
     public String discordWebhookUrl() { return discordWebhookUrl; }
@@ -206,6 +213,7 @@ public final class MdConfig {
     public int scheduledRaceAiFillCount() { return scheduledRaceAiFillCount; }
     public int scheduledRaceAiShowCount() { return scheduledRaceAiShowCount; }
     public List<LocalTime> scheduledRaceDailyTimes() { return scheduledRaceDailyTimes; }
+    public ZoneId scheduledRaceTimeZone() { return scheduledRaceTimeZone; }
 
     public double hologramNameRadius() { return holoNameRadius; }
     public String infusionHologramName() { return infusionHoloName; }

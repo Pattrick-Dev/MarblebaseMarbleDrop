@@ -30,7 +30,7 @@ public final class InfusionTableCommand implements CommandExecutor {
         if (!Commands.requireAdmin(player)) return true;
 
         if (args.length == 0) {
-            Commands.usage(player, "/md table give|remove|count|private");
+            Commands.usage(player, "/station table give|remove|count|private");
             return true;
         }
 
@@ -66,7 +66,7 @@ public final class InfusionTableCommand implements CommandExecutor {
             }
 
             default -> {
-                Commands.usage(player, "/md table give|remove|count|private");
+                Commands.usage(player, "/station table give|remove|count|private");
                 return true;
             }
         }

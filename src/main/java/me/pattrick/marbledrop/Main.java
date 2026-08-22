@@ -7,6 +7,7 @@ import me.pattrick.marbledrop.marble.MarbleDisplayAmbient;
 import me.pattrick.marbledrop.marble.MarbleDisplayMenuListener;
 import me.pattrick.marbledrop.progression.*;
 import me.pattrick.marbledrop.progression.infusion.InfusionService;
+import me.pattrick.marbledrop.progression.infusion.heads.GeyserSkullSync;
 import me.pattrick.marbledrop.progression.infusion.heads.HeadPool;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableAmbient;
 import me.pattrick.marbledrop.progression.infusion.table.InfusionTableCommand;
@@ -106,7 +107,6 @@ public class Main extends JavaPlugin {
         // -------------------- Update checker --------------------
         updateChecker = new UpdateChecker(this, mdConfig, getFile().getName());
         getServer().getPluginManager().registerEvents(updateChecker, this);
-        updateChecker.start();
 
         // -------------------- Init marble keys --------------------
         MarbleKeys.init(this);
@@ -239,6 +239,7 @@ public class Main extends JavaPlugin {
         // -------------------- Load heads pool --------------------
         HeadPool headPool = new HeadPool(this);
         headPool.load();
+        GeyserSkullSync.sync(this, headPool);
 
         // -------------------- Scheduled server races --------------------
         // Needs raceManager/raceWatchManager/raceEngine (racing section above)
@@ -294,7 +295,7 @@ public class Main extends JavaPlugin {
         upgradeAmbient.start();
 
         // Constructed after upgradeAmbient (not before, like it used to
-        // be) so /md upgrades remove can hand it the ambient cleanup
+        // be) so /station upgrade remove can hand it the ambient cleanup
         // callback - same as MarbleRecyclerCommand/InfusionTableCommand
         // already do for their own station types.
         UpgradeStationCommand upgradeStationCommand = new UpgradeStationCommand(this, upgradeStations, upgradeAmbient);
@@ -397,7 +398,10 @@ public class Main extends JavaPlugin {
         DustAdminCommand dustAdminCommand = new DustAdminCommand(dustManager);
         RecipesCommand recipesCommand = new RecipesCommand(this);
 
-        // -------------------- Register ONLY /md (router) --------------------
+        // -------------------- Command router --------------------
+        // One CommandKit instance handles every top-level command (md,
+        // race, tutorial, team, dust, station, tasks, recipes) - see its
+        // javadoc for why there are this many now.
         CommandKit md = new CommandKit(
                 this,
                 mdConfig,
@@ -414,30 +418,23 @@ public class Main extends JavaPlugin {
                 tutorialCommand,
                 recipesCommand,
                 scheduledRaceManager,
-                updateChecker
+                updateChecker,
+                headPool
         );
 
         CommandKitTabCompletion mdTabCompletion = new CommandKitTabCompletion(trackManager);
 
-        if (getCommand("md") != null) {
-            getCommand("md").setExecutor(md);
-            getCommand("md").setTabCompleter(mdTabCompletion);
-        } else {
-            getLogger().severe("Command 'md' is not defined in plugin.yml!");
-        }
-
-        if (getCommand("tasks") != null) {
-            getCommand("tasks").setExecutor(md);
-            getCommand("tasks").setTabCompleter(mdTabCompletion);
-        } else {
-            getLogger().severe("Command 'tasks' is not defined in plugin.yml!");
-        }
-
-        if (getCommand("recipes") != null) {
-            getCommand("recipes").setExecutor(md);
-            getCommand("recipes").setTabCompleter(mdTabCompletion);
-        } else {
-            getLogger().severe("Command 'recipes' is not defined in plugin.yml!");
+        // One shared CommandKit instance/tab-completer behind every one of
+        // these top-level commands - CommandKit.onCommand switches on
+        // cmd.getName() to tell them apart. Each needs its own plugin.yml
+        // commands: entry (Bukkit requires that to route it here at all).
+        for (String commandName : new String[]{"md", "race", "tutorial", "team", "dust", "station", "tasks", "recipes"}) {
+            if (getCommand(commandName) != null) {
+                getCommand(commandName).setExecutor(md);
+                getCommand(commandName).setTabCompleter(mdTabCompletion);
+            } else {
+                getLogger().severe("Command '" + commandName + "' is not defined in plugin.yml!");
+            }
         }
 
         // -------------------- Feedback --------------------
@@ -466,10 +463,7 @@ public class Main extends JavaPlugin {
     @Override
     public void onDisable() {
 
-        if (updateChecker != null) {
-            updateChecker.stop();
-            updateChecker = null;
-        }
+        updateChecker = null;
 
         if (tutorialPoller != null) {
             tutorialPoller.stop();

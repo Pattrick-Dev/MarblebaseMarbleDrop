@@ -32,8 +32,8 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -41,7 +41,8 @@ import java.util.UUID;
 
 /**
  * Runs a server race at each of {@link MdConfig#scheduledRaceDailyTimes()}
- * (fixed clock times, server-local) - races happen ONLY at those specific
+ * (fixed clock times, interpreted in {@link MdConfig#scheduledRaceTimeZone()},
+ * NOT the host machine's timezone) - races happen ONLY at those specific
  * times, never on any kind of recurring interval. The entry window for a
  * race is always open: the moment one race concludes (or the plugin starts),
  * the next one opens immediately and stays open right up until the next
@@ -53,7 +54,7 @@ import java.util.UUID;
  * (at each of {@link MdConfig#scheduledRaceAnnounceMinutesBefore()}) count
  * down to that close time, and at zero the race runs.
  * <p>
- * Three outcomes depending on how many real players joined via {@code /md join}:
+ * Three outcomes depending on how many real players joined via {@code /race join}:
  * <ul>
  *   <li><b>2+</b>: handed straight to {@link RaceManager#start} exactly like an
  *   admin-triggered race - {@link RaceManager.OutcomeListener} picks up the
@@ -98,7 +99,7 @@ public final class ScheduledRaceManager implements Listener {
     private volatile boolean running;
     private BukkitTask nextTask;
 
-    // Non-null only during the open-for-entry window; used by /md join.
+    // Non-null only during the open-for-entry window; used by /race join.
     private volatile String openTrackId;
 
     // Non-null from the moment a track opens for entry until its race (of
@@ -182,7 +183,7 @@ public final class ScheduledRaceManager implements Listener {
         activeCycleTrackId = null;
     }
 
-    /** The track currently open for /md join, or null if no scheduled race is in its entry window right now. */
+    /** The track currently open for /race join, or null if no scheduled race is in its entry window right now. */
     public String openTrackId() {
         return openTrackId;
     }
@@ -191,7 +192,7 @@ public final class ScheduledRaceManager implements Listener {
      * The track a scheduled cycle currently has in flight (open OR actually
      * racing), or null if nothing's happening right now. Distinct from
      * {@link #openTrackId()}: this stays set once entries close and the race
-     * itself is running, which is what lets /md race next tell "a race is
+     * itself is running, which is what lets /race next tell "a race is
      * running, check back after" apart from "nothing's open, next in Xm"
      * instead of just reporting a stale/meaningless minutesUntilNextCycle().
      */
@@ -219,7 +220,7 @@ public final class ScheduledRaceManager implements Listener {
     }
 
     /**
-     * Called alongside RaceManager#purgeAllRunners (see /md race purge) --
+     * Called alongside RaceManager#purgeAllRunners (see /race purge) --
      * a purge force-removes runners without ever calling their normal
      * finish callbacks, so without this, purging a stuck scheduled race
      * would leave activeCycleTrackId set forever and jam the scheduler
@@ -247,7 +248,7 @@ public final class ScheduledRaceManager implements Listener {
         scheduleReopenSoon();
     }
 
-    /** Admin escape hatch (see /md race forcecycle) - opens a race right now instead of waiting for the next reopen. No-op if a cycle is already open/running. */
+    /** Admin escape hatch (see /race forcecycle) - opens a race right now instead of waiting for the next reopen. No-op if a cycle is already open/running. */
     public void forceCycleNow() {
         if (activeCycleTrackId != null) return;
         if (nextTask != null) {
@@ -310,16 +311,16 @@ public final class ScheduledRaceManager implements Listener {
         nextTask = Bukkit.getScheduler().runTaskLater(plugin, this::runCycle, REOPEN_DELAY_TICKS);
     }
 
-    /** Milliseconds until the soonest configured daily-time, rolling over to tomorrow if every one of today's has already passed. Long.MAX_VALUE if none are configured. */
+    /** Milliseconds until the soonest configured daily-time (in {@link MdConfig#scheduledRaceTimeZone()}), rolling over to tomorrow if every one of today's has already passed. Long.MAX_VALUE if none are configured. */
     private long millisUntilNextDailyTime() {
         List<LocalTime> times = config.scheduledRaceDailyTimes();
         if (times.isEmpty()) return Long.MAX_VALUE;
 
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime soonest = null;
+        ZonedDateTime now = ZonedDateTime.now(config.scheduledRaceTimeZone());
+        ZonedDateTime soonest = null;
 
         for (LocalTime t : times) {
-            LocalDateTime candidate = LocalDateTime.of(now.toLocalDate(), t);
+            ZonedDateTime candidate = ZonedDateTime.of(now.toLocalDate(), t, now.getZone());
             if (!candidate.isAfter(now)) {
                 candidate = candidate.plusDays(1);
             }
@@ -338,7 +339,7 @@ public final class ScheduledRaceManager implements Listener {
         if (activeCycleTrackId != null) return; // a cycle is already open/running - never overlap
 
         if (!config.scheduledRaceEnabled() || config.scheduledRaceDailyTimes().isEmpty()) {
-            return; // scheduled races off entirely - nothing opens until re-enabled + /md race forcecycle or a restart
+            return; // scheduled races off entirely - nothing opens until re-enabled + /race forcecycle or a restart
         }
 
         List<String> candidates = new ArrayList<>();
@@ -402,7 +403,7 @@ public final class ScheduledRaceManager implements Listener {
         Component msg = Component.text("A race on ", NamedTextColor.GOLD)
                 .append(Component.text(trackId, NamedTextColor.YELLOW))
                 .append(Component.text(" opens for entries! ", NamedTextColor.GOLD))
-                .append(Component.text("/md join", NamedTextColor.AQUA))
+                .append(Component.text("/race join", NamedTextColor.AQUA))
                 .append(Component.text(" - starts in " + formatDuration(windowMs / 1000) + ".", NamedTextColor.GOLD));
 
         Component rewardMsg = Component.text("1st place gets " + fullDust + " Dust, less for runners-up", NamedTextColor.GREEN)
@@ -423,7 +424,7 @@ public final class ScheduledRaceManager implements Listener {
 
         int joined = races.lobbyCount(trackId);
         Component msg = Component.text(minutesLeft + " minute" + (minutesLeft == 1 ? "" : "s") + " left to ", NamedTextColor.GOLD)
-                .append(Component.text("/md join", NamedTextColor.AQUA))
+                .append(Component.text("/race join", NamedTextColor.AQUA))
                 .append(Component.text(" the race on ", NamedTextColor.GOLD))
                 .append(Component.text(trackId, NamedTextColor.YELLOW))
                 .append(Component.text(" (" + joined + " joined so far)", NamedTextColor.GRAY));
@@ -814,7 +815,7 @@ public final class ScheduledRaceManager implements Listener {
         countdownBar.setTitle(ChatColor.GOLD + "Race on " + ChatColor.YELLOW + trackId +
                 ChatColor.GOLD + " - " + formatDuration(remainingMs / 1000) +
                 ChatColor.GOLD + " - " + ChatColor.AQUA + joined + " player" + plural + " joined" +
-                ChatColor.GOLD + " - " + ChatColor.AQUA + "/md join" + ChatColor.GOLD + "!");
+                ChatColor.GOLD + " - " + ChatColor.AQUA + "/race join" + ChatColor.GOLD + "!");
 
         double progress = windowMs <= 0 ? 0 : Math.max(0.0, Math.min(1.0, remainingMs / (double) windowMs));
         countdownBar.setProgress(progress);

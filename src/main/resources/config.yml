@@ -2,8 +2,7 @@ debug:
   enabled: false
 
 update-checker:
-  enabled: true               # check GitHub Releases for a newer build than this one, and stage it for the next restart
-  check-interval-hours: 6     # how often to check
+  enabled: true               # check GitHub Releases for a newer build whenever an op logs in, and stage it for the next restart
   notify-ops: true            # tell online ops in chat once an update has been downloaded and staged
 
 discord:
@@ -377,15 +376,22 @@ races:
     ai-fill-count: 3                   # AI opponents added when exactly 1 real player joins
     ai-show-count: 4                   # AI racers for a pure showcase race when no one joins
 
-    # The ONLY times a race actually runs (24h HH:mm, server's local time).
-    # Entry is always open - the moment one race ends (or the plugin
-    # starts), the next one opens immediately and stays joinable right up
-    # until the next one of these times, then closes and runs. If no
-    # eligible track happens to be free right then, it keeps retrying every
-    # few seconds until one opens up. Empty list, or `enabled: false` above,
-    # turns scheduled races off entirely - re-enabling requires
-    # /md race forcecycle or a restart to kick it back off.
+    # The ONLY times a race actually runs (24h HH:mm), interpreted in the
+    # timezone below - NOT the server host's own timezone. Entry is always
+    # open - the moment one race ends (or the plugin starts), the next one
+    # opens immediately and stays joinable right up until the next one of
+    # these times, then closes and runs. If no eligible track happens to be
+    # free right then, it keeps retrying every few seconds until one opens
+    # up. Empty list, or `enabled: false` above, turns scheduled races off
+    # entirely - re-enabling requires /race forcecycle or a restart to kick
+    # it back off.
     daily-times: ["12:00", "16:00", "20:00", "00:00"]
+
+    # Timezone the daily-times above are interpreted in. Uses standard IANA
+    # zone names (e.g. "America/New_York", "America/Chicago", "UTC") so it
+    # automatically follows EST/EDT daylight saving - it does NOT depend on
+    # what timezone the host machine/OS is set to.
+    timezone: "America/New_York"
 
 recycler:
   dust-return:

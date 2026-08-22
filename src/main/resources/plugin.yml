@@ -3,10 +3,26 @@ main: me.pattrick.marbledrop.Main
 version: ${project.version}
 api-version: "26.2"
 softdepend: [WorldEdit, FastAsyncWorldEdit, ProtocolLib]
+loadbefore: [Geyser-Spigot]
 commands:
    md:
-      description: Base command for marble drop
+      description: Admin/core MarbleDrop commands
       usage: /md
+   race:
+      description: Join, leave, or manage marble races
+      usage: /race
+   tutorial:
+      description: The MarbleDrop onboarding tutorial
+      usage: /tutorial
+   team:
+      description: Manage your marble team
+      usage: /team
+   dust:
+      description: Check or manage Dust balances
+      usage: /dust
+   station:
+      description: Manage infusion table/recycler/upgrade station items
+      usage: /station <table|recycler|upgrade> <give|remove|count>
    tasks:
       description: View and manage your daily/weekly tasks
       usage: /tasks
@@ -21,7 +37,7 @@ permissions:
    marbledrop.admin:
       default: op
    marbledrop.debug:
-      description: Toggle debug mode and use debug-only tools (e.g. /md race test)
+      description: Toggle debug mode and use debug-only tools (e.g. /race test)
       default: op
    marbledrop.infusion.bypass:
       description: Bypass daily infusion limits

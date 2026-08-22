@@ -10,15 +10,15 @@ import org.bukkit.entity.Player;
 
 /**
  * Usage:
- *   /md tutorial start
- *   /md tutorial status [player]
- *   /md tutorial reset <player>
- *   /md tutorial skip <player>
- *   /md tutorial setlocation <step>
- *   /md tutorial clearlocation <step>
- *   /md tutorial setrace <trackId>
- *   /md tutorial setpost
- *   /md tutorial setcraftframes
+ *   /tutorial start
+ *   /tutorial status [player]
+ *   /tutorial reset <player>
+ *   /tutorial skip <player>
+ *   /tutorial setlocation <step>
+ *   /tutorial clearlocation <step>
+ *   /tutorial setrace <trackId>
+ *   /tutorial setpost
+ *   /tutorial setcraftframes
  * <p>
  * start/status are open to everyone; every other subcommand requires
  * marbledrop.admin, checked individually in each case below rather than
@@ -38,7 +38,7 @@ public final class TutorialCommand implements CommandExecutor {
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
 
         if (args.length == 0) {
-            Commands.usage(sender, "/md tutorial <start|status|reset|skip|setlocation|clearlocation|setrace|setpost|setcraftframes> [player|step|trackId]");
+            Commands.usage(sender, "/tutorial <start|status|reset|skip|setlocation|clearlocation|setrace|setpost|setcraftframes> [player|step|trackId]");
             return true;
         }
 
@@ -81,7 +81,7 @@ public final class TutorialCommand implements CommandExecutor {
                 if (target == null) return true;
                 tutorialManager.reset(target);
                 sender.sendMessage(ChatColor.GREEN + "Reset the tutorial for " + target.getName() +
-                        ". They'll need to run /md tutorial start again.");
+                        ". They'll need to run /tutorial start again.");
                 return true;
             }
 
@@ -103,7 +103,7 @@ public final class TutorialCommand implements CommandExecutor {
                 }
 
                 if (args.length < 2) {
-                    Commands.usage(admin, "/md tutorial setlocation <step>");
+                    Commands.usage(admin, "/tutorial setlocation <step>");
                     admin.sendMessage(ChatColor.GRAY + "Steps: " + stepNameList());
                     return true;
                 }
@@ -120,7 +120,7 @@ public final class TutorialCommand implements CommandExecutor {
             case "clearlocation" -> {
                 if (!Commands.requireAdmin(sender)) return true;
                 if (args.length < 2) {
-                    Commands.usage(sender, "/md tutorial clearlocation <step>");
+                    Commands.usage(sender, "/tutorial clearlocation <step>");
                     return true;
                 }
                 TutorialStep step = parseStep(args[1]);
@@ -136,7 +136,7 @@ public final class TutorialCommand implements CommandExecutor {
             case "setrace" -> {
                 if (!Commands.requireAdmin(sender)) return true;
                 if (args.length < 2) {
-                    Commands.usage(sender, "/md tutorial setrace <trackId>");
+                    Commands.usage(sender, "/tutorial setrace <trackId>");
                     return true;
                 }
                 tutorialManager.locations().setRaceTrackId(args[1].toLowerCase());
@@ -170,7 +170,7 @@ public final class TutorialCommand implements CommandExecutor {
             }
 
             default -> {
-                Commands.usage(sender, "/md tutorial <start|status|reset|skip|setlocation|clearlocation|setrace|setpost|setcraftframes> [player|step|trackId]");
+                Commands.usage(sender, "/tutorial <start|status|reset|skip|setlocation|clearlocation|setrace|setpost|setcraftframes> [player|step|trackId]");
                 return true;
             }
         }

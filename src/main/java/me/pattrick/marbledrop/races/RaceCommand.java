@@ -44,7 +44,7 @@ public final class RaceCommand implements CommandExecutor {
             case "open" -> {
                 if (!Commands.requireAdmin(player)) return true;
                 if (args.length < 2) {
-                    Commands.usage(player, "/md race open <trackId>");
+                    Commands.usage(player, "/race open <trackId>");
                     return true;
                 }
                 String trackId = args[1].toLowerCase();
@@ -56,7 +56,7 @@ public final class RaceCommand implements CommandExecutor {
             case "close" -> {
                 if (!Commands.requireAdmin(player)) return true;
                 if (args.length < 2) {
-                    Commands.usage(player, "/md race close <trackId>");
+                    Commands.usage(player, "/race close <trackId>");
                     return true;
                 }
                 String trackId = args[1].toLowerCase();
@@ -68,7 +68,7 @@ public final class RaceCommand implements CommandExecutor {
             case "start" -> {
                 if (!Commands.requireAdmin(player)) return true;
                 if (args.length < 2) {
-                    Commands.usage(player, "/md race start <trackId>");
+                    Commands.usage(player, "/race start <trackId>");
                     return true;
                 }
                 String trackId = args[1].toLowerCase();
@@ -80,7 +80,7 @@ public final class RaceCommand implements CommandExecutor {
             case "clear" -> {
                 if (!Commands.requireAdmin(player)) return true;
                 if (args.length < 2) {
-                    Commands.usage(player, "/md race clear <trackId>");
+                    Commands.usage(player, "/race clear <trackId>");
                     return true;
                 }
                 races.clear(args[1].toLowerCase());
@@ -90,7 +90,7 @@ public final class RaceCommand implements CommandExecutor {
 
             case "watch" -> {
                 if (args.length < 2) {
-                    Commands.usage(player, "/md race watch <trackId>");
+                    Commands.usage(player, "/race watch <trackId>");
                     return true;
                 }
                 watch.start(player, args[1].toLowerCase());
@@ -105,8 +105,8 @@ public final class RaceCommand implements CommandExecutor {
             case "test", "testrace" -> {
                 if (!Commands.requireAdmin(player)) return true;
                 if (args.length < 2) {
-                    Commands.usage(player, "/md race test <trackId> [aiCount] [noself]");
-                    player.sendMessage(ChatColor.YELLOW + "   or: /md race test loadout <trackId>  (pick a loadout to test with)");
+                    Commands.usage(player, "/race test <trackId> [aiCount] [noself]");
+                    player.sendMessage(ChatColor.YELLOW + "   or: /race test loadout <trackId>  (pick a loadout to test with)");
                     return true;
                 }
 
@@ -116,7 +116,7 @@ public final class RaceCommand implements CommandExecutor {
                 // reads it automatically, no lobby entry required.
                 if (args[1].equalsIgnoreCase("loadout")) {
                     if (args.length < 3) {
-                        Commands.usage(player, "/md race test loadout <trackId>");
+                        Commands.usage(player, "/race test loadout <trackId>");
                         return true;
                     }
                     RaceLoadoutGui.open(player, races, args[2].toLowerCase());
@@ -148,7 +148,7 @@ public final class RaceCommand implements CommandExecutor {
 
                 if (openId != null) {
                     player.sendMessage(ChatColor.GREEN + "A race on '" + openId + "' is open right now - " +
-                            ChatColor.AQUA + "/md join" + ChatColor.GREEN + "! (" + races.lobbyCount(openId) + " joined so far)");
+                            ChatColor.AQUA + "/race join" + ChatColor.GREEN + "! (" + races.lobbyCount(openId) + " joined so far)");
                 } else if (activeId != null) {
                     player.sendMessage(ChatColor.YELLOW + "A race on '" + activeId + "' is currently running - " +
                             "check back once it finishes.");
@@ -224,10 +224,10 @@ public final class RaceCommand implements CommandExecutor {
     /**
      * Blocks the raw admin open/close/start commands from touching a track
      * the scheduled race system currently has open-for-entry or actually
-     * running. Without this, e.g. /md race close on that track silently
+     * running. Without this, e.g. /race close on that track silently
      * desyncs RaceManager's isOpen() from ScheduledRaceManager's own
-     * openTrackId (breaking /md join while the boss bar still claims it's
-     * open), and /md race start hijacks the scheduled lobby into an
+     * openTrackId (breaking /race join while the boss bar still claims it's
+     * open), and /race start hijacks the scheduled lobby into an
      * untracked race - joiners never get their scheduled Dust, and the
      * scheduler still runs its own showcase race on top once its original
      * close time arrives since it never saw its lobby get taken.
@@ -235,27 +235,27 @@ public final class RaceCommand implements CommandExecutor {
     private boolean isClaimedByScheduler(Player player, String trackId) {
         if (!trackId.equals(scheduledRaces.activeCycleTrackId())) return false;
         player.sendMessage(ChatColor.RED + "'" + trackId + "' is currently in use by the scheduled race system.");
-        player.sendMessage(ChatColor.GRAY + "Use " + ChatColor.AQUA + "/md race forcecycle" + ChatColor.GRAY
-                + " or " + ChatColor.AQUA + "/md race purge" + ChatColor.GRAY + " instead, or wait for it to finish.");
+        player.sendMessage(ChatColor.GRAY + "Use " + ChatColor.AQUA + "/race forcecycle" + ChatColor.GRAY
+                + " or " + ChatColor.AQUA + "/race purge" + ChatColor.GRAY + " instead, or wait for it to finish.");
         return true;
     }
 
     private void usage(Player player) {
         player.sendMessage(ChatColor.YELLOW + "Race commands:");
-        player.sendMessage(ChatColor.GRAY + "/md race" + ChatColor.DARK_GRAY + " (open menu)");
-        player.sendMessage(ChatColor.GRAY + "/md race watch <trackId>" + ChatColor.DARK_GRAY + " (watch w/ inventory saved)");
-        player.sendMessage(ChatColor.GRAY + "/md race unwatch" + ChatColor.DARK_GRAY + " (restore inventory)");
-        player.sendMessage(ChatColor.GRAY + "/md race open <trackId> " + ChatColor.DARK_GRAY + "(admin)");
-        player.sendMessage(ChatColor.GRAY + "/md race close <trackId> " + ChatColor.DARK_GRAY + "(admin)");
-        player.sendMessage(ChatColor.GRAY + "/md race start <trackId> " + ChatColor.DARK_GRAY + "(admin)");
-        player.sendMessage(ChatColor.GRAY + "/md race clear <trackId> " + ChatColor.DARK_GRAY + "(admin)");
-        player.sendMessage(ChatColor.GRAY + "/md race test <trackId> [aiCount] [noself] " + ChatColor.DARK_GRAY + "(admin, debug mode only)");
-        player.sendMessage(ChatColor.GRAY + "/md race test loadout <trackId> " + ChatColor.DARK_GRAY + "(admin, pick a loadout to test with)");
-        player.sendMessage(ChatColor.GRAY + "/md race purge " + ChatColor.DARK_GRAY + "(admin, removes all active runners)");
-        player.sendMessage(ChatColor.GRAY + "/md join " + ChatColor.DARK_GRAY + "(join the current scheduled race)");
-        player.sendMessage(ChatColor.GRAY + "/md leave " + ChatColor.DARK_GRAY + "(leave whatever race you're entered in)");
-        player.sendMessage(ChatColor.GRAY + "/md race next " + ChatColor.DARK_GRAY + "(time until the next scheduled race)");
-        player.sendMessage(ChatColor.GRAY + "/md race forcecycle " + ChatColor.DARK_GRAY + "(admin, runs the scheduled race cycle now)");
-        player.sendMessage(ChatColor.GRAY + "/md race schedule " + ChatColor.DARK_GRAY + "(admin, GUI to tune scheduled race settings)");
+        player.sendMessage(ChatColor.GRAY + "/race" + ChatColor.DARK_GRAY + " (open menu)");
+        player.sendMessage(ChatColor.GRAY + "/race watch <trackId>" + ChatColor.DARK_GRAY + " (watch w/ inventory saved)");
+        player.sendMessage(ChatColor.GRAY + "/race unwatch" + ChatColor.DARK_GRAY + " (restore inventory)");
+        player.sendMessage(ChatColor.GRAY + "/race open <trackId> " + ChatColor.DARK_GRAY + "(admin)");
+        player.sendMessage(ChatColor.GRAY + "/race close <trackId> " + ChatColor.DARK_GRAY + "(admin)");
+        player.sendMessage(ChatColor.GRAY + "/race start <trackId> " + ChatColor.DARK_GRAY + "(admin)");
+        player.sendMessage(ChatColor.GRAY + "/race clear <trackId> " + ChatColor.DARK_GRAY + "(admin)");
+        player.sendMessage(ChatColor.GRAY + "/race test <trackId> [aiCount] [noself] " + ChatColor.DARK_GRAY + "(admin, debug mode only)");
+        player.sendMessage(ChatColor.GRAY + "/race test loadout <trackId> " + ChatColor.DARK_GRAY + "(admin, pick a loadout to test with)");
+        player.sendMessage(ChatColor.GRAY + "/race purge " + ChatColor.DARK_GRAY + "(admin, removes all active runners)");
+        player.sendMessage(ChatColor.GRAY + "/race join " + ChatColor.DARK_GRAY + "(join the current scheduled race)");
+        player.sendMessage(ChatColor.GRAY + "/race leave " + ChatColor.DARK_GRAY + "(leave whatever race you're entered in)");
+        player.sendMessage(ChatColor.GRAY + "/race next " + ChatColor.DARK_GRAY + "(time until the next scheduled race)");
+        player.sendMessage(ChatColor.GRAY + "/race forcecycle " + ChatColor.DARK_GRAY + "(admin, runs the scheduled race cycle now)");
+        player.sendMessage(ChatColor.GRAY + "/race schedule " + ChatColor.DARK_GRAY + "(admin, GUI to tune scheduled race settings)");
     }
 }

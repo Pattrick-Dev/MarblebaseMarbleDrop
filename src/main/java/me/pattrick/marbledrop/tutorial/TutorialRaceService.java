@@ -86,7 +86,7 @@ public final class TutorialRaceService {
         String trackId = locationStore.getRaceTrackId();
         if (trackId == null) {
             player.sendMessage(ChatColor.RED + "No tutorial race track is configured yet.");
-            player.sendMessage(ChatColor.GRAY + "An admin needs to run /md tutorial setrace <trackId>.");
+            player.sendMessage(ChatColor.GRAY + "An admin needs to run /tutorial setrace <trackId>.");
             return;
         }
 
@@ -160,7 +160,7 @@ public final class TutorialRaceService {
                     watchManager.stop(player, true);
                     // Then redirect to the RACE checkpoint (a spot the
                     // tutorial actually controls) so they don't end up
-                    // wherever they happened to be standing when /md race
+                    // wherever they happened to be standing when /race
                     // was typed - that's how players were ending up back
                     // in the recycler room. Same tick as the line above,
                     // so this is still a single safe teleport overall.

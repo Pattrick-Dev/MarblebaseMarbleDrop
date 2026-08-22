@@ -6,8 +6,8 @@ import java.util.Set;
  * Ordered steps of the forced onboarding tutorial. Teams is intentionally
  * left out since that system isn't fleshed out yet.
  * <p>
- * commandKeywords is still used for /md command gating (blocking every
- * subcommand except the current step's), but actual step COMPLETION is
+ * commandKeywords is still used for command gating (blocking every
+ * top-level command except the current step's), but actual step COMPLETION is
  * now driven by real gameplay actions (killing the tutorial sheep,
  * receiving a marble, upgrading it, recycling it, finishing a race),
  * not by simply typing the command.
@@ -21,7 +21,7 @@ public enum TutorialStep {
             50
     ),
     CRAFT(
-            Set.of(), // crafting has no /md command to gate - see TutorialCraftHook
+            Set.of(), // crafting has no command to gate - see TutorialCraftHook
             "Learn the Recipes",
             "Open a crafting table and craft the station shown - the next recipe's ingredients appear once you're done. Each is taken back once crafted; you'll get real ones later.",
             0
@@ -47,7 +47,7 @@ public enum TutorialStep {
     RACE(
             Set.of("race", "races"),
             "Race Against AI",
-            "Type /md race to enter a practice race and see how it works.",
+            "Type /race to enter a practice race and see how it works.",
             75
     ),
     COMPLETE(

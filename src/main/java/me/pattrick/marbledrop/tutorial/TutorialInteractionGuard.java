@@ -21,7 +21,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.plugin.Plugin;
 
 /**
- * /md command gating alone doesn't stop a player from just walking up
+ * TutorialListener's command gating alone doesn't stop a player from just walking up
  * to any Infusion Cauldron / Upgrade Station / Recycler in the world and
  * right-clicking it directly - those systems trigger off
  * PlayerInteractEvent, independent of any command. This closes that

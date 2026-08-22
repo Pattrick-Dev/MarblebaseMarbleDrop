@@ -126,7 +126,7 @@ public final class DiscordRaceStatus {
                 + "," + field("Players Joined (" + joined + ")", joinedPlayersList(trackId), false)
                 + "]";
 
-        return embed("🏁 Race Open for Entries", "Join in-game with `/md join`", COLOR_OPEN, fields);
+        return embed("🏁 Race Open for Entries", "Join in-game with `/race join`", COLOR_OPEN, fields);
     }
 
     private String closedEmbed(String trackId) {
@@ -143,7 +143,7 @@ public final class DiscordRaceStatus {
     /** Bulleted list of who's currently in trackId's lobby, capped so a big field never blows past Discord's 1024-char embed field value limit. */
     private String joinedPlayersList(String trackId) {
         List<RaceManager.RaceEntry> lobby = races.lobbySnapshot(trackId);
-        if (lobby.isEmpty()) return "_Nobody yet - be the first with `/md join`!_";
+        if (lobby.isEmpty()) return "_Nobody yet - be the first with `/race join`!_";
 
         StringBuilder sb = new StringBuilder();
         int shown = 0;

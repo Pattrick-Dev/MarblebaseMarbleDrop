@@ -35,7 +35,7 @@ public final class RaceMotdListener implements Listener {
 
         if (scheduledRaces.openTrackId() != null) {
             return Component.text("Race open - starts in " + ScheduledRaceManager.formatDuration(scheduledRaces.secondsUntilNextCycle())
-                    + " - join with /md join!", NamedTextColor.GREEN);
+                    + " - join with /race join!", NamedTextColor.GREEN);
         }
 
         long seconds = scheduledRaces.secondsUntilNextCycle();
